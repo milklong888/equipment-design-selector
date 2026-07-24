@@ -12,25 +12,29 @@
 - HTML、Markdown、JSON 报告导出及 `.manifest.json` 哈希清单；
 - Agent 按“结论、计算、候选与系统修改方案、强制警告、待补证据、下一步”组织答案；
 - 所有用户可见下拉框显示中文，内部继续保存标准代码，保证计算与审计接口稳定。
+- 40/40 条内置计算规则登记公式 ID、适用范围、输入绑定、知识来源、执行源码和开放缺口；
+- 每次计算生成“公式定义 SHA-256”和“本次计算追溯 SHA-256”，GUI、报告与 Agent 返回同一份 `equipment-formula-trace-v1` 机器记录；
+- Windows 打包脚本支持长路径知识资产，并通过 D 盘迁移目录的实际重建验证。
 
 ## 验证结果
 
-- 全量自动化测试：379 项通过，1 项按环境条件跳过；
+- 全量自动化测试：384 项通过，1 项按环境条件跳过；
 - 打包后 Agent/CLI 自检：17 项全部通过；
+- 打包后泵实算：3 条公式追溯记录的定义哈希和本次计算哈希均可独立重算；源码状态为 `PACKAGED_SOURCE_BOUND_BY_MANIFEST`；
 - 设备族覆盖：17/17 均能返回具体登记型式，不使用“非标准型/其他/待定”作为设备型式；
 - 管线样例：返回“无缝钢制工艺管道”以及 DN、外径、壁厚、材料、设计压力和设计温度；
 - 奇异大泵样例：返回“2 并联 × 1 串联轴流泵系统”，2 台运行、1 台备用，并给单台 Q/H 和厂家曲线/NPSH/控制/材料密封复核动作；
-- 图形程序：Tk/Tcl 与拖放组件已被构建器收录；29 项真实窗口测试全部通过；隐藏启动烟测进程持续稳定；
-- 知识资产：6755 个文件，1,489,154,898 bytes；SQLite `quick_check=ok`。
+- 图形程序：Tk/Tcl 与拖放组件已被构建器收录；30 项真实窗口测试全部通过；新 GUI EXE 无窗口自检通过；
+- 知识资产：6756 个文件，1,489,160,853 bytes；SQLite `quick_check=ok`。
 
 ## 权威哈希
 
-- 核心源码集合 SHA-256：`2D7EDA40194E9460298F4DB5997260379276F8E0E8AFEC30D38254A6F8F04617`
-- 核心源码清单 SHA-256：`969155C59E8515F3978F0E1521C93A963A58AE9FC15BF3AEF2BA0C6463060AD8`
-- 运行时知识包版本：`9F78717991FE7EEBDC6374C05402595C7A7F1C57D8A9CBCA22719F894F8D27C1`
-- 运行时知识清单 SHA-256：`D103775F3CA17DD93FA4C3508BF4FCB3D1763FCE5FA159EE9EBA8BCE98F87457`
-- `EquipmentDesignGraphApp.exe` SHA-256：`FFD5395EF44822D5CB5D944943CBD94D7F0557C7898A4BC552B1A52ADD8EA8E1`
-- `EquipmentDesignAgentCLI.exe` SHA-256：`14866760653E72A3C39FC96B4BC02A4766B823335A836D9CF7BFE18956A0F89C`
+- 核心源码集合 SHA-256：`4025FCDBBA6E8F247A25F168390F2D872B7F5E33DD66F23BC91EE07E48395462`
+- 核心源码清单 SHA-256：`EAD6578D7975631827083D1BE2E6521FD0DCBBCF9B38FED25064AB42C7EA85BC`
+- 运行时知识包版本：`FC28F1751003A5EAA1476C46D7228D7594218A070BF1F070192829CBB50A5DBA`
+- 运行时知识清单 SHA-256：`BE2F511E638533A97F9914CB7F3F44E13733189ED3017A8D864C50564EC5623C`
+- `EquipmentDesignGraphApp.exe`（171,137,018 bytes）SHA-256：`4613910D98F7819B08797470774836ECF0996412503463FD8E7868858F2B11D6`
+- `EquipmentDesignAgentCLI.exe`（171,179,625 bytes）SHA-256：`F3C54536EE3AC5189A77C52E1FE3FF6AF9EC12DD33F5699547FF71B2E6E38B6D`
 
 ## 尚未在本机执行的生产环境验证
 
