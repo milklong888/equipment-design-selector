@@ -28,9 +28,12 @@ venv/
 !/data/aspen_equipment_export_sample.json
 !/data/aspen_run_status_clean_sample.json
 
-# Keep the current release verification public to the repository; legacy
-# migration/real-case audit material may contain workstation paths or case IDs.
+# Keep public project/retrieval documentation and the current release
+# verification in the repository; legacy migration/real-case audit material
+# may contain workstation paths or case IDs.
 /docs/*
+!/docs/PROJECT_STRUCTURE.md
+!/docs/RETRIEVAL_AND_GAPS.md
 !/docs/STAGE1_2_4_0_RELEASE_VERIFICATION_20260724.md
 /DELIVERY_STATUS_20260720_PROMPT_AUDIT.md
 /RECOVERED_RUNTIME_ASSET_REPORT.json
