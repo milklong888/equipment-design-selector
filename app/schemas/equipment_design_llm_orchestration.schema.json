@@ -67,6 +67,9 @@
     "provider_endpoint": {"type": ["string", "null"]},
     "model": {"type": "string"},
     "timeout_s": {"type": ["integer", "null"]},
+    "wire_api": {"enum": ["chat_completions", "responses"]},
+    "reasoning_effort": {"type": ["string", "null"]},
+    "response_storage_disabled": {"type": ["boolean", "null"]},
     "api_key_persisted": {"type": "boolean"},
     "api_key_echoed": {"type": "boolean"},
     "orchestration_sha256": {"type": "string", "pattern": "^[A-F0-9]{64}$"}

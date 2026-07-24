@@ -41,8 +41,8 @@
       "source_path": "app/equipment_design_app.py"
     },
     {
-      "sha256": "2569A91398E49E8DA100F7AAE62353A63D4E4E365C7E19160AD5D9B54612F0E9",
-      "size_bytes": 137139,
+      "sha256": "FC19C467D7B5A9EF0620ACAA40E2AF7E34037999EEE4B592E924D16C98468ABE",
+      "size_bytes": 144004,
       "source_path": "app/llm_bridge.py"
     },
     {
@@ -66,8 +66,8 @@
       "source_path": "app/source_code_manifest.py"
     },
     {
-      "sha256": "D269FA2511F57BB960DF9FE23036363D228BD771AA248AF40FB7AE3ED87166CD",
-      "size_bytes": 188020,
+      "sha256": "005BAE4CE89E808B0052463E5B7DA18320BD4C133A6274C5E06ED4D37AD00BA8",
+      "size_bytes": 190047,
       "source_path": "app/tk_gui.py"
     },
     {
@@ -106,10 +106,10 @@
       "source_path": "scripts/equipment_service_profile.py"
     }
   ],
-  "manifest_payload_sha256": "E98354BF7AE628EDA289DBF4CE932957A05E53C40833CFD7F4770C63D83C45E9",
+  "manifest_payload_sha256": "05607B349F2C9FDBB3DBD8DF255AE763BCE83F7673D7C3256AAF235FB655324B",
   "path_set_sha256": "5195BF4C0810352E20041CFA9C1E8FD23A2372BE8E571E8D6242D4A48165A8BF",
   "schema": "equipment-design-source-code-manifest-v1",
-  "source_code_set_sha256": "4025FCDBBA6E8F247A25F168390F2D872B7F5E33DD66F23BC91EE07E48395462",
+  "source_code_set_sha256": "91F8A93717FAB425FC5E77520E48C4468F91AF85FED63F6D7EAEB2F569F8961B",
   "source_paths": [
     "app/app_core.py",
     "app/aspen_com_import.py",

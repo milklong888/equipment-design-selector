@@ -136,6 +136,9 @@ class TkGuiTests(unittest.TestCase):
         self.assertEqual(len(self.app.catalog["selections"]), 36)
         self.assertEqual(self.app.llm_provider.get(), "openai_compatible")
         self.assertEqual(self.app.llm_timeout.get(), "90")
+        self.assertEqual(self.app.llm_wire_api.get(), "chat_completions")
+        self.assertEqual(self.app.llm_reasoning_effort.get(), "medium")
+        self.assertTrue(self.app.llm_disable_response_storage.get())
         self.assertTrue(self.app.knowledge_pack_vars)
         self.assertTrue(self.app.llm_enabled.get())
         self.assertEqual(self.app.llm_injection_point.get(), "audit")
@@ -189,6 +192,8 @@ class TkGuiTests(unittest.TestCase):
 
         self.app.llm_model.set("deepseek-chat")
         self.app.llm_key.set("TEST-SECRET")
+        self.app.llm_wire_api.set("responses")
+        self.app.llm_reasoning_effort.set("xhigh")
 
         def immediate(_button, _label, work, done):
             done(work())
@@ -208,6 +213,10 @@ class TkGuiTests(unittest.TestCase):
         ) as test_connection, patch("tk_gui.messagebox.showinfo"):
             self.app._test_llm_connection()
         test_connection.assert_called_once()
+        tested_config = test_connection.call_args.args[0]
+        self.assertEqual(tested_config["wire_api"], "responses")
+        self.assertEqual(tested_config["reasoning_effort"], "xhigh")
+        self.assertTrue(tested_config["disable_response_storage"])
         self.assertTrue(self.app.llm_connection_state.get().startswith("连接状态：成功"))
         self.assertFalse(self.app.llm_apply_settings_button.instate(["disabled"]))
 
@@ -215,6 +224,9 @@ class TkGuiTests(unittest.TestCase):
         self.assertFalse(self.app.llm_button.instate(["disabled"]))
         self.assertEqual(self.app._applied_llm_settings["config"]["model"], "deepseek-chat")
         self.assertEqual(self.app._applied_llm_settings["config"]["api_key"], "TEST-SECRET")
+        self.assertEqual(self.app._applied_llm_settings["config"]["wire_api"], "responses")
+        self.assertEqual(self.app._applied_llm_settings["config"]["reasoning_effort"], "xhigh")
+        self.assertTrue(self.app._applied_llm_settings["config"]["disable_response_storage"])
 
         self.app.llm_model.set("deepseek-reasoner")
         self.root.update_idletasks()

@@ -1050,6 +1050,68 @@ class LlmOrchestrationTests(unittest.TestCase):
         self.assertIn("condition_assessments", active_policy["sections_that_must_be_empty"])
         self.assertEqual(active_policy["empty_value_by_section"]["condition_assessments"], [])
 
+    def test_responses_provider_runs_strict_hybrid_contract_without_storage(self) -> None:
+        prepared = llm_bridge.hybrid_prepare(
+            pump_result(),
+            {"status": "NOT_REQUESTED", "hits": []},
+            "audit",
+        )
+        output = empty_output(prepared)
+        response_body = {
+            "output": [{
+                "type": "message",
+                "content": [{
+                    "type": "output_text",
+                    "text": json.dumps(output, ensure_ascii=False),
+                }],
+            }],
+        }
+        captured: dict[str, object] = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            @staticmethod
+            def read() -> bytes:
+                return json.dumps(response_body, ensure_ascii=False).encode("utf-8")
+
+        def fake_urlopen(request, timeout):
+            captured["url"] = request.full_url
+            captured["timeout"] = timeout
+            captured["payload"] = json.loads(request.data.decode("utf-8"))
+            return FakeResponse()
+
+        with patch.object(llm_bridge.urllib.request, "urlopen", side_effect=fake_urlopen):
+            result = llm_bridge.hybrid_run({
+                "provider": "openai_compatible",
+                "base_url": "https://example.invalid/v1/chat/completions",
+                "model": "reasoning-model",
+                "wire_api": "responses",
+                "reasoning_effort": "xhigh",
+                "disable_response_storage": True,
+                "timeout_s": 31,
+                "api_key": "TEST-KEY",
+            }, prepared)
+
+        payload = captured["payload"]
+        self.assertEqual(captured["url"], "https://example.invalid/v1/responses")
+        self.assertEqual(captured["timeout"], 31)
+        self.assertIn("instructions", payload)
+        user_payload = json.loads(payload["input"])
+        self.assertEqual(user_payload["active_output_policy"]["injection_point"], "audit")
+        self.assertEqual(payload["reasoning"], {"effort": "xhigh"})
+        self.assertFalse(payload["store"])
+        self.assertNotIn("messages", payload)
+        self.assertNotIn("temperature", payload)
+        self.assertEqual(result["provider"], "openai_compatible")
+        self.assertEqual(result["wire_api"], "responses")
+        self.assertEqual(result["reasoning_effort"], "xhigh")
+        self.assertTrue(result["response_storage_disabled"])
+
     def test_nested_claim_requires_nonempty_citation(self) -> None:
         prepared = llm_bridge.hybrid_prepare(pump_result(), {"status": "NOT_REQUESTED", "hits": []}, "audit")
         output = empty_output(prepared)

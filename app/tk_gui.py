@@ -100,6 +100,8 @@ UI_OPTION_LABELS: dict[str, str] = {
     "openai": "OpenAI 官方接口",
     "openai_compatible": "OpenAI 兼容接口",
     "local_openai_compatible": "本机 OpenAI 兼容接口",
+    "chat_completions": "Chat Completions（传统兼容）",
+    "responses": "Responses（推理模型）",
     "ambiguity_resolution": "模糊项判断",
     "audit": "结果审核",
     "kg_retrieval_planning": "知识检索规划",
@@ -770,6 +772,13 @@ class EquipmentDesignTkApp:
         self.llm_base = tk.StringVar(value="https://api.openai.com/v1")
         self.llm_model = tk.StringVar(value=os.environ.get("EQUIPMENT_DESIGN_LLM_MODEL_ID", ""))
         self.llm_timeout = tk.StringVar(value=str(self.llm_provider_registry.get("timeout_s", {}).get("default", 90)))
+        self.llm_wire_api = tk.StringVar(
+            value=os.environ.get("EQUIPMENT_DESIGN_LLM_WIRE_API", "chat_completions")
+        )
+        self.llm_reasoning_effort = tk.StringVar(
+            value=os.environ.get("EQUIPMENT_DESIGN_LLM_REASONING_EFFORT", "medium")
+        )
+        self.llm_disable_response_storage = tk.BooleanVar(value=True)
         self.llm_injection_point = tk.StringVar(value="audit")
         self.llm_context_scope = tk.StringVar(value="minimum")
         provider = TranslatedCombobox(
@@ -783,10 +792,39 @@ class EquipmentDesignTkApp:
         self._labeled_widget(grid, 0, "服务接口", provider)
         self._labeled_widget(grid, 1, "API Base URL", ttk.Entry(grid, textvariable=self.llm_base))
         self._labeled_widget(grid, 2, "模型 ID", ttk.Entry(grid, textvariable=self.llm_model))
-        self._labeled_widget(grid, 3, "超时 / s", ttk.Entry(grid, textvariable=self.llm_timeout))
-        self._labeled_widget(grid, 4, "API Key（仅内存）", ttk.Entry(grid, textvariable=self.llm_key, show="•"))
+        self._labeled_widget(
+            grid,
+            3,
+            "API 协议",
+            TranslatedCombobox(
+                grid,
+                textvariable=self.llm_wire_api,
+                values=tuple(self.llm_provider_registry.get("wire_apis", ("chat_completions", "responses"))),
+                state="readonly",
+            ),
+        )
+        self._labeled_widget(
+            grid,
+            4,
+            "推理强度（Responses）",
+            TranslatedCombobox(
+                grid,
+                textvariable=self.llm_reasoning_effort,
+                values=tuple(self.llm_provider_registry.get("reasoning_efforts", ("low", "medium", "high"))),
+                option_labels={
+                    "minimal": "最低",
+                    "low": "低",
+                    "medium": "中",
+                    "high": "高",
+                    "xhigh": "超高（xhigh）",
+                },
+                state="readonly",
+            ),
+        )
+        self._labeled_widget(grid, 5, "超时 / s", ttk.Entry(grid, textvariable=self.llm_timeout))
+        self._labeled_widget(grid, 6, "API Key（仅内存）", ttk.Entry(grid, textvariable=self.llm_key, show="•"))
         option_row = ttk.Frame(grid, style="Panel.TFrame")
-        option_row.grid(row=5, column=1, sticky="w", pady=5)
+        option_row.grid(row=7, column=1, sticky="w", pady=5)
         self.llm_enabled_label = tk.StringVar()
         self.llm_knowledge_enabled_label = tk.StringVar()
         ttk.Checkbutton(
@@ -801,10 +839,16 @@ class EquipmentDesignTkApp:
             variable=self.llm_knowledge_enabled,
             style="Toggle.TCheckbutton",
         ).pack(side="left", padx=(12, 0))
+        ttk.Checkbutton(
+            option_row,
+            text="禁止服务端存储响应",
+            variable=self.llm_disable_response_storage,
+            style="Toggle.TCheckbutton",
+        ).pack(side="left", padx=(12, 0))
         self._sync_llm_toggle_labels()
 
         pack_frame = ttk.Frame(grid, style="Panel.TFrame")
-        pack_frame.grid(row=6, column=1, sticky="ew", pady=4)
+        pack_frame.grid(row=8, column=1, sticky="ew", pady=4)
         pack_frame.columnconfigure(0, weight=1)
         pack_frame.columnconfigure(1, weight=1)
         self.knowledge_pack_vars: dict[str, tk.BooleanVar] = {}
@@ -817,7 +861,7 @@ class EquipmentDesignTkApp:
             check.grid(row=index // 2, column=index % 2, sticky="w", padx=(0, 12), pady=1)
         self._labeled_widget(
             grid,
-            7,
+            9,
             "注入点",
             TranslatedCombobox(
                 grid,
@@ -828,7 +872,7 @@ class EquipmentDesignTkApp:
         )
         self._labeled_widget(
             grid,
-            8,
+            10,
             "上下文范围",
             TranslatedCombobox(
                 grid,
@@ -838,11 +882,11 @@ class EquipmentDesignTkApp:
             ),
         )
         self.llm_knowledge_query = tk.StringVar(value="设备选型 公式 证据门 型号状态")
-        self._labeled_widget(grid, 9, "检索问题", ttk.Entry(grid, textvariable=self.llm_knowledge_query))
-        ttk.Label(grid, text="Agent 任务", style="Field.TLabel").grid(row=10, column=0, sticky="nw", padx=(0, 14), pady=8)
+        self._labeled_widget(grid, 11, "检索问题", ttk.Entry(grid, textvariable=self.llm_knowledge_query))
+        ttk.Label(grid, text="Agent 任务", style="Field.TLabel").grid(row=12, column=0, sticky="nw", padx=(0, 14), pady=8)
         self.llm_task = tk.Text(grid, height=3, wrap="word", bg="#F8FAFB", fg=COLORS["ink"], relief="solid", borderwidth=1, font=("Microsoft YaHei UI", 10))
         self.llm_task.insert("1.0", "审核当前确定性结果；若候选证据足以唯一化，可提出白名单内的草稿决策，否则保留最泛用类型。")
-        self.llm_task.grid(row=10, column=1, sticky="ew", pady=8)
+        self.llm_task.grid(row=12, column=1, sticky="ew", pady=8)
         ttk.Label(
             tab,
             text=(
@@ -885,6 +929,9 @@ class EquipmentDesignTkApp:
             self.llm_base,
             self.llm_model,
             self.llm_timeout,
+            self.llm_wire_api,
+            self.llm_reasoning_effort,
+            self.llm_disable_response_storage,
         ):
             variable.trace_add("write", self._on_llm_connection_setting_changed)
         for variable in (
@@ -918,6 +965,9 @@ class EquipmentDesignTkApp:
             "base_url": self.llm_base.get().strip(),
             "model": self.llm_model.get().strip(),
             "timeout_s": self.llm_timeout.get().strip(),
+            "wire_api": self.llm_wire_api.get().strip(),
+            "reasoning_effort": self.llm_reasoning_effort.get().strip(),
+            "disable_response_storage": bool(self.llm_disable_response_storage.get()),
             "api_key": self.llm_key.get(),
         }
 

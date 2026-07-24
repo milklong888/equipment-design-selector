@@ -559,6 +559,110 @@ class AppCoreTests(unittest.TestCase):
         self.assertEqual(request_body["model"], "exact-model-id")
         self.assertNotIn("TOP-SECRET-KEY", json.dumps(result))
 
+    def test_llm_responses_connection_uses_reasoning_and_disables_storage(self) -> None:
+        response_body = {
+            "id": "resp_test",
+            "output": [{
+                "type": "message",
+                "content": [{"type": "output_text", "text": "pong"}],
+            }],
+        }
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            @staticmethod
+            def read() -> bytes:
+                return json.dumps(response_body).encode("utf-8")
+
+        with patch.object(llm_bridge.urllib.request, "urlopen", return_value=FakeResponse()) as mocked:
+            result = llm_bridge.test_provider_connection({
+                "provider": "openai_compatible",
+                "base_url": "https://example.invalid/v1",
+                "model": "reasoning-model",
+                "wire_api": "responses",
+                "reasoning_effort": "xhigh",
+                "disable_response_storage": True,
+                "timeout_s": 23,
+                "api_key": "TOP-SECRET-KEY",
+            })
+
+        request = mocked.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+        self.assertTrue(request.full_url.endswith("/v1/responses"))
+        self.assertEqual(payload["input"], "Reply with exactly: pong")
+        self.assertEqual(payload["reasoning"], {"effort": "xhigh"})
+        self.assertFalse(payload["store"])
+        self.assertEqual(payload["max_output_tokens"], 16)
+        self.assertNotIn("messages", payload)
+        self.assertNotIn("temperature", payload)
+        self.assertEqual(result["status"], "CONNECTED")
+        self.assertEqual(result["wire_api"], "responses")
+        self.assertEqual(result["reasoning_effort"], "xhigh")
+        self.assertTrue(result["response_storage_disabled"])
+        self.assertNotIn("TOP-SECRET-KEY", json.dumps(result))
+
+    def test_llm_review_parses_responses_output_text(self) -> None:
+        review = {
+            "summary": "确定性结果保持不变",
+            "recommended_action": "review",
+            "changes": [],
+        }
+        response_body = {
+            "output": [{
+                "type": "message",
+                "content": [{"type": "output_text", "text": json.dumps(review, ensure_ascii=False)}],
+            }],
+        }
+        captured: dict[str, object] = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            @staticmethod
+            def read() -> bytes:
+                return json.dumps(response_body, ensure_ascii=False).encode("utf-8")
+
+        def fake_urlopen(request, timeout):
+            captured["url"] = request.full_url
+            captured["payload"] = json.loads(request.data.decode("utf-8"))
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        with patch.object(llm_bridge.urllib.request, "urlopen", side_effect=fake_urlopen):
+            result = llm_bridge.request_review(
+                {
+                    "provider": "openai_compatible",
+                    "base_url": "https://example.invalid/v1/responses",
+                    "model": "reasoning-model",
+                    "wire_api": "responses",
+                    "reasoning_effort": "high",
+                    "disable_response_storage": True,
+                    "timeout_s": 29,
+                    "api_key": "TOP-SECRET-KEY",
+                },
+                {"status": "MATCHED"},
+            )
+
+        self.assertEqual(captured["url"], "https://example.invalid/v1/responses")
+        self.assertEqual(captured["timeout"], 29)
+        payload = captured["payload"]
+        self.assertIn("instructions", payload)
+        self.assertIn("input", payload)
+        self.assertEqual(payload["reasoning"], {"effort": "high"})
+        self.assertFalse(payload["store"])
+        self.assertEqual(result["proposal"]["summary"], "确定性结果保持不变")
+        self.assertEqual(result["wire_api"], "responses")
+        self.assertNotIn("TOP-SECRET-KEY", json.dumps(result))
+
     def test_mock_connection_check_never_accesses_network_and_api_wraps_it(self) -> None:
         with patch.object(llm_bridge.urllib.request, "urlopen", side_effect=AssertionError("network used")) as mocked:
             result = EquipmentDesignApi().test_llm_connection({"provider": "mock", "model": "offline-check"})

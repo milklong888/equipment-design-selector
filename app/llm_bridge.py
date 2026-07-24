@@ -955,6 +955,9 @@ SUPPORTED_PROVIDERS: dict[str, dict[str, Any]] = {
     },
 }
 
+SUPPORTED_WIRE_APIS = {"chat_completions", "responses"}
+SUPPORTED_REASONING_EFFORTS = {"minimal", "low", "medium", "high", "xhigh"}
+
 
 def provider_catalog() -> dict[str, Any]:
     return {
@@ -963,6 +966,9 @@ def provider_catalog() -> dict[str, Any]:
             for provider_id, metadata in SUPPORTED_PROVIDERS.items()
         ],
         "timeout_s": {"default": 90, "minimum": 5, "maximum": 600},
+        "wire_apis": ["chat_completions", "responses"],
+        "reasoning_efforts": ["minimal", "low", "medium", "high", "xhigh"],
+        "response_storage_default": False,
         "api_key_policy": "runtime_memory_or_environment_only; never persist or echo",
         "injection_points": sorted(INJECTION_POINT_POLICIES),
         "context_scopes": ["minimum", "routed", "full_family", "full_bundle"],
@@ -974,7 +980,8 @@ def provider_catalog() -> dict[str, Any]:
 def test_provider_connection(config: dict[str, Any]) -> dict[str, Any]:
     """Safely validate a configured provider without retaining its credential.
 
-    A remote check intentionally sends one minimal chat-completions request so
+    A remote check intentionally sends one minimal request over the selected
+    wire protocol so
     the returned state proves the exact configured model is reachable, rather
     than merely proving that a URL parses.  This is operational metadata only:
     credentials are never included in the returned object or written to disk.
@@ -983,6 +990,9 @@ def test_provider_connection(config: dict[str, Any]) -> dict[str, Any]:
     api_key = str(config.get("api_key", "")).strip() if isinstance(config, dict) else ""
     provider = str(config.get("provider", "openai_compatible")).strip() if isinstance(config, dict) else ""
     model_id = str(config.get("model_id") or config.get("model") or "").strip() if isinstance(config, dict) else ""
+    wire_api = "chat_completions"
+    reasoning_effort: str | None = None
+    disable_response_storage = True
     endpoint_profile = "unknown"
     endpoint: str | None = None
     timeout_s: int | None = None
@@ -1003,18 +1013,30 @@ def test_provider_connection(config: dict[str, Any]) -> dict[str, Any]:
             }
         base_url = str(config.get("base_url") or provider_definition["default_base_url"]).strip()
         timeout_s = _timeout_seconds(config.get("timeout_s", 90))
-        endpoint = _endpoint(base_url, provider)
+        wire_api = _wire_api(config)
+        reasoning_effort = _reasoning_effort(config)
+        disable_response_storage = _disable_response_storage(config)
+        endpoint = _endpoint(base_url, provider, wire_api)
         parsed_endpoint = urllib.parse.urlparse(endpoint)
         is_loopback = parsed_endpoint.hostname in {"localhost", "127.0.0.1", "::1"}
         endpoint_profile = "local_openai_compatible" if is_loopback else "remote_openai_compatible"
         if not api_key and not is_loopback:
             raise ValueError("远程 API 必须填写 API Key。")
-        payload = {
-            "model": model_id,
-            "messages": [{"role": "user", "content": "ping"}],
-            "max_tokens": 1,
-            "temperature": 0,
-        }
+        if wire_api == "responses":
+            payload = _responses_payload(
+                model_id,
+                "Reply with exactly: pong",
+                reasoning_effort=reasoning_effort,
+                disable_response_storage=disable_response_storage,
+                max_output_tokens=16,
+            )
+        else:
+            payload = {
+                "model": model_id,
+                "messages": [{"role": "user", "content": "ping"}],
+                "max_tokens": 1,
+                "temperature": 0,
+            }
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
@@ -1024,8 +1046,14 @@ def test_provider_connection(config: dict[str, Any]) -> dict[str, Any]:
             headers=headers,
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:
-            response_obj = json.loads(response.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_s) as response:
+                response_obj = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = _redact(exc.read().decode("utf-8", errors="replace")[:1500], api_key)
+            raise RuntimeError(f"LLM API HTTP {exc.code}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"LLM API 连接失败：{_redact(str(exc.reason), api_key)}") from exc
         _content(response_obj)
         return {
             "schema": schema,
@@ -1033,7 +1061,10 @@ def test_provider_connection(config: dict[str, Any]) -> dict[str, Any]:
             "provider": provider,
             "model_id": model_id,
             "endpoint_profile": endpoint_profile,
-            "message": "已通过最小 chat/completions 请求验证该精确模型。",
+            "wire_api": wire_api,
+            "reasoning_effort": reasoning_effort,
+            "response_storage_disabled": disable_response_storage if wire_api == "responses" else None,
+            "message": f"已通过最小 {wire_api} 请求验证该精确模型。",
         }
     except Exception as exc:
         return {
@@ -1042,13 +1073,96 @@ def test_provider_connection(config: dict[str, Any]) -> dict[str, Any]:
             "provider": provider or "unknown",
             "model_id": model_id or None,
             "endpoint_profile": endpoint_profile,
+            "wire_api": wire_api,
+            "reasoning_effort": reasoning_effort,
+            "response_storage_disabled": disable_response_storage if wire_api == "responses" else None,
             "message": _redact(str(exc), api_key),
         }
 
 
-def _endpoint(base_url: str, provider: str = "openai_compatible") -> str:
+def _wire_api(config: dict[str, Any]) -> str:
+    raw = str(config.get("wire_api", "chat_completions")).strip().lower().replace("-", "_")
+    aliases = {
+        "chat": "chat_completions",
+        "chat/completions": "chat_completions",
+        "chat_completions": "chat_completions",
+        "response": "responses",
+        "responses": "responses",
+    }
+    wire_api = aliases.get(raw)
+    if wire_api not in SUPPORTED_WIRE_APIS:
+        raise ValueError("wire_api 只能是 chat_completions 或 responses。")
+    return wire_api
+
+
+def _reasoning_effort(config: dict[str, Any]) -> str | None:
+    raw = str(config.get("reasoning_effort") or "").strip().lower()
+    if not raw or raw == "none":
+        return None
+    if raw not in SUPPORTED_REASONING_EFFORTS:
+        raise ValueError(
+            "reasoning_effort 只能是 minimal、low、medium、high 或 xhigh。"
+        )
+    return raw
+
+
+def _disable_response_storage(config: dict[str, Any]) -> bool:
+    raw = config.get("disable_response_storage", True)
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)) and raw in {0, 1}:
+        return bool(raw)
+    normalized = str(raw).strip().lower()
+    if normalized in {"true", "1", "yes", "on"}:
+        return True
+    if normalized in {"false", "0", "no", "off"}:
+        return False
+    raise ValueError("disable_response_storage 必须是布尔值。")
+
+
+def _responses_payload(
+    model: str,
+    input_value: str,
+    *,
+    instructions: str | None = None,
+    reasoning_effort: str | None = None,
+    disable_response_storage: bool = True,
+    max_output_tokens: int | None = None,
+    json_schema: dict[str, Any] | None = None,
+    schema_name: str = "equipment_design_output",
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "model": model,
+        "input": input_value,
+        "store": not disable_response_storage,
+    }
+    if instructions:
+        payload["instructions"] = instructions
+    if reasoning_effort:
+        payload["reasoning"] = {"effort": reasoning_effort}
+    if max_output_tokens is not None:
+        payload["max_output_tokens"] = max_output_tokens
+    if json_schema is not None:
+        payload["text"] = {
+            "format": {
+                "type": "json_schema",
+                "name": schema_name,
+                "strict": True,
+                "schema": json_schema,
+            }
+        }
+    return payload
+
+
+def _endpoint(
+    base_url: str,
+    provider: str = "openai_compatible",
+    wire_api: str = "chat_completions",
+) -> str:
     if provider not in SUPPORTED_PROVIDERS:
         raise ValueError(f"不支持的 LLM provider：{provider}。")
+    if wire_api not in SUPPORTED_WIRE_APIS:
+        raise ValueError(f"不支持的 wire_api：{wire_api}。")
     value = str(base_url).strip().rstrip("/")
     parsed = urllib.parse.urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -1061,9 +1175,12 @@ def _endpoint(base_url: str, provider: str = "openai_compatible") -> str:
         raise ValueError("provider=openai 时 API Base URL 必须使用 api.openai.com。")
     if provider == "local_openai_compatible" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
         raise ValueError("local_openai_compatible 仅允许本机 loopback 地址。")
-    if parsed.path.endswith("/chat/completions"):
-        return value
-    return value + "/chat/completions"
+    target_suffix = "/responses" if wire_api == "responses" else "/chat/completions"
+    for known_suffix in ("/chat/completions", "/responses"):
+        if value.endswith(known_suffix):
+            value = value[: -len(known_suffix)]
+            break
+    return value + target_suffix
 
 
 def _timeout_seconds(value: Any) -> int:
@@ -1085,9 +1202,30 @@ def _redact(text: str, *secrets: str) -> str:
 
 
 def _content(response: dict[str, Any]) -> str:
+    output_text = response.get("output_text")
+    if isinstance(output_text, str) and output_text:
+        return output_text
+
+    output = response.get("output")
+    if isinstance(output, list):
+        text_parts: list[str] = []
+        for item in output:
+            if not isinstance(item, dict) or item.get("type") != "message":
+                continue
+            content = item.get("content")
+            if not isinstance(content, list):
+                continue
+            for content_item in content:
+                if not isinstance(content_item, dict):
+                    continue
+                if content_item.get("type") == "output_text" and isinstance(content_item.get("text"), str):
+                    text_parts.append(content_item["text"])
+        if text_parts:
+            return "\n".join(text_parts)
+
     choices = response.get("choices")
     if not isinstance(choices, list) or not choices:
-        raise ValueError("API 响应缺少 choices。")
+        raise ValueError("API 响应缺少可用的 output_text、output message 或 choices。")
     content = choices[0].get("message", {}).get("content")
     if isinstance(content, str):
         return content
@@ -2695,9 +2833,12 @@ def _request_step_output(config: dict[str, Any], prepared: dict[str, Any]) -> tu
     api_key = str(config.get("api_key", "")).strip()
     base_url = str(config.get("base_url") or provider_definition["default_base_url"]).strip()
     timeout_s = _timeout_seconds(config.get("timeout_s", 90))
+    wire_api = _wire_api(config)
+    reasoning_effort = _reasoning_effort(config)
+    disable_response_storage = _disable_response_storage(config)
     if not model:
         raise ValueError("必须填写模型名称。")
-    endpoint = _endpoint(base_url, provider)
+    endpoint = _endpoint(base_url, provider, wire_api)
     parsed_endpoint = urllib.parse.urlparse(endpoint)
     if not api_key and parsed_endpoint.hostname not in {"localhost", "127.0.0.1", "::1"}:
         raise ValueError("远程 API 必须填写 API Key；Key 只在本次请求内使用，不保存。")
@@ -2745,18 +2886,29 @@ def _request_step_output(config: dict[str, Any], prepared: dict[str, Any]) -> tu
         },
         "output_contract": output_contract,
     }
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": json.dumps(user, ensure_ascii=False)},
-        ],
-        "temperature": 0.0,
-    }
-    if provider == "openai":
-        provider_schema = prepared["output_contract"].get("provider_json_schema")
-        if not isinstance(provider_schema, dict):
-            raise ValueError("prepared.output_contract 缺少 provider_json_schema。")
+    provider_schema = prepared["output_contract"].get("provider_json_schema")
+    if provider == "openai" and not isinstance(provider_schema, dict):
+        raise ValueError("prepared.output_contract 缺少 provider_json_schema。")
+    if wire_api == "responses":
+        payload = _responses_payload(
+            model,
+            json.dumps(user, ensure_ascii=False),
+            instructions=system,
+            reasoning_effort=reasoning_effort,
+            disable_response_storage=disable_response_storage,
+            json_schema=provider_schema if provider == "openai" else None,
+            schema_name="equipment_design_llm_step_output",
+        )
+    else:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": json.dumps(user, ensure_ascii=False)},
+            ],
+            "temperature": 0.0,
+        }
+    if provider == "openai" and wire_api == "chat_completions":
         payload["response_format"] = {
             "type": "json_schema",
             "json_schema": {
@@ -2788,6 +2940,9 @@ def _request_step_output(config: dict[str, Any], prepared: dict[str, Any]) -> tu
         "provider_endpoint": endpoint,
         "model": model,
         "timeout_s": timeout_s,
+        "wire_api": wire_api,
+        "reasoning_effort": reasoning_effort,
+        "response_storage_disabled": disable_response_storage if wire_api == "responses" else None,
         "api_key_persisted": False,
         "api_key_echoed": False,
     }
@@ -2883,9 +3038,12 @@ def request_review(
     base_url = str(config.get("base_url") or provider_definition["default_base_url"]).strip()
     model = str(config.get("model") or "").strip()
     timeout_s = _timeout_seconds(config.get("timeout_s", 90))
+    wire_api = _wire_api(config)
+    reasoning_effort = _reasoning_effort(config)
+    disable_response_storage = _disable_response_storage(config)
     if not model:
         raise ValueError("必须填写模型名称。")
-    endpoint = _endpoint(base_url, provider)
+    endpoint = _endpoint(base_url, provider, wire_api)
     parsed_endpoint = urllib.parse.urlparse(endpoint)
     if not api_key and parsed_endpoint.hostname not in {"localhost", "127.0.0.1", "::1"}:
         raise ValueError("远程 API 必须填写 API Key；Key 只在本次请求内使用，不保存。")
@@ -2909,14 +3067,23 @@ def request_review(
             "limitation": "No selected knowledge package was supplied.",
         },
     }
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": json.dumps(user, ensure_ascii=False)},
-        ],
-        "temperature": 0.1,
-    }
+    if wire_api == "responses":
+        payload = _responses_payload(
+            model,
+            json.dumps(user, ensure_ascii=False),
+            instructions=system,
+            reasoning_effort=reasoning_effort,
+            disable_response_storage=disable_response_storage,
+        )
+    else:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": json.dumps(user, ensure_ascii=False)},
+            ],
+            "temperature": 0.1,
+        }
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -2943,6 +3110,9 @@ def request_review(
         "provider_endpoint": endpoint,
         "model": model,
         "timeout_s": timeout_s,
+        "wire_api": wire_api,
+        "reasoning_effort": reasoning_effort,
+        "response_storage_disabled": disable_response_storage if wire_api == "responses" else None,
         "api_key_persisted": False,
         "api_key_echoed": False,
         "knowledge_context_used": bool(knowledge_context),
