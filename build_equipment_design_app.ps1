@@ -77,13 +77,43 @@ function Assert-ChildPath {
     }
 }
 
+function ConvertTo-LongPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $full = [IO.Path]::GetFullPath($Path)
+    if ($full.StartsWith('\\?\')) {
+        return $full
+    }
+    if ($full.StartsWith('\\')) {
+        return '\\?\UNC\' + $full.TrimStart('\')
+    }
+    return '\\?\' + $full
+}
+
+function New-LongPathDirectory {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    [IO.Directory]::CreateDirectory((ConvertTo-LongPath -Path $Path)) | Out-Null
+}
+
+function Copy-LongPathFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+    New-LongPathDirectory -Path (Split-Path -Parent $Destination)
+    [IO.File]::Copy(
+        (ConvertTo-LongPath -Path $Source),
+        (ConvertTo-LongPath -Path $Destination),
+        $true
+    )
+}
+
 function Reset-BundleDirectory {
     param([Parameter(Mandatory = $true)][string]$Path)
     Assert-ChildPath -ChildPath $Path -ParentPath (Join-Path $Root 'build')
     if (Test-Path -LiteralPath $Path) {
-        Remove-Item -LiteralPath $Path -Recurse -Force
+        [IO.Directory]::Delete((ConvertTo-LongPath -Path $Path), $true)
     }
-    New-Item -ItemType Directory -Path $Path -Force | Out-Null
+    New-LongPathDirectory -Path $Path
 }
 
 function Copy-RuntimeKnowledgeAssets {
@@ -95,7 +125,7 @@ function Copy-RuntimeKnowledgeAssets {
     if (-not (Test-Path -LiteralPath $sourceFull -PathType Container)) {
         throw "Knowledge asset root is missing: $sourceFull"
     }
-    New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
+    New-LongPathDirectory -Path $DestinationRoot
     $oldPreference = $ErrorActionPreference
     try {
         # Parser lock/temp directories may be inaccessible. They are not runtime
@@ -125,8 +155,7 @@ function Copy-RuntimeKnowledgeAssets {
             continue
         }
         $destination = Join-Path $DestinationRoot $relative
-        New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
-        Copy-Item -LiteralPath $fileFull -Destination $destination -Force
+        Copy-LongPathFile -Source $fileFull -Destination $destination
         $copiedCount += 1
     }
     return $copiedCount
