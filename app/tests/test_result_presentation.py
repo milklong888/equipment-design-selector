@@ -11,9 +11,48 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 import result_presentation
+import app_core
 
 
 class ResultPresentationTests(unittest.TestCase):
+    def test_formula_trace_is_visible_in_html_markdown_and_agent_answer(self) -> None:
+        result = app_core.manual_match("block:PUMP", {
+            "equipment_tag": "P-REPORT-TRACE",
+            "process_function": "liquid pressure boosting",
+            "pressure_basis": "absolute",
+            "flow_m3_h": 24.0,
+            "density_kg_m3": 910.0,
+            "inlet_pressure_mpa": 0.15,
+            "outlet_pressure_mpa": 0.45,
+            "efficiency_percent": 75.0,
+        })
+        presentation = result_presentation.build_presentation(result)
+        html = result_presentation.render_html(presentation)
+        self.assertIn("公式可追溯性", html)
+        self.assertIn("公式定义 SHA-256", html)
+        self.assertIn("本次计算追溯 SHA-256", html)
+        self.assertIn("scripts/equipment_design_match.py#run_calculations", html)
+        self.assertIn("formula_pump_hydraulic_power", html)
+
+        answer = result_presentation.build_organized_answer(presentation)
+        calculations = answer["equipment"][0]["calculations"]
+        traced = next(
+            item
+            for item in calculations
+            if item["calculation_id"] == "pump_hydraulic_power"
+        )
+        self.assertEqual(traced["formula_id"], "A_PUMP_HYDRAULIC_POWER")
+        self.assertEqual(
+            traced["formula_trace"]["schema"],
+            "equipment-formula-trace-v1",
+        )
+        markdown = result_presentation.render_organized_markdown(answer)
+        self.assertIn("公式 ID：`A_PUMP_HYDRAULIC_POWER`", markdown)
+        self.assertIn("公式定义 SHA-256", markdown)
+        self.assertIn("输入绑定", markdown)
+        self.assertIn("公式来源", markdown)
+        self.assertIn("追溯缺口", markdown)
+
     def test_overview_schema_requires_quantity_and_visible_core_columns(self) -> None:
         schema = json.loads(
             (APP_DIR / "schemas" / "equipment_overview_table.schema.json").read_text(

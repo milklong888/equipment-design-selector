@@ -1364,6 +1364,10 @@ class EquipmentDesignAgentTests(unittest.TestCase):
             "aspen-equipment-export-v1",
             {item["schema_id"] for item in capabilities["result"]["schemas"]},
         )
+        self.assertIn(
+            "equipment-formula-trace-v1",
+            {item["schema_id"] for item in capabilities["result"]["schemas"]},
+        )
         catalog_entry = next(
             item for item in capabilities["result"]["schemas"]
             if item["schema_id"] == "equipment-design-llm-step-output-v1"

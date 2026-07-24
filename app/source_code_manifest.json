@@ -31,8 +31,8 @@
       "source_path": "app/derivation_workbench.py"
     },
     {
-      "sha256": "496736E5D72713ED9D18716D674143958201E8654FB211BB523BE5F04592FBF0",
-      "size_bytes": 139713,
+      "sha256": "CF463F0B919D3E11864ACA6FBC3B60564C6B14F6481557BC41A85E49390CD2A4",
+      "size_bytes": 139852,
       "source_path": "app/equipment_design_agent.py"
     },
     {
@@ -51,8 +51,8 @@
       "source_path": "app/pfd_canvas.py"
     },
     {
-      "sha256": "22D8E776AF6476CCB7C58A1472074EA57B252D6292BB3E73A70FC9A5A9B871EB",
-      "size_bytes": 47963,
+      "sha256": "F34ABBE553490B0D805E56D7F2BDAD7B831449DF24020981AD315D26611B0BBB",
+      "size_bytes": 55598,
       "source_path": "app/result_presentation.py"
     },
     {
@@ -66,8 +66,8 @@
       "source_path": "app/source_code_manifest.py"
     },
     {
-      "sha256": "6F788858A65C2AC8FDD4A9374103906D5647C07CCCE31AE60F161FE4D40CD969",
-      "size_bytes": 184453,
+      "sha256": "D269FA2511F57BB960DF9FE23036363D228BD771AA248AF40FB7AE3ED87166CD",
+      "size_bytes": 188020,
       "source_path": "app/tk_gui.py"
     },
     {
@@ -96,8 +96,8 @@
       "source_path": "scripts/equipment_calc.py"
     },
     {
-      "sha256": "438FC879579F949BE71C9BC5184AA4AB84F9BD786552BB3C9563E1746B4B1FB2",
-      "size_bytes": 389807,
+      "sha256": "2A55B5CDB0074E3460FBD09D07240C7919384AB68A300D0096852BA7C3BACF9F",
+      "size_bytes": 404569,
       "source_path": "scripts/equipment_design_match.py"
     },
     {
@@ -106,10 +106,10 @@
       "source_path": "scripts/equipment_service_profile.py"
     }
   ],
-  "manifest_payload_sha256": "202F2DE00C558DF4DB505492DDBA516B90DF4C228E66E46A4EFDEDC4298F24BD",
+  "manifest_payload_sha256": "E98354BF7AE628EDA289DBF4CE932957A05E53C40833CFD7F4770C63D83C45E9",
   "path_set_sha256": "5195BF4C0810352E20041CFA9C1E8FD23A2372BE8E571E8D6242D4A48165A8BF",
   "schema": "equipment-design-source-code-manifest-v1",
-  "source_code_set_sha256": "2D7EDA40194E9460298F4DB5997260379276F8E0E8AFEC30D38254A6F8F04617",
+  "source_code_set_sha256": "4025FCDBBA6E8F247A25F168390F2D872B7F5E33DD66F23BC91EE07E48395462",
   "source_paths": [
     "app/app_core.py",
     "app/aspen_com_import.py",

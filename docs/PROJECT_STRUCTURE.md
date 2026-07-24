@@ -147,6 +147,7 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/schemas/equipment_design_source_code_manifest.schema.json` | 定义固定核心源码清单的文件记录、集合哈希和版本。 |
 | `app/schemas/equipment_evidence_index.schema.json` | 定义同一设备、同一工况下可用于型号升级的证据索引。 |
 | `app/schemas/equipment_family_datasheet.schema.json` | 定义按设备族输出的客户数据表、字段状态和证据等级。 |
+| `app/schemas/equipment_formula_trace.schema.json` | 定义内置公式的表达式、输入、出处、代码实现、开放缺口和双 SHA-256 机器追溯合同。 |
 | `app/schemas/equipment_overview_table.schema.json` | 定义完整设备选型一览表、公开字段、开放缺口、数量和证据门。 |
 
 ## 8. `app/static/` 浏览器界面
@@ -216,6 +217,7 @@ Aspen COM / 提取 JSON / 人工输入
 
 | 文件 | 作用 |
 | --- | --- |
+| `docs/FORMULA_TRACEABILITY.md` | 说明内置公式的机器追溯合同、输入/来源/代码绑定、哈希复核、40 条规则覆盖和剩余边界。 |
 | `docs/PROJECT_STRUCTURE.md` | 当前文档；说明目录边界、阅读顺序、执行链和所有受 Git 追踪文件的职责。 |
 | `docs/RETRIEVAL_AND_GAPS.md` | 说明知识检索、设备型式检索、排序与证据门，并逐项区分未实现、部分实现和待生产验证能力。 |
 | `docs/STAGE1_2_4_0_RELEASE_VERIFICATION_20260724.md` | 记录 2.4.0 完成范围、测试结果、17 类设备覆盖、程序/源码/知识包哈希及待生产环境验证。 |

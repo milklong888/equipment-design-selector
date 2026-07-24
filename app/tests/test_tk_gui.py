@@ -25,11 +25,51 @@ from tk_gui import (
     EquipmentDesignTkApp,
     TranslatedCombobox,
     _customer_overview_rows,
+    _formula_trace_text,
     _pretty_equation,
 )
 
 
 class EquationFormattingTests(unittest.TestCase):
+    def test_formula_trace_text_exposes_inputs_sources_code_and_open_gaps(self) -> None:
+        text = _formula_trace_text({
+            "formula_trace": {
+                "traceability_status": "REPRODUCIBLE_TRACE_WITH_OPEN_PROVENANCE",
+                "formula_id": "A_TEST",
+                "formula_definition_sha256": "A" * 64,
+                "calculation_trace_sha256": "B" * 64,
+                "input_bindings": [{
+                    "field_id": "flow_m3_h",
+                    "value": 10,
+                    "unit": "m3/h",
+                    "source_kind": "normalized_input",
+                    "binding_status": "SOURCE_PROVENANCE_NOT_ESTABLISHED_BY_MATCHER",
+                    "field_value_sha256": "C" * 64,
+                }],
+                "formula_definition": {
+                    "implementation_binding": {
+                        "implementation_ref": "scripts/equipment_design_match.py#run_calculations",
+                        "binding_status": "SOURCE_FILE_MATCHES_MANIFEST",
+                        "source_file_sha256": "D" * 64,
+                    },
+                    "source_bindings": [{
+                        "reference": "knowledge_graph/formula_family_nodes.md#formula_test",
+                        "binding_status": "FILE_AND_ANCHOR_BOUND",
+                        "locator_line_1based": 12,
+                        "source_file_sha256": "E" * 64,
+                    }],
+                },
+                "open_traceability_gaps": [
+                    "input_source_provenance_open:flow_m3_h"
+                ],
+            },
+        })
+        self.assertIn("A_TEST", text)
+        self.assertIn("输入绑定", text)
+        self.assertIn("formula_family_nodes.md#formula_test", text)
+        self.assertIn("equipment_design_match.py#run_calculations", text)
+        self.assertIn("input_source_provenance_open:flow_m3_h", text)
+
     def test_new_formula_titles_and_symbols_are_engineering_readable(self) -> None:
         cases = {
             "design_pressure_basis_conversion": "设计压力基准换算：P_d,g",

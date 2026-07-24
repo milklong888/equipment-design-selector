@@ -669,6 +669,61 @@ CALCULATION_POLICIES: dict[str, dict[str, Any]] = {
     },
 }
 
+# The block-specific solid-processing formulas used to execute without a
+# registered source policy.  They are intentionally included here so every
+# executable calculation rule has an explicit applicability/evidence boundary
+# and at least one source route.
+CALCULATION_POLICIES.update({
+    "crystallizer_working_volume": {
+        "formula_id": "A_CRYSTALLIZER_WORKING_VOLUME",
+        "release_class": "A",
+        "evidence_class": "D",
+        "result_status": "DERIVED",
+        "title": "结晶器工作容积由浆液流量和显式停留时间计算",
+        "message": "本式只闭合工作容积恒等关系；晶体生长、粒度分布、过饱和度和搅拌传热尚未闭合。",
+        "applicability": "稳定连续浆液流量，停留时间为当前结晶工艺的显式设计输入。",
+        "does_not_prove": ["crystal_size_distribution", "mixing_pass", "heat_transfer_pass", "final_model"],
+        "promotion_cap": "DERIVED_PARAMETER",
+        "source_refs": ["knowledge_graph/chapter_04_08_late_equipment_graph.md"],
+    },
+    "filter_area_from_cake_flux": {
+        "formula_id": "B_FILTER_AREA_FROM_CAKE_FLUX",
+        "release_class": "B",
+        "evidence_class": "J",
+        "result_status": "PROVISIONAL",
+        "title": "过滤面积由固体负荷和显式滤饼通量初算",
+        "message": "滤饼通量必须来自同物料试验或项目依据；本式不闭合滤布、压差、周期和洗涤要求。",
+        "applicability": "稳定固体进料，过滤通量大于零且适用于当前滤饼和操作周期。",
+        "does_not_prove": ["filter_cycle", "cloth_selection", "washing_pass", "final_model"],
+        "promotion_cap": "TYPE_SCREENING",
+        "source_refs": ["knowledge_graph/chapter_04_08_late_equipment_graph.md"],
+    },
+    "dryer_water_evaporation": {
+        "formula_id": "A_DRYER_WATER_BALANCE",
+        "release_class": "A",
+        "evidence_class": "D",
+        "result_status": "DERIVED",
+        "title": "干燥器蒸发水量由明确水组分的进出口质量衡算计算",
+        "message": "只有水组分映射和进出口质量流量属于同一边界时，本差值才代表水蒸发量。",
+        "applicability": "稳态、同一系统边界，水组分映射明确且无未计水支路。",
+        "does_not_prove": ["drying_kinetics", "bound_moisture", "residence_time_pass", "final_model"],
+        "promotion_cap": "DERIVED_PARAMETER",
+        "source_refs": ["knowledge_graph/chapter_04_08_late_equipment_graph.md"],
+    },
+    "dryer_specific_duty": {
+        "formula_id": "B_DRYER_SPECIFIC_DUTY",
+        "release_class": "B",
+        "evidence_class": "J",
+        "result_status": "PROVISIONAL",
+        "title": "干燥器单位蒸发水热耗由总热负荷初算",
+        "message": "总热负荷、散热、排风显热和热效率边界必须一致；本值不能替代干燥动力学和厂家热平衡。",
+        "applicability": "蒸发水量大于零，热负荷与水衡算属于同一稳定工况和系统边界。",
+        "does_not_prove": ["thermal_efficiency", "drying_kinetics", "air_system_design", "final_model"],
+        "promotion_cap": "TYPE_SCREENING",
+        "source_refs": ["knowledge_graph/chapter_04_08_late_equipment_graph.md"],
+    },
+})
+
 # The incompressible Cv expression is a liquid-only screening branch.  Keep
 # this executable policy explicit so unknown, gas, solid-bearing and
 # two-phase services can never be described as a harmless "liquid equivalent"
@@ -3200,6 +3255,256 @@ def _compact_substitution_numbers(value: str) -> str:
     return _SUBSTITUTION_NUMBER.sub(replace, value)
 
 
+_FORMULA_SOURCE_BINDING_CACHE: dict[str, dict[str, Any]] = {}
+_FORMULA_IMPLEMENTATION_BINDING_CACHE: dict[str, Any] | None = None
+
+
+def _sha256_file_for_formula_trace(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest().upper()
+
+
+def _formula_source_binding(reference: str) -> dict[str, Any]:
+    """Bind a formula source route to a local file hash when one is packaged."""
+
+    reference = str(reference).strip()
+    cached = _FORMULA_SOURCE_BINDING_CACHE.get(reference)
+    if cached is not None:
+        return dict(cached)
+    relative, separator, anchor = reference.partition("#")
+    normalized = relative.replace("\\", "/").lstrip("/")
+    local_prefixes = ("knowledge_graph/", "data/", "app/", "scripts/")
+    if not normalized.startswith(local_prefixes):
+        result = {
+            "reference": reference,
+            "source_kind": "external_citation",
+            "binding_status": "EXTERNAL_DOCUMENT_NOT_PACKAGED",
+            "relative_path": None,
+            "anchor": anchor or None,
+            "source_file_sha256": None,
+            "locator_line_1based": None,
+        }
+        _FORMULA_SOURCE_BINDING_CACHE[reference] = result
+        return dict(result)
+
+    path = PACKAGE_ROOT / Path(normalized)
+    if not path.is_file():
+        result = {
+            "reference": reference,
+            "source_kind": "registered_local_asset",
+            "binding_status": "REGISTERED_ASSET_MISSING",
+            "relative_path": normalized,
+            "anchor": anchor or None,
+            "source_file_sha256": None,
+            "locator_line_1based": None,
+        }
+        _FORMULA_SOURCE_BINDING_CACHE[reference] = result
+        return dict(result)
+
+    digest = _sha256_file_for_formula_trace(path)
+    locator_line: int | None = None
+    anchor_status = "NO_ANCHOR_DECLARED"
+    if separator and anchor:
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            lines = []
+        token = anchor.casefold()
+        locator_line = next(
+            (index for index, line in enumerate(lines, 1) if token in line.casefold()),
+            None,
+        )
+        anchor_status = "ANCHOR_TOKEN_FOUND" if locator_line is not None else "ANCHOR_TOKEN_NOT_FOUND"
+    result = {
+        "reference": reference,
+        "source_kind": "registered_local_asset",
+        "binding_status": (
+            "FILE_AND_ANCHOR_BOUND"
+            if anchor_status == "ANCHOR_TOKEN_FOUND"
+            else "FILE_BOUND_NO_ANCHOR"
+            if anchor_status == "NO_ANCHOR_DECLARED"
+            else "FILE_BOUND_ANCHOR_OPEN"
+        ),
+        "relative_path": normalized,
+        "anchor": anchor or None,
+        "anchor_status": anchor_status,
+        "source_file_sha256": digest,
+        "locator_line_1based": locator_line,
+    }
+    _FORMULA_SOURCE_BINDING_CACHE[reference] = result
+    return dict(result)
+
+
+def _formula_implementation_binding() -> dict[str, Any]:
+    """Return the source-code-manifest binding for the executable formula branch."""
+
+    global _FORMULA_IMPLEMENTATION_BINDING_CACHE
+    if _FORMULA_IMPLEMENTATION_BINDING_CACHE is not None:
+        return dict(_FORMULA_IMPLEMENTATION_BINDING_CACHE)
+    relative = "scripts/equipment_design_match.py"
+    manifest_path = PACKAGE_ROOT / "app" / "source_code_manifest.json"
+    manifest: dict[str, Any] = {}
+    if manifest_path.is_file():
+        try:
+            loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest = loaded if isinstance(loaded, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            manifest = {}
+    record = next(
+        (
+            item
+            for item in manifest.get("files", [])
+            if isinstance(item, dict) and item.get("source_path") == relative
+        ),
+        {},
+    )
+    actual_path = PACKAGE_ROOT / relative
+    actual_sha = (
+        _sha256_file_for_formula_trace(actual_path)
+        if actual_path.is_file()
+        else None
+    )
+    manifest_sha = str(record.get("sha256") or "").strip().upper() or None
+    if actual_sha and manifest_sha:
+        binding_status = (
+            "SOURCE_FILE_MATCHES_MANIFEST"
+            if actual_sha == manifest_sha
+            else "SOURCE_FILE_MANIFEST_MISMATCH"
+        )
+    elif manifest_sha:
+        binding_status = "PACKAGED_SOURCE_BOUND_BY_MANIFEST"
+    else:
+        binding_status = "SOURCE_MANIFEST_BINDING_MISSING"
+    _FORMULA_IMPLEMENTATION_BINDING_CACHE = {
+        "implementation_ref": f"{relative}#run_calculations",
+        "branch_key": "calculation_id",
+        "engine_version": ENGINE_VERSION,
+        "source_file_sha256": manifest_sha or actual_sha,
+        "actual_source_file_sha256": actual_sha,
+        "source_code_set_sha256": manifest.get("source_code_set_sha256"),
+        "source_manifest_payload_sha256": manifest.get("manifest_payload_sha256"),
+        "binding_status": binding_status,
+    }
+    return dict(_FORMULA_IMPLEMENTATION_BINDING_CACHE)
+
+
+def _formula_input_binding(
+    field: str,
+    value: Any,
+    lineage: dict[str, Any] | None,
+) -> dict[str, Any]:
+    lineage = dict(lineage or {})
+    if lineage.get("calculation_id") and not lineage.get("fallback_tier"):
+        source_kind = "upstream_registered_calculation"
+        binding_status = "UPSTREAM_CALCULATION_BOUND"
+    elif lineage.get("fallback_tier"):
+        source_kind = "registered_or_model_fallback"
+        binding_status = "PROVISIONAL_FALLBACK_BOUND"
+    else:
+        source_kind = "normalized_input"
+        binding_status = "SOURCE_PROVENANCE_NOT_ESTABLISHED_BY_MATCHER"
+    value_binding = {
+        "field_id": field,
+        "value": value,
+        "unit": FIELD_UNITS.get(field),
+        "source_kind": source_kind,
+        "binding_status": binding_status,
+        "evidence_class": lineage.get(
+            "evidence_class",
+            "U" if source_kind == "normalized_input" else "J",
+        ),
+        "upstream_calculation_id": lineage.get("calculation_id"),
+        "upstream_formula_trace_sha256": lineage.get("formula_trace_sha256"),
+        "fallback_tier": lineage.get("fallback_tier"),
+    }
+    value_binding["field_value_sha256"] = _canonical_sha256({
+        "field_id": field,
+        "value": value,
+        "unit": value_binding["unit"],
+        "source_kind": source_kind,
+    })
+    return value_binding
+
+
+def _formula_trace(
+    calc_id: str,
+    target_field: str,
+    formula: str,
+    substitution: str,
+    value: float,
+    unit: str,
+    input_bindings: list[dict[str, Any]],
+    policy: dict[str, Any],
+) -> dict[str, Any]:
+    source_bindings = [
+        _formula_source_binding(reference)
+        for reference in policy.get("source_refs", [])
+    ]
+    implementation = _formula_implementation_binding()
+    definition = {
+        "calculation_id": calc_id,
+        "formula_id": policy.get("formula_id", calc_id),
+        "formula_expression": formula,
+        "target_field": target_field,
+        "output_unit": unit,
+        "dependency_fields": [item["field_id"] for item in input_bindings],
+        "release_class": policy.get("release_class", "A"),
+        "declared_evidence_class": policy.get("evidence_class", "D"),
+        "applicability": policy.get("applicability"),
+        "does_not_prove": list(policy.get("does_not_prove", [])),
+        "promotion_cap": policy.get("promotion_cap", "DERIVED_PARAMETER"),
+        "implementation_binding": implementation,
+        "source_bindings": source_bindings,
+    }
+    definition_sha256 = _canonical_sha256(definition)
+    open_gaps: list[str] = []
+    for item in input_bindings:
+        if item.get("binding_status") == "SOURCE_PROVENANCE_NOT_ESTABLISHED_BY_MATCHER":
+            open_gaps.append(f"input_source_provenance_open:{item.get('field_id')}")
+        elif item.get("binding_status") == "PROVISIONAL_FALLBACK_BOUND":
+            open_gaps.append(f"provisional_input:{item.get('field_id')}")
+    for item in source_bindings:
+        if item.get("binding_status") not in {
+            "FILE_AND_ANCHOR_BOUND",
+            "FILE_BOUND_NO_ANCHOR",
+        }:
+            open_gaps.append(
+                f"formula_source_open:{item.get('reference')}:{item.get('binding_status')}"
+            )
+    if implementation.get("binding_status") not in {
+        "SOURCE_FILE_MATCHES_MANIFEST",
+        "PACKAGED_SOURCE_BOUND_BY_MANIFEST",
+    }:
+        open_gaps.append(
+            f"implementation_binding_open:{implementation.get('binding_status')}"
+        )
+    trace = {
+        "schema": "equipment-formula-trace-v1",
+        "traceability_status": (
+            "COMPLETE_REPRODUCIBLE_TRACE"
+            if not open_gaps
+            else "REPRODUCIBLE_TRACE_WITH_OPEN_PROVENANCE"
+        ),
+        "calculation_id": calc_id,
+        "formula_id": definition["formula_id"],
+        "formula_definition": definition,
+        "formula_definition_sha256": definition_sha256,
+        "input_bindings": input_bindings,
+        "substitution": substitution,
+        "output": {
+            "target_field": target_field,
+            "value": value,
+            "unit": unit,
+        },
+        "open_traceability_gaps": sorted(set(open_gaps)),
+    }
+    trace["calculation_trace_sha256"] = _canonical_sha256(trace)
+    return trace
+
+
 def calculation_record(
     calc_id: str,
     formula: str,
@@ -3208,6 +3513,7 @@ def calculation_record(
     unit: str,
     target: str | None = None,
     upstream_formula_lineage: list[dict[str, Any]] | None = None,
+    input_bindings: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     target_field = target or CALCULATION_OUTPUT_FIELDS.get(calc_id, calc_id)
     substitution = _compact_substitution_numbers(substitution)
@@ -3257,6 +3563,21 @@ def calculation_record(
             f"{notice['message']} 本结果使用了上游初筛公式结果（{upstream_ids}），"
             "因此证据等级继承为 J/provisional，最高只能用于型式初筛。"
         )
+    formula_trace = _formula_trace(
+        calc_id,
+        target_field,
+        formula,
+        substitution,
+        value,
+        unit,
+        list(input_bindings or []),
+        policy,
+    )
+    notice["source_bindings"] = formula_trace["formula_definition"]["source_bindings"]
+    notice["formula_definition_sha256"] = formula_trace["formula_definition_sha256"]
+    notice["calculation_trace_sha256"] = formula_trace["calculation_trace_sha256"]
+    notice["traceability_status"] = formula_trace["traceability_status"]
+    notice["open_traceability_gaps"] = formula_trace["open_traceability_gaps"]
     return {
         "calculation_id": calc_id,
         "target_field": target_field,
@@ -3277,6 +3598,7 @@ def calculation_record(
         ),
         "evidence_status": "NUMERICALLY_DERIVED_NOT_SOURCE_VERIFIED_BY_MATCHER",
         "calculation_notice": notice,
+        "formula_trace": formula_trace,
     }
 
 
@@ -3305,11 +3627,45 @@ def run_calculations(
         for field, item in (fallback_lineage or {}).items()
     }
 
-    def add_result(calc_id: str, formula: str, substitution: str, value: float, unit: str, target: str | None = None) -> None:
+    def add_result(
+        calc_id: str,
+        formula: str,
+        substitution: str,
+        value: float,
+        unit: str,
+        target: str | None = None,
+        dependency_fields: list[str] | None = None,
+    ) -> None:
+        active_dependencies = list(
+            dependency_fields
+            if dependency_fields is not None
+            else CALCULATION_REQUIREMENTS.get(calc_id, ())
+        )
+        if (
+            calc_id == "pressure_ratio"
+            and work.get("pressure_basis") == "gauge"
+            and "atmospheric_pressure_mpa" not in active_dependencies
+        ):
+            active_dependencies.append("atmospheric_pressure_mpa")
+        if (
+            calc_id == "design_pressure"
+            and work.get("pressure_basis") == "absolute"
+            and "atmospheric_pressure_mpa" not in active_dependencies
+        ):
+            active_dependencies.append("atmospheric_pressure_mpa")
         upstream_formula_lineage = [
             dict(formula_lineage_by_field[field])
-            for field in CALCULATION_REQUIREMENTS.get(calc_id, ())
+            for field in active_dependencies
             if field in formula_lineage_by_field
+        ]
+        input_bindings = [
+            _formula_input_binding(
+                field,
+                work.get(field),
+                formula_lineage_by_field.get(field),
+            )
+            for field in active_dependencies
+            if present(work, field)
         ]
         item = calculation_record(
             calc_id,
@@ -3319,6 +3675,7 @@ def run_calculations(
             unit,
             target,
             upstream_formula_lineage,
+            input_bindings,
         )
         target_field = str(item["target_field"])
         notice = item.get("calculation_notice", {})
@@ -3421,6 +3778,12 @@ def run_calculations(
                 "evidence_class": notice.get("evidence_class", "D"),
                 "result_status": notice.get("result_status", "DERIVED"),
                 "promotion_cap": notice.get("promotion_cap", "DERIVED_PARAMETER"),
+                "formula_trace_sha256": item.get("formula_trace", {}).get(
+                    "calculation_trace_sha256"
+                ),
+                "traceability_status": item.get("formula_trace", {}).get(
+                    "traceability_status"
+                ),
             }
 
     if present(work, "design_pressure_mpa") and not present(work, "design_pressure_basis"):

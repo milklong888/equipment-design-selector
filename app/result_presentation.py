@@ -72,6 +72,29 @@ def _predicate_summary(candidate: dict[str, Any]) -> dict[str, int]:
 def _equipment_card(result: dict[str, Any], index: int) -> dict[str, Any]:
     match = result.get("match", {})
     package = result.get("design_parameter_package", {})
+    executed_by_key = {
+        (item.get("calculation_id"), item.get("target_field")): item
+        for item in result.get("calculations", [])
+        if isinstance(item, dict)
+    }
+    calculation_chain: list[dict[str, Any]] = []
+    for packaged_item in package.get("calculation_chain", []):
+        if not isinstance(packaged_item, dict):
+            continue
+        item = dict(packaged_item)
+        executed = executed_by_key.get(
+            (item.get("calculation_id"), item.get("target_field"))
+        )
+        if isinstance(executed, dict):
+            for field in (
+                "formula_trace",
+                "calculation_notice",
+                "canonical_value",
+                "evidence_status",
+            ):
+                if field in executed:
+                    item[field] = executed[field]
+        calculation_chain.append(item)
     model = result.get("model_recommendation", {})
     decision = result.get("model_decision", {})
     normalized = result.get("normalized_input", {})
@@ -195,7 +218,7 @@ def _equipment_card(result: dict[str, Any], index: int) -> dict[str, Any]:
         "selection_agent_control": result.get(
             "selection_agent_control", {}
         ),
-        "calculation_chain": package.get("calculation_chain", []),
+        "calculation_chain": calculation_chain,
         "constraint_checks": package.get("constraint_checks", []),
         "selection_feature_vector": package.get("selection_feature_vector", {}),
         "candidates": candidates,
@@ -525,6 +548,58 @@ def _equation_html(item: dict[str, Any], symbols: dict[str, str]) -> str:
     return "<span class='eq-sep'> = </span>".join(parts)
 
 
+def _formula_trace_html(item: dict[str, Any]) -> str:
+    trace = item.get("formula_trace")
+    if not isinstance(trace, dict):
+        return "<span class='state missing'>未生成机器公式追溯记录</span>"
+    definition = trace.get("formula_definition")
+    definition = definition if isinstance(definition, dict) else {}
+    implementation = definition.get("implementation_binding")
+    implementation = implementation if isinstance(implementation, dict) else {}
+    input_rows = "".join(
+        "<tr>"
+        f"<td>{_cell(binding.get('field_id'))}</td>"
+        f"<td>{_cell(binding.get('value'))}</td>"
+        f"<td>{_cell(_pretty_unit(binding.get('unit')))}</td>"
+        f"<td>{_cell(_code_label(binding.get('source_kind')))}</td>"
+        f"<td>{_cell(_code_label(binding.get('binding_status')))}</td>"
+        f"<td class='meta'>{_cell(binding.get('field_value_sha256'))}</td>"
+        "</tr>"
+        for binding in trace.get("input_bindings", [])
+        if isinstance(binding, dict)
+    )
+    source_rows = "".join(
+        "<tr>"
+        f"<td>{_cell(binding.get('reference'))}</td>"
+        f"<td>{_cell(_code_label(binding.get('binding_status')))}</td>"
+        f"<td>{_cell(binding.get('locator_line_1based'))}</td>"
+        f"<td class='meta'>{_cell(binding.get('source_file_sha256'))}</td>"
+        "</tr>"
+        for binding in definition.get("source_bindings", [])
+        if isinstance(binding, dict)
+    )
+    gaps = trace.get("open_traceability_gaps", [])
+    return (
+        "<div class='formula-trace'>"
+        f"<p><strong>{_cell(trace.get('formula_id'))}</strong> · "
+        f"{_cell(_code_label(trace.get('traceability_status')))}</p>"
+        f"<p class='meta'>公式定义 SHA-256={_cell(trace.get('formula_definition_sha256'))}<br>"
+        f"本次计算追溯 SHA-256={_cell(trace.get('calculation_trace_sha256'))}</p>"
+        f"<p>实现：{_cell(implementation.get('implementation_ref'))} · "
+        f"{_cell(_code_label(implementation.get('binding_status')))}<br>"
+        f"<span class='meta'>源码 SHA-256={_cell(implementation.get('source_file_sha256'))}<br>"
+        f"源码集合 SHA-256={_cell(implementation.get('source_code_set_sha256'))}</span></p>"
+        "<h4>输入绑定</h4>"
+        "<table><thead><tr><th>字段</th><th>值</th><th>单位</th><th>来源类型</th><th>绑定状态</th><th>值 SHA-256</th></tr></thead>"
+        f"<tbody>{input_rows}</tbody></table>"
+        "<h4>公式来源绑定</h4>"
+        "<table><thead><tr><th>来源</th><th>绑定状态</th><th>定位行</th><th>源文件 SHA-256</th></tr></thead>"
+        f"<tbody>{source_rows}</tbody></table>"
+        f"<p class='warn'><strong>尚未闭合的追溯缺口：</strong>{_cell(gaps or ['无'])}</p>"
+        "</div>"
+    )
+
+
 def build_organized_answer(payload: Any) -> dict[str, Any]:
     """Organize immutable program facts into a fixed Agent answer contract."""
 
@@ -581,6 +656,27 @@ def build_organized_answer(payload: Any) -> dict[str, Any]:
                     )
                     else None
                 ),
+                "formula_id": (
+                    item.get("formula_trace", {}).get("formula_id")
+                    if isinstance(item.get("formula_trace"), dict)
+                    else None
+                ),
+                "traceability_status": (
+                    item.get("formula_trace", {}).get("traceability_status")
+                    if isinstance(item.get("formula_trace"), dict)
+                    else None
+                ),
+                "formula_definition_sha256": (
+                    item.get("formula_trace", {}).get("formula_definition_sha256")
+                    if isinstance(item.get("formula_trace"), dict)
+                    else None
+                ),
+                "calculation_trace_sha256": (
+                    item.get("formula_trace", {}).get("calculation_trace_sha256")
+                    if isinstance(item.get("formula_trace"), dict)
+                    else None
+                ),
+                "formula_trace": item.get("formula_trace"),
             }
             for item in card.get("calculation_chain", [])
             if isinstance(item, dict)
@@ -772,6 +868,47 @@ def render_organized_markdown(answer: dict[str, Any]) -> str:
                     )
                     + f"（{calculation.get('status') or 'UNKNOWN'}）"
                 )
+                trace = calculation.get("formula_trace")
+                if isinstance(trace, dict):
+                    definition = trace.get("formula_definition")
+                    definition = definition if isinstance(definition, dict) else {}
+                    implementation = definition.get("implementation_binding")
+                    implementation = implementation if isinstance(implementation, dict) else {}
+                    lines.extend([
+                        f"  - 公式 ID：`{trace.get('formula_id') or 'OPEN'}`",
+                        f"  - 追溯状态：`{trace.get('traceability_status') or 'OPEN'}`",
+                        f"  - 公式定义 SHA-256：`{trace.get('formula_definition_sha256') or 'OPEN'}`",
+                        f"  - 本次计算追溯 SHA-256：`{trace.get('calculation_trace_sha256') or 'OPEN'}`",
+                        (
+                            "  - 实现绑定："
+                            f"`{implementation.get('implementation_ref') or 'OPEN'}` / "
+                            f"`{implementation.get('source_file_sha256') or 'OPEN'}`"
+                        ),
+                        (
+                            "  - 输入绑定："
+                            + json.dumps(
+                                trace.get("input_bindings", []),
+                                ensure_ascii=False,
+                                sort_keys=True,
+                            )
+                        ),
+                        (
+                            "  - 公式来源："
+                            + json.dumps(
+                                definition.get("source_bindings", []),
+                                ensure_ascii=False,
+                                sort_keys=True,
+                            )
+                        ),
+                        (
+                            "  - 追溯缺口："
+                            + json.dumps(
+                                trace.get("open_traceability_gaps", []),
+                                ensure_ascii=False,
+                                sort_keys=True,
+                            )
+                        ),
+                    ])
         else:
             lines.append("- 当前设备没有已执行的内置计算。")
         lines.extend([
@@ -951,6 +1088,14 @@ def render_html(presentation: dict[str, Any]) -> str:
             "</tr>"
             for item in equipment.get("calculation_chain", [])
         )
+        traceability_rows = "".join(
+            "<tr>"
+            f"<td>{_cell(item.get('calculation_id'))}</td>"
+            f"<td>{_formula_trace_html(item)}</td>"
+            "</tr>"
+            for item in equipment.get("calculation_chain", [])
+            if isinstance(item, dict)
+        )
         fallback_rows = "".join(
             "<tr>"
             f"<td>{_cell(item.get('field_id'))}</td>"
@@ -1026,6 +1171,9 @@ def render_html(presentation: dict[str, Any]) -> str:
             + "<h3>仍需闭合但不阻断其他结果</h3><table><thead><tr><th>字段</th><th>名称</th><th>优先级</th><th>推荐动作</th><th>原因</th></tr></thead><tbody>" + recommendation_rows + "</tbody></table>"
             + "<h2>算法链</h2><p class='warn'><strong>提示：</strong>带公式的值由本应用生成，不是 Aspen / 用户直接输出；B 类结果仅供暂定初筛。</p><table><thead><tr><th>目标量</th><th>状态</th><th>目标量 = 公式 = 代入式 = 答案</th><th>适用边界</th><th>缺失</th></tr></thead>"
             f"<tbody>{calculation_rows}</tbody></table>"
+            + "<h2>公式可追溯性</h2><p class='warn'><strong>判定：</strong>公式、输入值和代码哈希齐全只证明可复算；输入来源或外部标准未绑定时，仍会明确列为开放缺口。</p>"
+            + "<table><thead><tr><th>计算 ID</th><th>机器追溯记录</th></tr></thead>"
+            f"<tbody>{traceability_rows}</tbody></table>"
             "<h2>候选型号 / 工程规格</h2><table><thead><tr><th>排名</th><th>类别</th><th>候选</th><th>状态</th><th>评分</th><th>谓词</th><th>待闭合</th></tr></thead>"
             f"<tbody>{candidate_rows}</tbody></table>"
             f"<h2>问题与证据门</h2><pre>{_cell(issues)}</pre>"
@@ -1042,4 +1190,5 @@ def render_html(presentation: dict[str, Any]) -> str:
 .model-estimate-warning{margin:14px 0;padding:10px 12px;border:1px solid #e1b75b;border-left:5px solid var(--amber);background:#fff8e8;color:#6f4300}
 .algorithmic-adjustment-warning{margin:14px 0;padding:12px 14px;border:2px solid #d58b16;border-left:7px solid var(--red);background:#fff2d8;color:#663800}.algorithmic-adjustment-warning pre{background:#fffaf0}.algorithmic-adjustment-warning strong{color:#8b2600}
 .agent-control-line{padding:8px 10px;background:#edf7f4;border-left:4px solid var(--green);overflow-wrap:anywhere}
+.formula-trace{min-width:760px}.formula-trace h4{margin:12px 0 5px}.formula-trace table{font-size:12px}.formula-trace .meta{word-break:break-all}
 </style></head><body><main>""" + body + "</main></body></html>"

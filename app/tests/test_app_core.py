@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 import unittest
@@ -162,6 +163,148 @@ class AppCoreTests(unittest.TestCase):
         self.assertEqual(pressure_head["evidence_class"], "J")
         self.assertEqual(pressure_head["result_status"], "PROVISIONAL")
         self.assertFalse(pressure_head["embedded_empirical_default_used"])
+
+    def test_every_executed_formula_has_reproducible_machine_trace(self) -> None:
+        result = app_core.manual_match("block:PUMP", {
+            "equipment_tag": "P-TRACE",
+            "process_function": "liquid pressure boosting",
+            "pressure_basis": "absolute",
+            "flow_m3_h": 36.0,
+            "density_kg_m3": 850.0,
+            "inlet_pressure_mpa": 0.12,
+            "outlet_pressure_mpa": 0.50,
+            "efficiency_percent": 72.0,
+        })["result"]
+        calculations = {
+            item["calculation_id"]: item
+            for item in result["calculations"]
+        }
+        self.assertTrue(calculations)
+        for calculation in calculations.values():
+            trace = calculation["formula_trace"]
+            self.assertEqual(trace["schema"], "equipment-formula-trace-v1")
+            self.assertRegex(trace["formula_definition_sha256"], r"^[A-F0-9]{64}$")
+            self.assertRegex(trace["calculation_trace_sha256"], r"^[A-F0-9]{64}$")
+            definition_payload = json.dumps(
+                trace["formula_definition"],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            self.assertEqual(
+                trace["formula_definition_sha256"],
+                hashlib.sha256(definition_payload).hexdigest().upper(),
+            )
+            trace_payload = dict(trace)
+            claimed_trace_sha256 = trace_payload.pop("calculation_trace_sha256")
+            canonical_trace = json.dumps(
+                trace_payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            self.assertEqual(
+                claimed_trace_sha256,
+                hashlib.sha256(canonical_trace).hexdigest().upper(),
+            )
+            implementation = trace["formula_definition"]["implementation_binding"]
+            self.assertEqual(
+                implementation["implementation_ref"],
+                "scripts/equipment_design_match.py#run_calculations",
+            )
+            self.assertEqual(
+                implementation["binding_status"],
+                "SOURCE_FILE_MATCHES_MANIFEST",
+            )
+            self.assertRegex(implementation["source_file_sha256"], r"^[A-F0-9]{64}$")
+            self.assertTrue(trace["formula_definition"]["source_bindings"])
+            self.assertTrue(trace["input_bindings"])
+
+        hydraulic = calculations["pump_hydraulic_power"]["formula_trace"]
+        input_by_field = {
+            item["field_id"]: item
+            for item in hydraulic["input_bindings"]
+        }
+        self.assertEqual(input_by_field["flow_m3_h"]["value"], 36.0)
+        self.assertEqual(input_by_field["flow_m3_h"]["unit"], "m3/h")
+        self.assertEqual(
+            input_by_field["head_m"]["source_kind"],
+            "upstream_registered_calculation",
+        )
+        self.assertEqual(
+            input_by_field["head_m"]["upstream_formula_trace_sha256"],
+            calculations["pump_head_from_pressure"]["formula_trace"][
+                "calculation_trace_sha256"
+            ],
+        )
+        self.assertIn(
+            "input_source_provenance_open:flow_m3_h",
+            hydraulic["open_traceability_gaps"],
+        )
+        source = hydraulic["formula_definition"]["source_bindings"][0]
+        self.assertEqual(source["binding_status"], "FILE_AND_ANCHOR_BOUND")
+        self.assertRegex(source["source_file_sha256"], r"^[A-F0-9]{64}$")
+
+    def test_formula_definition_hash_is_stable_while_input_changes_trace_hash(self) -> None:
+        base_payload = {
+            "equipment_tag": "P-TRACE-HASH",
+            "process_function": "liquid pressure boosting",
+            "pressure_basis": "absolute",
+            "density_kg_m3": 850.0,
+            "inlet_pressure_mpa": 0.12,
+            "outlet_pressure_mpa": 0.50,
+            "efficiency_percent": 72.0,
+        }
+        first = app_core.manual_match(
+            "block:PUMP",
+            {**base_payload, "flow_m3_h": 36.0},
+        )["result"]
+        second = app_core.manual_match(
+            "block:PUMP",
+            {**base_payload, "flow_m3_h": 40.0},
+        )["result"]
+        first_trace = next(
+            item["formula_trace"]
+            for item in first["calculations"]
+            if item["calculation_id"] == "pump_hydraulic_power"
+        )
+        second_trace = next(
+            item["formula_trace"]
+            for item in second["calculations"]
+            if item["calculation_id"] == "pump_hydraulic_power"
+        )
+        self.assertEqual(
+            first_trace["formula_definition_sha256"],
+            second_trace["formula_definition_sha256"],
+        )
+        self.assertNotEqual(
+            first_trace["calculation_trace_sha256"],
+            second_trace["calculation_trace_sha256"],
+        )
+        self.assertNotEqual(
+            next(
+                item["field_value_sha256"]
+                for item in first_trace["input_bindings"]
+                if item["field_id"] == "flow_m3_h"
+            ),
+            next(
+                item["field_value_sha256"]
+                for item in second_trace["input_bindings"]
+                if item["field_id"] == "flow_m3_h"
+            ),
+        )
+
+    def test_every_registered_calculation_has_an_explicit_source_policy(self) -> None:
+        self.assertEqual(
+            set(app_core.matcher.CALCULATION_REQUIREMENTS),
+            set(app_core.matcher.CALCULATION_POLICIES),
+        )
+        for calculation_id, policy in app_core.matcher.CALCULATION_POLICIES.items():
+            with self.subTest(calculation_id=calculation_id):
+                self.assertTrue(policy.get("formula_id"))
+                self.assertTrue(policy.get("applicability"))
+                self.assertTrue(policy.get("source_refs"))
+                self.assertTrue(policy.get("does_not_prove"))
 
     def test_solids_aspen_block_types_end_in_registered_preliminary_forms(self) -> None:
         cases = {

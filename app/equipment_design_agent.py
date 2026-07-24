@@ -50,6 +50,7 @@ EQUIPMENT_OVERVIEW_SCHEMA = APP_DIR / "schemas" / "equipment_overview_table.sche
 EQUIPMENT_FAMILY_DATASHEET_SCHEMA = APP_DIR / "schemas" / "equipment_family_datasheet.schema.json"
 EQUIPMENT_EVIDENCE_INDEX_SCHEMA = APP_DIR / "schemas" / "equipment_evidence_index.schema.json"
 PFD_MAPPING_SCHEMA = APP_DIR / "schemas" / "equipment_design_pfd_mapping.schema.json"
+FORMULA_TRACE_SCHEMA = APP_DIR / "schemas" / "equipment_formula_trace.schema.json"
 PARAMETER_PACKAGE_SCHEMA = PACKAGE_ROOT / "knowledge_graph" / "equipment_design_parameter_package.schema.json"
 CONNECTION_SELECTION_SCHEMA = PACKAGE_ROOT / "knowledge_graph" / "equipment_connection_selection_package.schema.json"
 SERVICE_PROFILE_SCHEMA = PACKAGE_ROOT / "knowledge_graph" / "equipment_service_profile.schema.json"
@@ -150,6 +151,7 @@ SCHEMA_PATHS: dict[str, Path] = {
     "equipment-family-datasheet-v1": EQUIPMENT_FAMILY_DATASHEET_SCHEMA,
     "equipment-evidence-index-v1": EQUIPMENT_EVIDENCE_INDEX_SCHEMA,
     "equipment-design-pfd-mapping-v1": PFD_MAPPING_SCHEMA,
+    "equipment-formula-trace-v1": FORMULA_TRACE_SCHEMA,
 }
 
 

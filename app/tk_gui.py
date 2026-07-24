@@ -298,6 +298,69 @@ def _pretty_equation(item: dict[str, Any]) -> str:
     return f"{title}：{_math_text(chain)}" if chain else title
 
 
+def _formula_trace_text(item: dict[str, Any]) -> str:
+    trace = item.get("formula_trace")
+    if not isinstance(trace, dict):
+        return "追溯：当前结果没有机器公式追溯记录"
+    definition = trace.get("formula_definition")
+    definition = definition if isinstance(definition, dict) else {}
+    implementation = definition.get("implementation_binding")
+    implementation = implementation if isinstance(implementation, dict) else {}
+    lines = [
+        f"追溯状态：{trace.get('traceability_status') or 'OPEN'}",
+        f"公式 ID：{trace.get('formula_id') or 'OPEN'}",
+        f"公式定义 SHA-256：{trace.get('formula_definition_sha256') or 'OPEN'}",
+        f"本次计算 SHA-256：{trace.get('calculation_trace_sha256') or 'OPEN'}",
+        (
+            "代码实现："
+            f"{implementation.get('implementation_ref') or 'OPEN'} / "
+            f"{implementation.get('binding_status') or 'OPEN'}"
+        ),
+        f"代码 SHA-256：{implementation.get('source_file_sha256') or 'OPEN'}",
+        "输入绑定：",
+    ]
+    input_bindings = [
+        binding
+        for binding in trace.get("input_bindings", [])
+        if isinstance(binding, dict)
+    ]
+    if input_bindings:
+        for binding in input_bindings:
+            lines.append(
+                "  - "
+                f"{binding.get('field_id')}={binding.get('value')} "
+                f"{binding.get('unit') or ''}；"
+                f"{binding.get('source_kind')}；"
+                f"{binding.get('binding_status')}；"
+                f"SHA-256={binding.get('field_value_sha256')}"
+            )
+    else:
+        lines.append("  - 无登记输入绑定")
+    lines.append("公式来源：")
+    source_bindings = [
+        binding
+        for binding in definition.get("source_bindings", [])
+        if isinstance(binding, dict)
+    ]
+    if source_bindings:
+        for binding in source_bindings:
+            lines.append(
+                "  - "
+                f"{binding.get('reference')}；"
+                f"{binding.get('binding_status')}；"
+                f"定位行={binding.get('locator_line_1based') or 'OPEN'}；"
+                f"SHA-256={binding.get('source_file_sha256') or 'OPEN'}"
+            )
+    else:
+        lines.append("  - 未登记来源")
+    gaps = trace.get("open_traceability_gaps", [])
+    lines.append(
+        "尚未闭合："
+        + ("；".join(map(str, gaps)) if isinstance(gaps, list) and gaps else "无")
+    )
+    return "\n".join(lines)
+
+
 def _set_text(widget: tk.Text, text: str) -> None:
     widget.configure(state="normal")
     widget.delete("1.0", "end")
@@ -3627,9 +3690,15 @@ class EquipmentDesignTkApp:
                     equations.append(
                         f"⚠ {release_class} 类 · {result_status} · {notice.get('title', '内置公式')}\n"
                         + _pretty_equation(item)
+                        + "\n"
+                        + _formula_trace_text(item)
                     )
                 else:
-                    equations.append(_pretty_equation(item))
+                    equations.append(
+                        _pretty_equation(item)
+                        + "\n"
+                        + _formula_trace_text(item)
+                    )
             else:
                 missing = ", ".join(item.get("missing_fields", []))
                 suffix = f"；缺少 {missing}" if missing else ""
@@ -3641,17 +3710,31 @@ class EquipmentDesignTkApp:
             provisional_count = sum(1 for notice in notices if notice.get("result_status") == "PROVISIONAL")
             self.formula_notice_var.set(
                 f"⚠ {len(notices)} 项由软件内置公式生成，并非 Aspen / 用户直接值；"
-                f"其中 {provisional_count} 项仅供暂定初筛。悬停 ⓘ 查看适用范围。"
+                f"其中 {provisional_count} 项仅供暂定初筛。公式页已显示输入、出处、代码与双哈希。"
             )
             help_blocks = []
             for notice in notices:
                 does_not_prove = "、".join(map(str, notice.get("does_not_prove", []))) or "未列明"
+                source_bindings = notice.get("source_bindings", [])
+                source_text = "；".join(
+                    f"{item.get('reference')}[{item.get('binding_status')}]"
+                    for item in source_bindings
+                    if isinstance(item, dict)
+                ) or "未登记"
+                gaps = "；".join(
+                    map(str, notice.get("open_traceability_gaps", []))
+                ) or "无"
                 help_blocks.append(
                     f"{notice.get('title', '内置公式')}\n"
+                    f"公式 ID：{notice.get('formula_id', 'OPEN')}\n"
                     f"状态：{notice.get('release_class', 'A')} 类 / {notice.get('result_status', 'DERIVED')}\n"
                     f"说明：{notice.get('message', '')}\n"
                     f"适用：{notice.get('applicability', '')}\n"
-                    f"不能证明：{does_not_prove}"
+                    f"不能证明：{does_not_prove}\n"
+                    f"公式来源：{source_text}\n"
+                    f"公式定义 SHA-256：{notice.get('formula_definition_sha256', 'OPEN')}\n"
+                    f"本次计算 SHA-256：{notice.get('calculation_trace_sha256', 'OPEN')}\n"
+                    f"追溯缺口：{gaps}"
                 )
             self._formula_help_text = "\n\n".join(help_blocks)
         else:
