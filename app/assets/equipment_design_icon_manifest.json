@@ -1,0 +1,40 @@
+{
+  "outputs": {
+    "ico": {
+      "file": "equipment_design_app.ico",
+      "sha256": "88487AC0004D09CF81488CCEE2C5A32EA25C37C9C35AD989EE3F3FF1F9EA6EA7",
+      "sizes_px": [
+        16,
+        24,
+        32,
+        48,
+        64,
+        128,
+        256
+      ]
+    },
+    "png": {
+      "file": "equipment_design_app_icon.png",
+      "sha256": "9BEE7273D1A7141BD01D9B0871792D88468B433F02348903EA3BEF6DF73A6922"
+    }
+  },
+  "pillow_version": "12.2.0",
+  "schema": "equipment-design-icon-manifest-v1",
+  "source": {
+    "file": "equipment_design_icon_source.jpg",
+    "height_px": 658,
+    "sha256": "4BF6C9D0D6BF5F820D25400FA19CD2DD0AC367DD43690FF227B7CA45E014CD54",
+    "width_px": 720
+  },
+  "square_adaptation": {
+    "canvas_px": [
+      720,
+      720
+    ],
+    "method": "center_on_white_square_without_crop_or_stretch",
+    "offset_px": [
+      0,
+      31
+    ]
+  }
+}

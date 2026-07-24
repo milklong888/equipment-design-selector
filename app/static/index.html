@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*;">
+  <title>设备设计图谱与脚本</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">EQUIPMENT DESIGN GRAPH & SCRIPTS</div>
+      <h1>设备设计图谱与脚本</h1>
+    </div>
+    <div class="status-line">
+      <span id="rule-status" class="status-chip">规则加载中</span>
+      <span id="com-status" class="status-chip neutral">COM 检测中</span>
+      <span class="status-chip safe">LLM 可选</span>
+    </div>
+  </header>
+
+  <main class="shell">
+    <nav class="mode-nav" aria-label="导入方式">
+      <button class="mode-button active" data-mode="aspen"><span>01</span>Aspen BKP</button>
+      <button class="mode-button" data-mode="manual"><span>02</span>手动输入</button>
+      <button class="mode-button" data-mode="llm"><span>03</span>LLM 辅助</button>
+      <button class="mode-button" data-mode="knowledge"><span>KG</span>知识图谱</button>
+    </nav>
+
+    <section class="workspace">
+      <div class="input-column">
+        <article id="mode-aspen" class="mode-panel active">
+          <div class="section-heading">
+            <h2>Aspen 文件自动导入</h2>
+            <p>只读复制源文件，在独立子进程中打开、遍历模块与流股并逐台匹配。</p>
+          </div>
+          <div class="file-row">
+            <input id="aspen-path" type="text" readonly placeholder="选择 .bkp / .apw / .inp">
+            <button id="choose-aspen" class="secondary">选择文件</button>
+          </div>
+          <div class="form-grid compact">
+            <label class="field"><span>压力基准</span><select id="aspen-pressure-basis"><option value="" selected>请选择；程序不默认</option><option value="absolute">绝压 absolute</option><option value="gauge">表压 gauge</option></select></label>
+            <label id="atmospheric-wrap" class="field hidden" title="压比计算把表压换成绝压时需要；机械初筛或标准表压限值把绝压换成表压时也需要。不填时程序不会代填，只把依赖该换算的步骤标为待补。"><span>当地大气压 <b>MPa</b>（表压↔绝压换算需要时填写）</span><input id="aspen-atmospheric" type="number" step="any" value="" placeholder="可留空；无内置默认值"></label>
+            <label class="field"><span>COM 运行超时 <b>s</b></span><input id="aspen-timeout" type="number" min="10" max="7200" value="900"></label>
+            <label class="check-field"><input id="aspen-run" type="checkbox" checked><span>打开后重新运行并采集历史证据</span></label>
+          </div>
+          <div id="com-unavailable-note" class="notice hidden">当前没有可用 COM。此模式不可用，但手动输入和 LLM 辅助仍可正常使用。</div>
+          <button id="run-aspen" class="primary full">自动遍历并匹配</button>
+          <div id="aspen-progress" class="progress hidden"><span></span><em>独立进程正在处理 Aspen，界面不会被 COM 卡住。</em></div>
+        </article>
+
+        <article id="mode-manual" class="mode-panel">
+          <div class="section-heading">
+            <h2>模块/设备参数输入</h2>
+            <p>选择模块类型后，仅显示该设备族的指定参数；每个输入框只填一个量。</p>
+          </div>
+          <label class="field selection-field"><span>模块类型 / 设备族</span><select id="module-select"></select></label>
+          <div id="manual-fields" class="form-grid"></div>
+          <button id="run-manual" class="primary full">确定性匹配与计算</button>
+        </article>
+
+        <article id="mode-llm" class="mode-panel">
+          <div class="section-heading">
+            <h2>大语言模型辅助调控</h2>
+            <p>API Key 只进入本次请求，不写入配置或磁盘。硬门不可被模型覆盖。</p>
+          </div>
+          <div class="form-grid">
+            <label class="field span-2"><span>API Key</span><input id="llm-key" type="password" autocomplete="off" placeholder="sk-…；本地模型可留空"></label>
+            <label class="field"><span>API Base URL</span><input id="llm-base" type="url" value="https://api.openai.com/v1"></label>
+            <label class="field"><span>模型</span><input id="llm-model" type="text" value="gpt-5-mini"></label>
+            <label class="field span-2"><span>审核/决策任务</span><textarea id="llm-task" rows="3">审核当前确定性结果；若候选证据足以唯一化，可提出白名单内的草稿决策，否则保留最泛用类型。</textarea></label>
+          </div>
+          <div class="notice">可改字段仅限：结构型式、工艺功能、相态、候选型号。数值、单位、压力基准、证据状态和最终型号状态不能由 LLM 改写。</div>
+          <button id="run-llm" class="primary full">审核当前结果</button>
+          <button id="apply-llm" class="secondary full hidden">接受白名单决策并重新复算</button>
+        </article>
+
+        <article id="mode-knowledge" class="mode-panel">
+          <div class="section-heading">
+            <h2>知识图谱与 Skill 入口</h2>
+            <p>查询设备族、公式、标准证据边界、Aspen 字段和历史犯错规则。</p>
+          </div>
+          <div class="file-row">
+            <input id="kg-query" type="search" placeholder="例如：泵 压力基准 轴功率 最泛用候选">
+            <button id="run-kg" class="secondary">查询</button>
+          </div>
+          <pre id="kg-result" class="knowledge-output">等待查询。</pre>
+          <div id="skill-entry" class="skill-entry"></div>
+        </article>
+      </div>
+
+      <aside class="result-column">
+        <div class="result-header">
+          <div>
+            <span class="eyebrow">DETERMINISTIC RESULT</span>
+            <h2>匹配与推导结果</h2>
+          </div>
+          <button id="save-result" class="icon-button" disabled>保存 JSON</button>
+        </div>
+        <div id="empty-result" class="empty-result">
+          <div class="rule-mark">=</div>
+          <p>选择任一导入方式后，这里显示设备族、候选状态、缺失项和连等式。</p>
+        </div>
+        <div id="result-summary" class="result-summary hidden"></div>
+        <div id="equation-list" class="equation-list hidden"></div>
+        <details id="raw-details" class="raw-details hidden">
+          <summary>查看完整机器 JSON</summary>
+          <pre id="raw-result"></pre>
+        </details>
+        <div id="session-actions" class="session-actions hidden"><button id="open-session" class="secondary">打开证据目录</button></div>
+      </aside>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>

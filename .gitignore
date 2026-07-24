@@ -1,0 +1,57 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+/app/tests/_runtime_bundle_test_*/
+
+# Generated applications, build caches, and run artifacts
+/build/
+/dist_stage*/
+/outputs/
+/tmp/
+
+# The frozen runtime knowledge bundle is distributed inside release binaries.
+# It contains large derived indexes and source-reference material that should
+# not be copied into ordinary Git history.
+/knowledge_graph/
+
+# Publish only deterministic runtime tables and synthetic examples from data/.
+# Document images, extracted textbook tables, real-case benchmarks, and local
+# source ledgers remain outside Git history.
+/data/*
+!/data/pipe_gbt12459_2025_dn_od_catalog.csv
+!/data/pump_gbt5662_2013_design_points.csv
+!/data/equipment_match_examples.json
+!/data/aspen_equipment_export_sample.json
+!/data/aspen_run_status_clean_sample.json
+
+# Keep the current release verification public to the repository; legacy
+# migration/real-case audit material may contain workstation paths or case IDs.
+/docs/*
+!/docs/STAGE1_2_4_0_RELEASE_VERIFICATION_20260724.md
+/DELIVERY_STATUS_20260720_PROMPT_AUDIT.md
+/RECOVERED_RUNTIME_ASSET_REPORT.json
+
+# Aspen cases, execution evidence, and local engineering source documents
+*.bkp
+*.apw
+*.inp
+*.his
+*.pdf
+*.pdg
+
+# Local archives and installer/download artifacts
+*.zip
+*.7z
+*.7z.exe
+*.msi
+
+# Editors and operating-system metadata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
