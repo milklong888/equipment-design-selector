@@ -14,9 +14,24 @@ venv/
 /tmp/
 
 # The frozen runtime knowledge bundle is distributed inside release binaries.
-# It contains large derived indexes and source-reference material that should
-# not be copied into ordinary Git history.
-/knowledge_graph/
+# Publish deterministic rules/contracts needed to understand and run the
+# algorithm, while keeping source documents, extracted tables and indexes out
+# of ordinary Git history.
+/knowledge_graph/*
+!/knowledge_graph/aspen_equipment_derivation_chain.md
+!/knowledge_graph/aspen_equipment_export.schema.json
+!/knowledge_graph/equipment_connection_selection_package.schema.json
+!/knowledge_graph/equipment_customer_output_profiles.json
+!/knowledge_graph/equipment_design_parameter_package.schema.json
+!/knowledge_graph/equipment_match_input.schema.json
+!/knowledge_graph/equipment_match_rules.json
+!/knowledge_graph/equipment_model_recommendation_rules.json
+!/knowledge_graph/equipment_parameter_chain_templates.json
+!/knowledge_graph/equipment_service_label_derivation_contract.md
+!/knowledge_graph/equipment_service_profile.schema.json
+!/knowledge_graph/equipment_type_applicability_contract.md
+!/knowledge_graph/equipment_type_applicability_graph.schema.json
+!/knowledge_graph/equipment_type_applicability_label_catalog.json
 
 # Publish only deterministic runtime tables and synthetic examples from data/.
 # Document images, extracted textbook tables, real-case benchmarks, and local
@@ -40,6 +55,7 @@ venv/
 !/docs/FORMULA_TRACEABILITY.md
 !/docs/STAGE1_2_4_0_RELEASE_VERIFICATION_20260724.md
 !/docs/DATABASE_STRUCTURE.md
+!/docs/ALGORITHM_GUIDE.md
 /DELIVERY_STATUS_20260720_PROMPT_AUDIT.md
 /RECOVERED_RUNTIME_ASSET_REPORT.json
 

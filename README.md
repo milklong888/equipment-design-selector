@@ -88,6 +88,21 @@ flowchart LR
     I --> J["GUI、JSON、HTML、Markdown、Agent 组织答案"]
 ```
 
+### 算法代码从哪里开始看
+
+单台设备的运行时算法总入口是
+[`scripts/equipment_design_match.py::match_one`](scripts/equipment_design_match.py#L7713)，
+公式调度中心是
+[`run_calculations`](scripts/equipment_design_match.py#L3605)。
+人工输入从 `app/app_core.py::manual_match` 进入；Aspen 输入从
+`scripts/aspen_equipment_derivation.py::derive_bundle` 进入；管线由
+`derive_piping` 独立计算。
+
+`scripts/equipment_calc.py` 文件前部提供管径、壁厚、泵功率、压比、塔底持液高度、膜面积、传热和 Ergun 压降等基础公式；同一文件后部还包含离线计算台账与教材公式审计，因此它不是 GUI 运行时的单一总入口。
+
+每个文件、关键函数、调用顺序和泵/管线示例见
+[算法源码导航](docs/ALGORITHM_GUIDE.md)。
+
 ### 1. 输入规范化
 
 系统先把 Aspen、人工输入和已有计算结果转换为统一字段。压力必须声明绝压或表压；需要换算时必须提供当地大气压。单位、空值、相态和枚举值会被校验，错误值不会静默进入公式。
@@ -337,7 +352,10 @@ GUI“公式链”页直接显示输入、来源、代码与双哈希；HTML/Mar
 │  └─ tests/            计算、选型、证据门、GUI 和打包回归测试
 ├─ scripts/             Aspen 推导、设备计算、具体型式匹配、连接部件选择和审计
 ├─ data/                小型目录、数据库权威注册表及公开 SQL 结构
-├─ docs/                项目结构、数据库拆解、检索边界和版本交付核验
+├─ knowledge_graph/     公开的确定性匹配规则、参数模板和接口合同
+├─ equipment_selection_graph/
+│                       公开的设备族、具体型式来源、证据门和标准/厂家路线
+├─ docs/                算法导航、项目结构、数据库拆解、检索边界和交付核验
 ├─ build_equipment_design_app.ps1
 │                       Windows 独立程序构建与打包入口
 └─ 使用说明.md          面向最终用户的操作说明
@@ -368,7 +386,7 @@ CLI 接收 `equipment-design-agent-request-v1` JSON，可执行：
 
 ## 验证状态
 
-- 全量自动化测试：395 项通过，1 项按环境条件跳过；
+- 全量自动化测试：396 项通过，1 项按环境条件跳过；
 - 图形界面真实窗口测试：30 项通过；
 - 打包后 Agent/CLI 自检：17 项全部通过；
 - 17/17 个设备族具体型式覆盖通过；

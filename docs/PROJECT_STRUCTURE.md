@@ -58,6 +58,8 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/tests/` | 对计算、提取、选型、证据门、报告、GUI 和打包行为做回归保护 | 不生成生产交付结论 |
 | `scripts/` | Aspen 推导、工程计算、设备匹配、连接部件选择和批量审计 | 不直接组织最终用户界面 |
 | `data/` | 可公开随源码发布的小型目录、数据库权威注册表和公开 SQL 结构 | 不包含大型 SQLite 载荷、完整知识库或真实 BKP |
+| `knowledge_graph/` | 公开确定性匹配规则、参数模板、客户字段合同及接口 Schema；发布包另含大型 RAG 资产 | 公开部分不包含教材/标准正文、页面图像和大型索引 |
+| `equipment_selection_graph/` | 公开设备族、具体型式来源、证据门、标准/厂家路线及旧结果隔离关系 | 不包含厂家 PDF 和标准正文 |
 | `docs/` | 项目结构、数据库拆解、检索边界和版本交付核验 | 解释运行合同，但不替代机器注册表和校验器 |
 
 ## 3. 根目录文件
@@ -183,6 +185,7 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/tests/test_llm_orchestration.py` | 验证模型不能替代程序算术、配方输入保持一致、缺段可补全、坏模型输出被隔离。 |
 | `app/tests/test_pfd_canvas.py` | 验证 17 类设备矢量符号、状态颜色、文字压缩和真实 Tk 画布渲染。 |
 | `app/tests/test_principles_requirements.py` | 验证原理需求图的节点、边、哈希、字段覆盖和正式证据边界。 |
+| `app/tests/test_public_algorithm_source.py` | 验证公开源码确实包含可执行的 17 类设备匹配规则、型号规则、参数模板和设备选择图谱。 |
 | `app/tests/test_public_rag_contract_bundle.py` | 验证 RAG 公开合同包可重复构建、文件哈希一致，并且不含 SQLite、PDF、图片或 Aspen 工程。 |
 | `app/tests/test_result_presentation.py` | 验证一览表字段、公式显示、候选门、终端型式来源和 HTML/Markdown 展示。 |
 | `app/tests/test_runtime_bundle.py` | 验证知识包清单对缺失、篡改、同尺寸替换和额外文件均能关闭运行。 |
@@ -223,23 +226,68 @@ Aspen COM / 提取 JSON / 人工输入
 | `scripts/probe_aspen_transport_property_tree.py` | 定向搜索 Aspen 属性树中的黏度等输运物性节点，为修复提取路径提供证据。 |
 | `scripts/rebuild_standards_runtime_sidecars.py` | 从标准知识 SQLite 权威载体重建紧凑目录、交叉表和审计旁路文件，不复制标准 PDF。 |
 
-## 12. `docs/` 文档
+## 12. `knowledge_graph/` 公开算法规则与接口合同
+
+这里只提交理解和运行确定性算法必需、且不包含版权正文的规则/合同。`standards_graph/`、文档切片、图片和 SQLite 仍由 Release 资产管理。
+
+| 文件 | 作用 |
+| --- | --- |
+| `knowledge_graph/aspen_equipment_derivation_chain.md` | 解释 Aspen 导出到设备/管线推导结果的字段链、状态和边界。 |
+| `knowledge_graph/aspen_equipment_export.schema.json` | 约束 Aspen COM/模拟导出中的案例、单位、流股、模块、拓扑和运行状态。 |
+| `knowledge_graph/equipment_connection_selection_package.schema.json` | 约束法兰、密封面、垫片、紧固件和连接证据包。 |
+| `knowledge_graph/equipment_customer_output_profiles.json` | 登记 17 个设备族在客户一览表/数据表中应公开的字段及来源。 |
+| `knowledge_graph/equipment_design_parameter_package.schema.json` | 约束设备设计参数包、选择特征向量、字段状态和来源。 |
+| `knowledge_graph/equipment_match_input.schema.json` | 约束确定性匹配器接受的规范输入字段和类型。 |
+| `knowledge_graph/equipment_match_rules.json` | 登记 17 个设备族的别名、Aspen 模块映射、尺寸字段、验证字段和计算规则。 |
+| `knowledge_graph/equipment_model_recommendation_rules.json` | 登记具体终端型式、适用谓词、硬约束、候选优先级和受控预设计默认。 |
+| `knowledge_graph/equipment_parameter_chain_templates.json` | 登记每个设备族的主计算、候选闭合、高级条件和正式证据字段。 |
+| `knowledge_graph/equipment_service_label_derivation_contract.md` | 说明工况标签必须从真实流股事实推导，禁止用户/LLM 直接标签成为证据。 |
+| `knowledge_graph/equipment_service_profile.schema.json` | 约束设备工况画像、边界流股、观察值、标签、未知项和诊断。 |
+| `knowledge_graph/equipment_type_applicability_contract.md` | 说明设备终端型式的适用性、禁用条件和证据边界。 |
+| `knowledge_graph/equipment_type_applicability_graph.schema.json` | 约束设备型式适用性图谱的节点、边和规则关系。 |
+| `knowledge_graph/equipment_type_applicability_label_catalog.json` | 登记型式适用性规则使用的标准标签和含义。 |
+
+## 13. `equipment_selection_graph/` 型式权威图谱
+
+| 文件 | 作用 |
+| --- | --- |
+| `equipment_selection_graph/equipment_selection_graph_v2.json` | 机器图谱主体；连接 17 个设备族、标准身份、厂家来源、模板、证据门和复用等级。 |
+| `equipment_selection_graph/README.md` | 说明图谱范围、入口和使用边界。 |
+| `equipment_selection_graph/00-authority-registry.md` | 列出图谱权威来源、状态和冲突处理顺序。 |
+| `equipment_selection_graph/05-evidence-reuse-boundaries.md` | 区分直接复用、方法借用、软件边界、厂家边界和禁止迁移。 |
+| `equipment_selection_graph/10-equipment-family-router.md` | 说明设备族路由和跨族冲突处理。 |
+| `equipment_selection_graph/12-template-coverage-router.md` | 说明设备一览表模板覆盖关系。 |
+| `equipment_selection_graph/13-overview-table-field-schema.md` | 说明设备一览表字段分组与公开状态。 |
+| `equipment_selection_graph/15-standard-designation-rules.md` | 说明标准系列/规格名称何时可以进入候选。 |
+| `equipment_selection_graph/16-dynamic-vendor-rules.md` | 说明厂家系列、平台和正式型号证据门。 |
+| `equipment_selection_graph/17-piping-selection-router.md` | 说明管线、管件、法兰垫片和阀门路由。 |
+| `equipment_selection_graph/18-model-size-standard-router.md` | 说明型号、规格尺寸和标准系列之间的边界。 |
+| `equipment_selection_graph/19-overview-table-source-precision.md` | 说明一览表字段所需的来源精度。 |
+| `equipment_selection_graph/20-model-determination-card.md` | 正式设备型号确定前必须核对的证据卡。 |
+| `equipment_selection_graph/21-line-determination-card.md` | 正式管道等级确定前必须核对的证据卡。 |
+| `equipment_selection_graph/30-overview-table-interface.md` | 设备一览表对外接口规则。 |
+| `equipment_selection_graph/31-piping-overview-interface.md` | 管线一览表对外接口规则。 |
+| `equipment_selection_graph/40-legacy-model-quarantine.md` | 旧项目型号、数值和历史候选的隔离规则。 |
+| `equipment_selection_graph/90-unknowns-router.md` | 无法闭合字段、未知项和下一步动作的路由。 |
+
+## 14. `docs/` 文档
 
 | 文件 | 作用 |
 | --- | --- |
 | `docs/FORMULA_TRACEABILITY.md` | 说明内置公式的机器追溯合同、输入/来源/代码绑定、哈希复核、40 条规则覆盖和剩余边界。 |
+| `docs/ALGORITHM_GUIDE.md` | 按真实执行顺序说明算法入口、文件分工、关键函数、公式位置、规则 JSON、管线主链和泵实例。 |
 | `docs/DATABASE_STRUCTURE.md` | 公开拆解数据库版本、路径、哈希、业务表、记录数、调用方、晋升/隔离原因、Git/Release 边界和后续接手检查单。 |
 | `docs/PROJECT_STRUCTURE.md` | 当前文档；说明目录边界、阅读顺序、执行链和所有受 Git 追踪文件的职责。 |
 | `docs/RETRIEVAL_AND_GAPS.md` | 说明知识检索、设备型式检索、排序与证据门，并逐项区分未实现、部分实现和待生产验证能力。 |
 | `docs/STAGE1_2_4_0_RELEASE_VERIFICATION_20260724.md` | 记录 2.4.0 完成范围、测试结果、17 类设备覆盖、程序/源码/知识包哈希及待生产环境验证。 |
 
-## 13. 没有进入 Git 的目录
+## 15. 没有进入 Git 的目录
 
 这些内容由 `.gitignore` 明确隔离，因此不会在 GitHub 源码树中看到：
 
 | 内容 | 原因与交付方式 |
 | --- | --- |
-| `knowledge_graph/` | 约 1.49 GB 的冻结知识资产；随独立程序打包并由运行时清单校验，不在普通 Git 历史复制。 |
+| `knowledge_graph/` 中未列入第 12 节的内容 | 约 1.49 GB 冻结知识资产中的标准正文索引、文档切片、图片、候选证据和大型 SQLite；随独立程序打包并由运行时清单校验。 |
 | `dist_stage*/`、`build/` | 独立程序和构建缓存；最终 EXE 作为 GitHub Release 附件发布。 |
 | `outputs/`、`tmp/` | 用户报告、审计输出、COM 隔离副本和临时文件；属于运行结果。 |
 | `*.bkp`、`*.apw`、`*.inp` | Aspen 工程可能包含项目机密和第三方数据，只允许用户在本地显式处理。 |
