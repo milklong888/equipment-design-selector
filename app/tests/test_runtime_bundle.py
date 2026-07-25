@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import contextlib
 import json
-import shutil
 import sqlite3
 import sys
+import tempfile
 import unittest
 import uuid
 from pathlib import Path
@@ -20,12 +20,13 @@ import runtime_bundle
 
 @contextlib.contextmanager
 def writable_temp_directory():
-    root = APP_DIR / "tests" / f"_runtime_bundle_test_{uuid.uuid4().hex}"
-    root.mkdir(parents=False, exist_ok=False)
-    try:
-        yield root
-    finally:
-        shutil.rmtree(root, ignore_errors=True)
+    # Use the system temp root because the current executable-database build
+    # path is intentionally descriptive and can exceed legacy Windows MAX_PATH
+    # when nested under this repository's long Chinese workspace path.
+    with tempfile.TemporaryDirectory(
+        prefix=f"equipment_runtime_bundle_{uuid.uuid4().hex}_"
+    ) as directory:
+        yield Path(directory)
 
 
 def _create_standards_sqlite(path: Path) -> None:

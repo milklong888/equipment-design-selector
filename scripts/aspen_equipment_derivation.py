@@ -23,20 +23,22 @@ if str(APP_DIR) not in sys.path:
 import equipment_design_match as matcher
 import equipment_service_profile as service_profile
 import connection_component_selection as connection_selection
+import database_authority
 import viscosity_fallback
 
 
 SCHEMA_PATH = PACKAGE_ROOT / "knowledge_graph" / "aspen_equipment_export.schema.json"
-PIPE_STANDARD_STORE_DIR = (
-    PACKAGE_ROOT
-    / "knowledge_graph"
-    / "standards_graph"
-    / "executable_data"
-    / "build_20260720_reconciled"
-    / "executable_store"
+PIPE_STANDARD_CONSUMER_ID = "pipe_standard_store"
+PIPE_STANDARD_DECLARATION = database_authority.declared_database_for_consumer(
+    PIPE_STANDARD_CONSUMER_ID,
+    PACKAGE_ROOT,
 )
-PIPE_STANDARD_DB_PATH = PIPE_STANDARD_STORE_DIR / "executable_standard_data.sqlite"
-PIPE_STANDARD_MANIFEST_PATH = PIPE_STANDARD_STORE_DIR / "build_manifest.json"
+PIPE_STANDARD_DB_PATH = Path(PIPE_STANDARD_DECLARATION["database_path"])
+PIPE_STANDARD_MANIFEST_PATH = Path(PIPE_STANDARD_DECLARATION["manifest_path"])
+PIPE_STANDARD_STORE_DIR = PIPE_STANDARD_DB_PATH.parent
+DATABASE_AUTHORITY_REGISTRY_PATH = (
+    PACKAGE_ROOT / database_authority.REGISTRY_RELATIVE_PATH
+)
 STANDARD_SOURCE_INVENTORY_PATH = (
     PACKAGE_ROOT
     / "knowledge_graph"
@@ -6806,10 +6808,20 @@ def _canonical_sha256(value: Any) -> str:
 def load_verified_pipe_standard_store() -> dict[str, Any]:
     """Load only QA-promoted pipe records from the immutable local store."""
 
-    if not PIPE_STANDARD_DB_PATH.is_file() or not PIPE_STANDARD_MANIFEST_PATH.is_file():
-        raise FileNotFoundError("verified executable pipe standard store is missing")
+    try:
+        authority_verification = database_authority.verify_consumer_database(
+            PIPE_STANDARD_CONSUMER_ID,
+            PACKAGE_ROOT,
+        )
+    except database_authority.DatabaseAuthorityError as exc:
+        raise RuntimeError(f"BLOCKED_PIPE_DATABASE_AUTHORITY:{exc}") from exc
+    verified_database_path = (
+        PACKAGE_ROOT / Path(authority_verification["relative_path"])
+    )
+    if verified_database_path != PIPE_STANDARD_DB_PATH:
+        raise RuntimeError("BLOCKED_PIPE_DATABASE_REGISTRY_PATH_DRIFT")
     manifest = json.loads(PIPE_STANDARD_MANIFEST_PATH.read_text(encoding="utf-8"))
-    database_sha256 = sha256_file(PIPE_STANDARD_DB_PATH)
+    database_sha256 = str(authority_verification["sha256"])
     expected_sha256 = str(manifest.get("sqlite_sha256") or "").upper()
     if database_sha256 != expected_sha256:
         raise RuntimeError("BLOCKED_PIPE_STANDARD_STORE_HASH_MISMATCH")
@@ -6908,6 +6920,12 @@ def load_verified_pipe_standard_store() -> dict[str, Any]:
         "build_id": manifest.get("build_id"),
         "database_path": str(PIPE_STANDARD_DB_PATH),
         "database_sha256": database_sha256,
+        "database_authority_registry_path": str(DATABASE_AUTHORITY_REGISTRY_PATH),
+        "database_authority_registry_sha256": sha256_file(
+            DATABASE_AUTHORITY_REGISTRY_PATH
+        ),
+        "database_authority_status": authority_verification["status"],
+        "database_scope_status": authority_verification["scope_status"],
         "manifest_path": str(PIPE_STANDARD_MANIFEST_PATH),
         "manifest_sha256": sha256_file(PIPE_STANDARD_MANIFEST_PATH),
         "datasets": datasets,

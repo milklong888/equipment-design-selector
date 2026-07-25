@@ -22,6 +22,7 @@ CORE_SOURCE_PATHS = (
     "app/aspen_pfd.py",
     "app/authority_revision.py",
     "app/customer_delivery.py",
+    "app/database_authority.py",
     "app/derivation_workbench.py",
     "app/equipment_design_agent.py",
     "app/equipment_design_app.py",

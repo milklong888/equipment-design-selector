@@ -30,6 +30,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 import equipment_design_match as matcher  # noqa: E402
 import equipment_service_profile as service_profile  # noqa: E402
 import connection_component_selection as connection_selection  # noqa: E402
+import database_authority  # noqa: E402
 import runtime_bundle  # noqa: E402
 import source_code_manifest  # noqa: E402
 import customer_delivery  # noqa: E402
@@ -54,6 +55,15 @@ def source_code_manifest_verification() -> dict[str, Any]:
     return source_code_manifest.verify_current_runtime(
         PACKAGE_ROOT,
         frozen=bool(FROZEN_ROOT),
+    )
+
+
+@lru_cache(maxsize=1)
+def standards_database_verification() -> dict[str, Any]:
+    """Verify the registry-bound standards retrieval carrier once per process."""
+    return database_authority.verify_consumer_database(
+        "standards_knowledge_search",
+        PACKAGE_ROOT,
     )
 
 
@@ -1474,9 +1484,17 @@ def _compact_excerpt(text: str, terms: list[str], width: int = 360) -> str:
 
 def _standards_sqlite_search(query: str, limit: int, root: Path) -> list[dict[str, Any]]:
     """Query the compact standards authority carrier without loading render PNGs."""
-    database = root / "source_layer" / "indexes" / "standards_knowledge.sqlite"
+    authority = standards_database_verification()
+    database = PACKAGE_ROOT / Path(authority["relative_path"])
+    registered_standards_root = database.parent.parent.parent
+    if registered_standards_root.resolve() != root.resolve():
+        raise database_authority.DatabaseAuthorityError(
+            "selected standards root does not match the registered RAG database"
+        )
     if not database.is_file():
-        return []
+        raise database_authority.DatabaseAuthorityError(
+            "registered standards RAG database is missing"
+        )
     terms = _search_terms(query)
     bounded_limit = max(1, min(int(limit), 20))
     like_values = [f"%{term}%" for term in terms]
@@ -1589,8 +1607,10 @@ def _standards_sqlite_search(query: str, limit: int, root: Path) -> list[dict[st
                         "reuse_boundary": reuse_boundary,
                         "text": _compact_excerpt(text, terms),
                     })
-    except (sqlite3.Error, OSError):
-        return []
+    except (sqlite3.Error, OSError) as exc:
+        raise database_authority.DatabaseAuthorityError(
+            f"registered standards RAG query failed: {exc}"
+        ) from exc
     rows.sort(key=lambda item: (-int(item["score"]), str(item["path"])))
     return rows[:bounded_limit]
 
@@ -1666,9 +1686,28 @@ def knowledge_search(query: str, limit: int = 8, package_ids: list[str] | None =
     if not terms:
         terms = [query.casefold()]
     standards_hits: list[dict[str, Any]] = []
+    standards_authority: dict[str, Any] = {"status": "NOT_SELECTED"}
     for item in selected:
         if item["id"] == "design_standards":
-            standards_hits = _standards_sqlite_search(query, bounded_limit, Path(item["root"]))
+            try:
+                standards_hits = _standards_sqlite_search(
+                    query,
+                    bounded_limit,
+                    Path(item["root"]),
+                )
+                verified = standards_database_verification()
+                standards_authority = {
+                    "status": verified["status"],
+                    "database_id": verified["database_id"],
+                    "relative_path": verified["relative_path"],
+                    "sha256": verified["sha256"],
+                    "scope_status": verified["scope_status"],
+                }
+            except database_authority.DatabaseAuthorityError as exc:
+                standards_authority = {
+                    "status": "BLOCKED_DATABASE_AUTHORITY",
+                    "error": str(exc),
+                }
             break
     search_roots = [
         (item["id"], Path(item["root"]))
@@ -1735,6 +1774,7 @@ def knowledge_search(query: str, limit: int = 8, package_ids: list[str] | None =
             if standards_hits else "deterministic_local_search"
         ),
         "selected_packages": selected_ids,
+        "standards_database_authority": standards_authority,
         "limitations": [item["limitations"] for item in selected],
         "hits": [
             {"rank": index + 1, **item}

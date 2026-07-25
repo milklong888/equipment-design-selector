@@ -236,6 +236,11 @@ $modelFileCount = Copy-RuntimeKnowledgeAssets `
 New-Item -ItemType Directory -Path $BundledData -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $Root 'data\pump_gbt5662_2013_design_points.csv') -Destination $BundledData -Force
 Copy-Item -LiteralPath (Join-Path $Root 'data\pipe_gbt12459_2025_dn_od_catalog.csv') -Destination $BundledData -Force
+Copy-Item -LiteralPath (Join-Path $Root 'data\database_authority_registry.json') -Destination $BundledData -Force
+$BundledDatabaseContracts = Join-Path $BundledData 'database_contracts'
+New-Item -ItemType Directory -Path $BundledDatabaseContracts -Force | Out-Null
+Get-ChildItem -LiteralPath (Join-Path $Root 'data\database_contracts') -Filter '*.sql' -File |
+    Copy-Item -Destination $BundledDatabaseContracts -Force
 New-Item -ItemType Directory -Path $BundledSchemas -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $Root 'app\schemas') -Filter '*.json' -File |
     Copy-Item -Destination $BundledSchemas -Force
@@ -259,13 +264,18 @@ $requiredBundleAssets = @(
     (Join-Path $BundledKnowledge 'standards_graph\standard_parameter_crosswalk.md'),
     (Join-Path $BundledKnowledge 'standards_graph\source_layer\indexes\chunk_catalog.csv'),
     (Join-Path $BundledKnowledge 'standards_graph\source_layer\indexes\standards_knowledge.sqlite'),
+    (Join-Path $BundledKnowledge 'standards_graph\executable_data\build_20260720_visual_batch_v2\executable_store\executable_standard_data.sqlite'),
+    (Join-Path $BundledKnowledge 'standards_graph\executable_data\build_20260720_visual_batch_v2\executable_store\build_manifest.json'),
     (Join-Path $BundledKnowledge 'type_selection\hgt20592_20635\hash_manifest.csv'),
     (Join-Path $BundledKnowledge 'type_selection\hgt20592_20635\build_type_option_package.py'),
     (Join-Path $BundledKnowledge 'type_selection\hgt20592_20635\select_terminal_type.py'),
     (Join-Path $BundledKnowledge 'type_selection\hgt20592_20635\validate_package.py'),
     (Join-Path $BundledModelGraph 'equipment_selection_graph_v2.json'),
     (Join-Path $BundledModelGraph '00-authority-registry.md'),
-    (Join-Path $BundledModelGraph '20-model-determination-card.md')
+    (Join-Path $BundledModelGraph '20-model-determination-card.md'),
+    (Join-Path $BundledData 'database_authority_registry.json'),
+    (Join-Path $BundledDatabaseContracts 'standards_knowledge_public_schema.sql'),
+    (Join-Path $BundledDatabaseContracts 'executable_standard_data_public_schema.sql')
 )
 $missingBundleAssets = @($requiredBundleAssets | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
 if ($missingBundleAssets.Count -gt 0) {

@@ -27,6 +27,9 @@ venv/
 !/data/equipment_match_examples.json
 !/data/aspen_equipment_export_sample.json
 !/data/aspen_run_status_clean_sample.json
+!/data/database_authority_registry.json
+!/data/database_contracts/
+!/data/database_contracts/*.sql
 
 # Keep public project/retrieval documentation and the current release
 # verification in the repository; legacy migration/real-case audit material
@@ -36,6 +39,7 @@ venv/
 !/docs/RETRIEVAL_AND_GAPS.md
 !/docs/FORMULA_TRACEABILITY.md
 !/docs/STAGE1_2_4_0_RELEASE_VERIFICATION_20260724.md
+!/docs/DATABASE_STRUCTURE.md
 /DELIVERY_STATUS_20260720_PROMPT_AUDIT.md
 /RECOVERED_RUNTIME_ASSET_REPORT.json
 

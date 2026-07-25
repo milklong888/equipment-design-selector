@@ -24,6 +24,15 @@ RUNTIME_ROOTS = (
 STANDARDS_SQLITE_PATH = (
     "knowledge_graph/standards_graph/source_layer/indexes/standards_knowledge.sqlite"
 )
+EXECUTABLE_STANDARD_SQLITE_PATH = (
+    "knowledge_graph/standards_graph/executable_data/"
+    "build_20260720_visual_batch_v2/executable_store/"
+    "executable_standard_data.sqlite"
+)
+EXECUTABLE_STANDARD_MANIFEST_PATH = (
+    "knowledge_graph/standards_graph/executable_data/"
+    "build_20260720_visual_batch_v2/executable_store/build_manifest.json"
+)
 REQUIRED_RUNTIME_PATHS = {
     "knowledge_graph/README.md",
     "knowledge_graph/equipment_match_rules.json",
@@ -50,11 +59,16 @@ REQUIRED_RUNTIME_PATHS = {
     "knowledge_graph/standards_graph/standard_parameter_crosswalk.md",
     "knowledge_graph/standards_graph/source_layer/indexes/chunk_catalog.csv",
     STANDARDS_SQLITE_PATH,
+    EXECUTABLE_STANDARD_SQLITE_PATH,
+    EXECUTABLE_STANDARD_MANIFEST_PATH,
     "equipment_selection_graph/equipment_selection_graph_v2.json",
     "equipment_selection_graph/00-authority-registry.md",
     "equipment_selection_graph/20-model-determination-card.md",
     "data/pump_gbt5662_2013_design_points.csv",
     "data/pipe_gbt12459_2025_dn_od_catalog.csv",
+    "data/database_authority_registry.json",
+    "data/database_contracts/standards_knowledge_public_schema.sql",
+    "data/database_contracts/executable_standard_data_public_schema.sql",
     "app/schemas/equipment_design_agent_request.schema.json",
     "app/schemas/equipment_design_agent_response.schema.json",
     "app/schemas/equipment_design_authority_revision.schema.json",
@@ -71,6 +85,7 @@ REQUIRED_RUNTIME_PATHS = {
     "app/schemas/equipment_overview_table.schema.json",
     "app/schemas/equipment_family_datasheet.schema.json",
     "app/schemas/equipment_evidence_index.schema.json",
+    "app/schemas/equipment_database_authority_registry.schema.json",
 }
 SQLITE_COUNT_TABLES = (
     "documents",

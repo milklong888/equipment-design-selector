@@ -9,12 +9,13 @@
 1. `README.md`：先了解产品能力、七阶段工作机理和工程边界。
 2. `app/equipment_design_app.py` 与 `app/equipment_design_agent.py`：查看 GUI/API 和 CLI/Agent 两个入口。
 3. `app/app_core.py`：查看入口如何组织目录、参数检查、计算、选型和客户交付。
-4. `scripts/aspen_equipment_derivation.py`：查看 Aspen 原始数据怎样成为统一的设备参数。
-5. `scripts/equipment_calc.py`：查看确定性工程公式和参数台账。
-6. `scripts/equipment_design_match.py`：查看具体设备型式、候选和证据门怎样生成。
-7. `app/customer_delivery.py` 与 `app/result_presentation.py`：查看机器结果怎样投影为设备一览表和报告。
-8. `app/derivation_workbench.py` 与 `app/tk_gui.py`：查看用户改参、单设备重算和恢复默认。
-9. `app/llm_bridge.py`：最后查看 LLM 怎样在不能修改确定性结果的前提下参与解释和协作。
+4. `data/database_authority_registry.json` 与 `docs/DATABASE_STRUCTURE.md`：确认程序实际使用的数据库、表合同和隔离状态。
+5. `scripts/aspen_equipment_derivation.py`：查看 Aspen 原始数据怎样成为统一的设备参数。
+6. `scripts/equipment_calc.py`：查看确定性工程公式和参数台账。
+7. `scripts/equipment_design_match.py`：查看具体设备型式、候选和证据门怎样生成。
+8. `app/customer_delivery.py` 与 `app/result_presentation.py`：查看机器结果怎样投影为设备一览表和报告。
+9. `app/derivation_workbench.py` 与 `app/tk_gui.py`：查看用户改参、单设备重算和恢复默认。
+10. `app/llm_bridge.py`：最后查看 LLM 怎样在不能修改确定性结果的前提下参与解释和协作。
 
 主执行链如下：
 
@@ -56,8 +57,8 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/static/` | 浏览器轻量界面的结构、样式和交互 | 不掌握选型权威 |
 | `app/tests/` | 对计算、提取、选型、证据门、报告、GUI 和打包行为做回归保护 | 不生成生产交付结论 |
 | `scripts/` | Aspen 推导、工程计算、设备匹配、连接部件选择和批量审计 | 不直接组织最终用户界面 |
-| `data/` | 可公开随源码发布的小型目录和脱敏样例 | 不包含完整知识库或真实 BKP |
-| `docs/` | 项目结构说明和版本交付核验 | 不参与运行时决策 |
+| `data/` | 可公开随源码发布的小型目录、数据库权威注册表和公开 SQL 结构 | 不包含大型 SQLite 载荷、完整知识库或真实 BKP |
+| `docs/` | 项目结构、数据库拆解、检索边界和版本交付核验 | 解释运行合同，但不替代机器注册表和校验器 |
 
 ## 3. 根目录文件
 
@@ -80,6 +81,7 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/aspen_pfd.py` | 把 Aspen 模块、流股拓扑和统一参数确定性映射为 PFD 节点；只确定设备族/应用类型，不冒充厂家机械型号。 |
 | `app/authority_revision.py` | 生成并验证当前确定性权威版本，把核心源码、模式、运行时清单和哈希绑定为一次可审计修订。 |
 | `app/customer_delivery.py` | 将匹配器已有的机器状态投影为客户设备一览表、设备数据表和证据索引；不重新计算或擅自升级证据。 |
+| `app/database_authority.py` | 数据库权威解析与 fail-closed 校验器；验证活动状态、包内相对路径、大小、SHA-256、SQLite 完整性、表/列/记录数、构建清单和数据集晋升门。 |
 | `app/derivation_workbench.py` | 建立可视化推导工作台对象；提供默认值、当前值、可编辑字段、中文选项、模板选择、单设备覆盖和重算审计。 |
 | `app/equipment_design_agent.py` | 无界面 CLI/Agent 入口；处理 JSON/JSONL 请求，调度人工匹配、Aspen 推导、PFD、报告、知识查询、混合协作和自检。 |
 | `app/equipment_design_app.py` | 图形应用入口和本地 API 门面；管理报告状态、原子写入、GUI 启动以及 Aspen 子进程调用。 |
@@ -132,6 +134,7 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/schemas/equipment_agent_organized_answer.schema.json` | 约束 Agent 最终答案的固定章节、结论、计算、候选、警告、缺证和下一步。 |
 | `app/schemas/equipment_customer_delivery_bundle.schema.json` | 约束一览表、设备数据表和证据索引组成的权威绑定客户交付包。 |
 | `app/schemas/equipment_customer_output_profiles.schema.json` | 定义每个设备族应向客户展示哪些字段及字段来源合同。 |
+| `app/schemas/equipment_database_authority_registry.schema.json` | 定义数据库注册表的消费者、版本状态、运行许可、文件身份、表合同和非 SQL 目录记录。 |
 | `app/schemas/equipment_design_agent_request.schema.json` | 定义 CLI/Agent 可接受的操作名、输入对象、文件路径、LLM 配置和输出选项。 |
 | `app/schemas/equipment_design_agent_response.schema.json` | 定义 Agent 成功/失败响应、结果对象、错误和产物清单。 |
 | `app/schemas/equipment_design_authority_revision.schema.json` | 定义确定性权威修订中的源码、模式、知识清单版本及哈希关系。 |
@@ -171,6 +174,7 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/tests/test_audit_stage1_detailed_reliability.py` | 验证最终行与来源、推导链和证据谱系绑定，检测篡改与陈旧计数。 |
 | `app/tests/test_customer_delivery.py` | 验证客户一览表、数据表和证据索引不会丢失具体型式或把缺失值伪装成默认值。 |
 | `app/tests/test_customer_delivery_real_bkp_stage1.py` | 用已核查真实 BKP 派生结果验证塔、泵、六条物理管线及公开字段的诚实性。 |
+| `app/tests/test_database_authority.py` | 验证活动库绑定、旧库/候选库禁用、路径逃逸、文件替换、表合同、构建清单和数据集晋升门均 fail-closed。 |
 | `app/tests/test_engineering_adjustment_workbench.py` | 验证大换热器、奇异泵、大塔调整方案，以及工作台改参、中文选项和组织答案。 |
 | `app/tests/test_equipment_design_agent.py` | 验证 CLI/JSONL 协议、打包运行、自检、人工批处理、错误封装和运行时 fail-closed。 |
 | `app/tests/test_equipment_design_app.py` | 验证 GUI API 的 Aspen 前置检查、子进程调用和报告状态旁路文件。 |
@@ -179,6 +183,7 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/tests/test_llm_orchestration.py` | 验证模型不能替代程序算术、配方输入保持一致、缺段可补全、坏模型输出被隔离。 |
 | `app/tests/test_pfd_canvas.py` | 验证 17 类设备矢量符号、状态颜色、文字压缩和真实 Tk 画布渲染。 |
 | `app/tests/test_principles_requirements.py` | 验证原理需求图的节点、边、哈希、字段覆盖和正式证据边界。 |
+| `app/tests/test_public_rag_contract_bundle.py` | 验证 RAG 公开合同包可重复构建、文件哈希一致，并且不含 SQLite、PDF、图片或 Aspen 工程。 |
 | `app/tests/test_result_presentation.py` | 验证一览表字段、公式显示、候选门、终端型式来源和 HTML/Markdown 展示。 |
 | `app/tests/test_runtime_bundle.py` | 验证知识包清单对缺失、篡改、同尺寸替换和额外文件均能关闭运行。 |
 | `app/tests/test_source_code_manifest.py` | 验证源码及打包快照的缺失、修改、额外文件和清单漂移检测。 |
@@ -193,6 +198,9 @@ Aspen COM / 提取 JSON / 人工输入
 | `data/aspen_equipment_export_sample.json` | 脱敏 Aspen 设备/流股导出样例，用于演示和基本推导测试。 |
 | `data/aspen_run_status_clean_sample.json` | 干净 Aspen 运行状态样例，用于区分已收敛、警告和错误状态。 |
 | `data/equipment_match_examples.json` | 多种设备工况与预期具体型式的匹配示例。 |
+| `data/database_authority_registry.json` | 数据库机器权威注册表；公开当前活动库、隔离/无效/候选库、消费者、文件大小、SHA-256、表计数和允许使用范围。 |
+| `data/database_contracts/standards_knowledge_public_schema.sql` | 标准检索库的公开业务表 DDL，不包含受版权约束的数据载荷。 |
+| `data/database_contracts/executable_standard_data_public_schema.sql` | 结构化执行库的公开业务表 DDL，不包含标准记录载荷。 |
 | `data/pipe_gbt12459_2025_dn_od_catalog.csv` | 程序使用的 DN—外径小型目录，支持管径计算后选择标准公称直径和外径。 |
 | `data/pump_gbt5662_2013_design_points.csv` | 泵标准设计点/型式初筛目录，支持泵候选条件核对，不代替厂家性能曲线。 |
 
@@ -201,6 +209,8 @@ Aspen COM / 提取 JSON / 人工输入
 | 文件 | 作用 |
 | --- | --- |
 | `scripts/aspen_equipment_derivation.py` | 核心 Aspen 推导引擎；规范化流股和模块、换算单位、建立来源谱系、补充黏度并计算各设备族的参数链。 |
+| `scripts/audit_database_authority.py` | 公开数据库审计入口；可只列库存，也可完整核对活动库哈希、SQLite、表合同、构建清单和必需数据集。 |
+| `scripts/build_public_rag_contract_bundle.py` | 将 RAG 注册表、公开 SQL、检索说明和验证源码打成确定性小型 ZIP，同时阻止数据库及版权正文进入压缩包。 |
 | `scripts/audit_multi_bkp_model_gate.py` | 批量检查多个 BKP 派生结果是否给出具体登记型式，统计候选、开放缺口和不合格笼统措辞。 |
 | `scripts/audit_multi_bkp_overview_gate.py` | 批量审计客户设备一览表的物理设备计数、字段覆盖、开放门、来源及单元格/行/表哈希。 |
 | `scripts/audit_stage1_detailed_reliability.py` | 第一阶段深度可靠性审计；逐设备核查输入、公式、型式、数量、管线细节、调整方案、来源和公开投影。 |
@@ -218,6 +228,7 @@ Aspen COM / 提取 JSON / 人工输入
 | 文件 | 作用 |
 | --- | --- |
 | `docs/FORMULA_TRACEABILITY.md` | 说明内置公式的机器追溯合同、输入/来源/代码绑定、哈希复核、40 条规则覆盖和剩余边界。 |
+| `docs/DATABASE_STRUCTURE.md` | 公开拆解数据库版本、路径、哈希、业务表、记录数、调用方、晋升/隔离原因、Git/Release 边界和后续接手检查单。 |
 | `docs/PROJECT_STRUCTURE.md` | 当前文档；说明目录边界、阅读顺序、执行链和所有受 Git 追踪文件的职责。 |
 | `docs/RETRIEVAL_AND_GAPS.md` | 说明知识检索、设备型式检索、排序与证据门，并逐项区分未实现、部分实现和待生产验证能力。 |
 | `docs/STAGE1_2_4_0_RELEASE_VERIFICATION_20260724.md` | 记录 2.4.0 完成范围、测试结果、17 类设备覆盖、程序/源码/知识包哈希及待生产环境验证。 |
