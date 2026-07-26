@@ -879,11 +879,82 @@ def attach_customer_delivery(result: dict[str, Any]) -> dict[str, Any]:
     return enriched
 
 
+def attach_manual_programmatic_pipe_specification(
+    result: dict[str, Any],
+    record: dict[str, Any],
+    *,
+    family_id: str,
+) -> dict[str, Any]:
+    """Route manual piping through the same deterministic chain as Aspen lines."""
+
+    if family_id != "family_process_piping":
+        return result
+    import aspen_equipment_derivation as aspen_derivation  # noqa: PLC0415
+
+    pipe_record = dict(record)
+    alias_pairs = {
+        "medium_name": ("main_medium", "medium"),
+        "dynamic_viscosity_mpa_s": ("viscosity_mpa_s",),
+        "source_endpoint": ("line_origin",),
+        "destination_endpoint": ("line_destination",),
+        "line_length_m": ("pipe_length_m", "straight_length_m"),
+    }
+    for canonical, aliases in alias_pairs.items():
+        if pipe_record.get(canonical) not in (None, ""):
+            continue
+        for alias in aliases:
+            if pipe_record.get(alias) not in (None, ""):
+                pipe_record[canonical] = pipe_record[alias]
+                break
+    pipe_record.setdefault("pressure_basis", "gauge")
+    pipe_record["_pipe_input_source_kind"] = "MANUAL_INPUT"
+    source_sha256 = _canonical_sha256(pipe_record)
+    source_file = PACKAGE_ROOT / "manual_input_record"
+    try:
+        specification = aspen_derivation.build_programmatic_pipe_specification(
+            stream_id=str(
+                pipe_record.get("line_number")
+                or pipe_record.get("equipment_tag")
+                or "MANUAL-PIPE"
+            ),
+            record=pipe_record,
+            match_result=result,
+            source_file=source_file,
+            source_sha256=source_sha256,
+        )
+    except RuntimeError as exc:
+        specification = {
+            "schema": "programmatic-pipe-specification-v1",
+            "version": "1.4.0",
+            "status": "BLOCKED_MANUAL_PIPE_SPECIFICATION",
+            "deterministic": True,
+            "llm_used": False,
+            "program_generated": True,
+            "stream_id": str(
+                pipe_record.get("line_number")
+                or pipe_record.get("equipment_tag")
+                or "MANUAL-PIPE"
+            ),
+            "blocking_error": str(exc),
+            "source_binding": {
+                "input_source_kind": "MANUAL_INPUT",
+                "manual_input_record_sha256": source_sha256,
+            },
+        }
+    enriched = dict(result)
+    aspen_derivation.apply_programmatic_pipe_model_boundary(
+        enriched,
+        specification,
+    )
+    return enriched
+
+
 def manual_match(
     selection_id: str,
     values: dict[str, Any],
     *,
     model_estimate_lineage: dict[str, Any] | None = None,
+    engineering_choice_lineage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     catalog = load_catalog()
     selected = _selection(catalog, selection_id)
@@ -898,6 +969,12 @@ def manual_match(
         rules,
         graph,
         model_estimate_lineage=model_estimate_lineage,
+        engineering_choice_lineage=engineering_choice_lineage,
+    )
+    result = attach_manual_programmatic_pipe_specification(
+        result,
+        record,
+        family_id=str(selected.get("family_id") or ""),
     )
     derived_service_profile = service_profile.build_manual_service_profile(
         record,
@@ -937,10 +1014,12 @@ def manual_match(
         "input_provenance": {
             "status": (
                 "MIXED_USER_AND_LLM_PROVISIONAL_ESTIMATES"
-                if model_estimate_lineage else "USER_ENTERED_UNVERIFIED"
+                if model_estimate_lineage or engineering_choice_lineage
+                else "USER_ENTERED_UNVERIFIED"
             ),
             "formal_use": False,
             "model_estimate_fields": sorted(model_estimate_lineage or {}),
+            "ai_registered_choice_fields": sorted(engineering_choice_lineage or {}),
         },
         "decision_boundary": "LLM may review or propose allowlisted draft changes; deterministic blockers and evidence/model gates remain authoritative.",
     }
@@ -950,6 +1029,7 @@ def auto_match(
     values: dict[str, Any],
     *,
     model_estimate_lineage: dict[str, Any] | None = None,
+    engineering_choice_lineage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Match arbitrary partial fields without a prior family/module choice."""
     record = clean_record(values)
@@ -959,6 +1039,17 @@ def auto_match(
         rules,
         graph,
         model_estimate_lineage=model_estimate_lineage,
+        engineering_choice_lineage=engineering_choice_lineage,
+    )
+    auto_family_id = str(
+        result.get("match", {}).get("family_id")
+        if isinstance(result.get("match"), dict)
+        else record.get("equipment_family") or ""
+    )
+    result = attach_manual_programmatic_pipe_specification(
+        result,
+        record,
+        family_id=auto_family_id,
     )
     derived_service_profile = service_profile.build_manual_service_profile(
         record,
@@ -998,10 +1089,12 @@ def auto_match(
         "input_provenance": {
             "status": (
                 "MIXED_USER_AND_LLM_PROVISIONAL_ESTIMATES"
-                if model_estimate_lineage else "USER_ENTERED_UNVERIFIED"
+                if model_estimate_lineage or engineering_choice_lineage
+                else "USER_ENTERED_UNVERIFIED"
             ),
             "formal_use": False,
             "model_estimate_fields": sorted(model_estimate_lineage or {}),
+            "ai_registered_choice_fields": sorted(engineering_choice_lineage or {}),
         },
         "decision_boundary": (
             "Field compatibility generates candidates only. Exact identity or an explicit physical route "

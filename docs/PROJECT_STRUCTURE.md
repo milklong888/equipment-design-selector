@@ -234,6 +234,7 @@ Aspen COM / 提取 JSON / 人工输入
 | --- | --- |
 | `knowledge_graph/aspen_equipment_derivation_chain.md` | 解释 Aspen 导出到设备/管线推导结果的字段链、状态和边界。 |
 | `knowledge_graph/aspen_equipment_export.schema.json` | 约束 Aspen COM/模拟导出中的案例、单位、流股、模块、拓扑和运行状态。 |
+| `knowledge_graph/ai_engineering_choice_registry.json` | 登记 17 个设备族的 AI 可选具体型式与材料/零部件包；保存精确 ID、背景、触发条件、选择依据、来源、固定字段值和预设计警告，模型不得在表外自由生成。 |
 | `knowledge_graph/equipment_connection_selection_package.schema.json` | 约束法兰、密封面、垫片、紧固件和连接证据包。 |
 | `knowledge_graph/equipment_customer_output_profiles.json` | 登记 17 个设备族在客户一览表/数据表中应公开的字段及来源。 |
 | `knowledge_graph/equipment_design_parameter_package.schema.json` | 约束设备设计参数包、选择特征向量、字段状态和来源。 |

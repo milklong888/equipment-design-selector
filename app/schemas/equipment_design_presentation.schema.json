@@ -24,7 +24,7 @@
     }
   },
   "type": "object",
-  "required": ["schema", "source_payload_sha256", "equipment_count", "equipment", "deterministic", "llm_used", "model_estimate_disclosure"],
+  "required": ["schema", "source_payload_sha256", "equipment_count", "equipment", "deterministic", "llm_used", "llm_control_result", "model_estimate_disclosure"],
   "properties": {
     "schema": {"const": "equipment-design-presentation-v1"},
     "source_payload_sha256": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
@@ -33,12 +33,16 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["equipment_id", "header", "status_axes", "terminal_selection", "parameter_groups", "calculation_chain", "candidates", "issues", "llm_used", "model_estimate_inputs", "model_estimate_disclosure"],
+        "required": ["equipment_id", "header", "status_axes", "terminal_selection", "selected_output", "branch_selection", "component_selections", "llm_control_result", "parameter_groups", "calculation_chain", "candidates", "issues", "llm_used", "model_estimate_inputs", "model_estimate_disclosure"],
         "properties": {
           "equipment_id": {"type": "string"},
           "header": {"type": "object"},
           "status_axes": {"type": "object"},
           "terminal_selection": {"type": "object"},
+          "selected_output": {"type": "object"},
+          "branch_selection": {"type": "object"},
+          "component_selections": {"type": "array"},
+          "llm_control_result": {"type": "object"},
           "parameter_groups": {"type": "array"},
           "calculation_chain": {"type": "array"},
           "constraint_checks": {"type": "array"},
@@ -56,6 +60,7 @@
     },
     "deterministic": {"const": true},
     "llm_used": {"type": "boolean"},
+    "llm_control_result": {"type": "object"},
     "model_estimate_disclosure": {"$ref": "#/$defs/aggregateDisclosure"}
   },
   "additionalProperties": true

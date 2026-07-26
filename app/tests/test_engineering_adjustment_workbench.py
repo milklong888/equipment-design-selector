@@ -326,8 +326,9 @@ class EngineeringAdjustmentWorkbenchTests(unittest.TestCase):
         self.assertEqual(
             answer["section_order"],
             [
-                "结论",
-                "计算",
+                "基本信息",
+                "分支选择与大模型调控",
+                "详细计算链条",
                 "候选与系统修改方案",
                 "强制警告",
                 "待补证据",
@@ -357,8 +358,9 @@ class EngineeringAdjustmentWorkbenchTests(unittest.TestCase):
             result_presentation.render_organized_markdown(answer)
         )
         for heading in (
-            "### 结论",
-            "### 计算",
+            "### 基本信息",
+            "### 分支选择与大模型调控",
+            "### 详细计算链条",
             "### 候选与系统修改方案",
             "### 强制警告",
             "### 待补证据",

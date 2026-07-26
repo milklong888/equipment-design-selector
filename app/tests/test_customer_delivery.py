@@ -12,8 +12,12 @@ from pathlib import Path
 APP_DIR = Path(__file__).resolve().parents[1]
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
+SCRIPTS_DIR = APP_DIR.parent / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
 
 import customer_delivery as delivery
+import equipment_design_match as matcher
 
 
 CONTEXT_SHA = "A" * 64
@@ -969,12 +973,12 @@ class CustomerDeliveryTests(unittest.TestCase):
         if not delivery.DEFAULT_PROFILE_PATH.is_file():
             self.skipTest("canonical profile file has not been generated yet")
         frozen_raw = json.loads(delivery.DEFAULT_PROFILE_PATH.read_text(encoding="utf-8"))
-        self.assertEqual(len(frozen_raw["profiles"]), 19)
-        self.assertEqual(len(frozen_raw["canonical_field_definitions"]), 248)
+        self.assertEqual(len(frozen_raw["profiles"]), 25)
+        self.assertEqual(len(frozen_raw["canonical_field_definitions"]), 256)
         self.assertEqual(len(frozen_raw["algorithm_family_profile_map"]), 17)
         frozen_profile = delivery.load_customer_output_profiles()
-        self.assertEqual(len(frozen_profile["profiles"]), 20)
-        self.assertEqual(len(frozen_profile["field_definitions"]), 248)
+        self.assertEqual(len(frozen_profile["profiles"]), 26)
+        self.assertEqual(len(frozen_profile["field_definitions"]), 256)
         sheet = delivery.build_equipment_family_datasheet(pump_result())["equipment"][0]
         fields = {item["field_id"]: item for item in sheet["fields"]}
         self.assertEqual(sheet["profile_ids"], ["T01"])
@@ -1097,8 +1101,22 @@ class CustomerDeliveryTests(unittest.TestCase):
         reactor_fields = {
             item["field_id"]: item for item in by_tag["R-1"]["fields"]
         }
-        for field_id in tower_values:
-            self.assertNotIn(field_id, tower_fields)
+        for field_id in (
+            "tower_diameter_screening_mm",
+            "tower_height_screening_mm",
+            "formula_only_shell_thickness_mm",
+            "formula_only_head_thickness_mm",
+        ):
+            self.assertIn(field_id, tower_fields)
+            self.assertEqual(
+                tower_fields[field_id]["value"],
+                tower_values[field_id],
+            )
+        for field_id in (
+            "nominal_shell_wall_thickness_selected",
+            "nominal_head_wall_thickness_selected",
+        ):
+            self.assertIn(field_id, tower_fields)
         for field_id, value in rplug_values.items():
             self.assertIn(field_id, reactor_fields)
             self.assertEqual(reactor_fields[field_id]["value"], value)
@@ -1174,6 +1192,78 @@ class CustomerDeliveryTests(unittest.TestCase):
             tower_row["formal_readiness_gate"]["state"],
             "BLOCKED",
         )
+
+    def test_programmatic_tower_spec_is_verified_and_formal_geometry_stays_open(
+        self,
+    ) -> None:
+        result = matcher.match_one(
+            {
+                "equipment_tag": "T-PACK-DELIVERY",
+                "equipment_type": "规整填料塔",
+                "aspen_block_type": "RADFRAC",
+                "phase": "mixed",
+                "flow_m3_h": 120.0,
+                "stage_count": 30,
+                "operating_pressure_mpa": 0.2,
+                "pressure_basis": "absolute",
+                "atmospheric_pressure_mpa": 0.101325,
+            },
+            matcher.load_rules(),
+            matcher.load_graph(),
+        )
+        sheet = delivery.build_equipment_family_datasheet(result)[
+            "equipment"
+        ][0]
+        fields = {item["field_id"]: item for item in sheet["fields"]}
+
+        self.assertEqual(
+            fields["tower_internals_type"]["value"],
+            "250Y金属孔板波纹规整填料（程序保底）",
+        )
+        self.assertEqual(fields["packing_bed_height_m"]["value"], 15.0)
+        self.assertEqual(fields["packing_section_count"]["value"], 3)
+        self.assertTrue(
+            fields["model_designation"]["value"].startswith(
+                "TWR-PACK250Y-"
+            )
+        )
+        self.assertEqual(
+            fields["model_designation"]["state"],
+            "PROGRAMMATIC_TOWER_ENGINEERING_DESIGNATION",
+        )
+        self.assertEqual(
+            fields["model_designation"]["source"]["kind"],
+            "deterministic_programmatic_tower_specification",
+        )
+        self.assertIn(
+            "程序候选规格=TWR-PACK250Y-",
+            fields["technical_specification"]["value"],
+        )
+        self.assertEqual(
+            fields["tower_diameter_screening_mm"]["source"]["kind"],
+            "deterministic_programmatic_tower_specification",
+        )
+        self.assertEqual(
+            fields["tower_diameter_screening_mm"]["state"],
+            "CALCULATED",
+        )
+        self.assertEqual(
+            fields["diameter_mm"]["state"],
+            "OPEN_FORMAL_EVIDENCE_GATE",
+        )
+        self.assertIsNone(fields["diameter_mm"]["value"])
+        self.assertEqual(
+            fields["height_mm"]["state"],
+            "OPEN_FORMAL_EVIDENCE_GATE",
+        )
+        self.assertIsNone(fields["height_mm"]["value"])
+
+        tampered = copy.deepcopy(result)
+        tampered["programmatic_tower_specification"]["fields"][
+            "packing_bed_height_m"
+        ]["value"] = 999.0
+        with self.assertRaises(delivery.CustomerDeliveryError):
+            delivery.build_equipment_family_datasheet(tampered)
 
     def test_pfd_temperature_alias_keeps_aspen_d_lineage_in_customer_cell(
         self,
@@ -1341,9 +1431,16 @@ class CustomerDeliveryTests(unittest.TestCase):
         if not delivery.DEFAULT_PROFILE_PATH.is_file():
             self.skipTest("canonical profile file has not been generated yet")
         source = pump_result()
-        source["match"] = {"family_id": "family_agitator", "family_name": "搅拌设备"}
-        source["design_parameter_package"]["family_id"] = "family_agitator"
-        source["model_recommendation"]["family_id"] = "family_agitator"
+        source["match"] = {
+            "family_id": "family_unmapped_test",
+            "family_name": "无专属模板测试设备",
+        }
+        source["design_parameter_package"]["family_id"] = (
+            "family_unmapped_test"
+        )
+        source["model_recommendation"]["family_id"] = (
+            "family_unmapped_test"
+        )
         sheet = delivery.build_equipment_family_datasheet(source)["equipment"][0]
         self.assertEqual(sheet["profile_ids"], ["__common_delivery__"])
         self.assertTrue(sheet["fields"])
@@ -1371,8 +1468,8 @@ class CustomerDeliveryTests(unittest.TestCase):
             self.assertEqual(frozen_delivery.DEFAULT_PROFILE_PATH, profile_path)
             loaded = frozen_delivery.load_customer_output_profiles()
             self.assertEqual(loaded["schema"], "equipment-customer-output-profiles-v1")
-            self.assertEqual(len(loaded["profiles"]), 20)
-            self.assertEqual(len(loaded["field_definitions"]), 248)
+            self.assertEqual(len(loaded["profiles"]), 26)
+            self.assertEqual(len(loaded["field_definitions"]), 256)
         finally:
             sys.modules.pop(module_name, None)
             if had_meipass:
@@ -1521,6 +1618,608 @@ class CustomerDeliveryTests(unittest.TestCase):
         self.assertNotIn("equipment_type", sheet["customer_table_missing_fields"])
         self.assertEqual(unified_fields["equipment_type"]["value"], "轴向吸入离心泵")
         self.assertEqual(overview_row["equipment_type"], "轴向吸入离心泵")
+
+    def test_separator_uses_only_t13_and_projects_verified_program_spec(
+        self,
+    ) -> None:
+        result = matcher.match_one(
+            {
+                "equipment_tag": "V-DELIVERY-001",
+                "equipment_family": "反应器/容器/分离器",
+                "aspen_block_type": "FLASH2",
+                "inner_diameter_mm": 2000.0,
+                "straight_shell_length_mm": 6000.0,
+                "operating_pressure_mpa": 1.2,
+                "pressure_basis": "gauge",
+                "temperature_c": 160.0,
+                "phase": "mixed",
+            },
+            matcher.load_rules(),
+            matcher.load_graph(),
+        )
+        bundle = delivery.build_customer_delivery(result)
+        sheet = bundle["equipment_family_datasheet"]["equipment"][0]
+        fields = {item["field_id"]: item for item in sheet["fields"]}
+        overview = bundle["equipment_overview_table"]["rows"][0]
+        authority = {
+            item["field_id"]: item for item in overview["authority_cells"]
+        }
+
+        self.assertEqual(sheet["profile_ids"], ["T13"])
+        self.assertNotIn("active_tube_inner_diameter_mm", fields)
+        self.assertNotIn("reaction_tube_count", fields)
+        self.assertEqual(fields["orientation"]["value"], "立式")
+        self.assertIn("SP型", fields["demister_type"]["value"])
+        self.assertEqual(fields["inlet_nozzle_dn"]["value"], 65)
+        self.assertEqual(
+            fields["inlet_nozzle_dn"]["source"]["kind"],
+            "deterministic_programmatic_vessel_separator_specification",
+        )
+        self.assertEqual(
+            fields["selected_wall_thickness_mm"]["state"],
+            "PRELIMINARY_CANDIDATE_NOT_FORMAL",
+        )
+        self.assertEqual(authority["selected_wall_thickness_mm"]["value"], 18.0)
+        self.assertIn(
+            "programmatic_vessel_separator_specification",
+            fields,
+        )
+
+    def test_separator_program_spec_tampering_is_rejected(self) -> None:
+        result = matcher.match_one(
+            {
+                "equipment_tag": "V-DELIVERY-TAMPER",
+                "equipment_family": "反应器/容器/分离器",
+                "aspen_block_type": "FLASH2",
+                "inner_diameter_mm": 1600.0,
+                "straight_shell_length_mm": 4000.0,
+            },
+            matcher.load_rules(),
+            matcher.load_graph(),
+        )
+        result["programmatic_vessel_separator_specification"]["fields"][
+            "inlet_nozzle_dn"
+        ]["value"] = 999
+        with self.assertRaises(delivery.CustomerDeliveryError):
+            delivery.build_customer_delivery(result)
+
+    def test_reactor_uses_only_t12_and_projects_verified_program_spec(
+        self,
+    ) -> None:
+        result = matcher.match_one(
+            {
+                "equipment_tag": "R-DELIVERY-001",
+                "equipment_family": "反应器/容器/分离器",
+                "aspen_block_type": "RCSTR",
+                "equipment_type": "连续搅拌釜式反应器",
+                "volume_m3": 10.0,
+                "inner_diameter_mm": 2000.0,
+                "height_mm": 3500.0,
+                "operating_pressure_mpa": 0.3,
+                "pressure_basis": "gauge",
+                "temperature_c": 120.0,
+            },
+            matcher.load_rules(),
+            matcher.load_graph(),
+        )
+        bundle = delivery.build_customer_delivery(result)
+        sheet = bundle["equipment_family_datasheet"]["equipment"][0]
+        fields = {item["field_id"]: item for item in sheet["fields"]}
+
+        self.assertEqual(sheet["profile_ids"], ["T12"])
+        self.assertNotIn(
+            "programmatic_vessel_separator_specification",
+            fields,
+        )
+        self.assertIn("programmatic_reactor_specification", fields)
+        self.assertIn("六叶45°折叶", fields["agitator_type"]["value"])
+        self.assertEqual(fields["baffle_count"]["value"], 4)
+        self.assertEqual(fields["motor_power_kw"]["value"], 7.5)
+        self.assertIn("整体夹套", fields["jacket_type"]["value"])
+        self.assertEqual(
+            fields["agitator_type"]["source"]["kind"],
+            "deterministic_programmatic_reactor_specification",
+        )
+        self.assertEqual(
+            fields["selected_wall_thickness_mm"]["state"],
+            "PRELIMINARY_CANDIDATE_NOT_FORMAL",
+        )
+
+    def test_reactor_program_spec_tampering_is_rejected(self) -> None:
+        result = matcher.match_one(
+            {
+                "equipment_tag": "R-DELIVERY-TAMPER",
+                "equipment_family": "反应器/容器/分离器",
+                "aspen_block_type": "RPLUG",
+                "required_total_reactor_volume_m3": 0.1,
+            },
+            matcher.load_rules(),
+            matcher.load_graph(),
+        )
+        result["programmatic_reactor_specification"]["fields"][
+            "selected_tube_count"
+        ]["value"] = 999
+        with self.assertRaises(delivery.CustomerDeliveryError):
+            delivery.build_customer_delivery(result)
+
+    def test_crystallizer_uses_t15_and_projects_verified_program_spec(
+        self,
+    ) -> None:
+        result = matcher.match_one(
+            {
+                "equipment_tag": "X-DELIVERY-001",
+                "equipment_family": "反应器/容器/分离器",
+                "aspen_block_type": "CRYSTALLIZER",
+            },
+            matcher.load_rules(),
+            matcher.load_graph(),
+        )
+        bundle = delivery.build_customer_delivery(result)
+        sheet = bundle["equipment_family_datasheet"]["equipment"][0]
+        fields = {item["field_id"]: item for item in sheet["fields"]}
+        overview = bundle["equipment_overview_table"]["rows"][0]
+        authority = {
+            item["field_id"]: item for item in overview["authority_cells"]
+        }
+
+        self.assertEqual(sheet["profile_ids"], ["T15"])
+        self.assertNotIn("programmatic_reactor_specification", fields)
+        self.assertNotIn(
+            "programmatic_vessel_separator_specification",
+            fields,
+        )
+        self.assertIn("programmatic_crystallizer_specification", fields)
+        self.assertIn("DTB型", fields["equipment_type"]["value"])
+        self.assertEqual(fields["working_volume_m3"]["value"], 10.0)
+        self.assertAlmostEqual(
+            fields["heat_transfer_area_m2"]["value"],
+            19.6078431373,
+        )
+        self.assertIn("中心导流筒", fields["draft_tube_specification"]["value"])
+        self.assertEqual(
+            fields["heat_transfer_area_m2"]["source"]["kind"],
+            "deterministic_programmatic_crystallizer_specification",
+        )
+        self.assertEqual(
+            fields["selected_wall_thickness_mm"]["state"],
+            "PRELIMINARY_CANDIDATE_NOT_FORMAL",
+        )
+
+    def test_crystallizer_program_spec_tampering_is_rejected(self) -> None:
+        result = matcher.match_one(
+            {
+                "equipment_tag": "X-DELIVERY-TAMPER",
+                "equipment_family": "反应器/容器/分离器",
+                "aspen_block_type": "CRYSTALLIZER",
+            },
+            matcher.load_rules(),
+            matcher.load_graph(),
+        )
+        result["programmatic_crystallizer_specification"]["fields"][
+            "heat_transfer_area_m2"
+        ]["value"] = 999.0
+        with self.assertRaises(delivery.CustomerDeliveryError):
+            delivery.build_customer_delivery(result)
+
+    def test_storage_vessel_subtypes_keep_separate_authority_profiles(
+        self,
+    ) -> None:
+        expected = {
+            "储罐": ("T06", "立式圆筒储罐", "立式"),
+            "回流罐": ("T07", "卧式回流罐", "卧式"),
+            "缓冲罐": ("T08", "立式缓冲罐", "立式"),
+            "其他罐": ("T09", "立式工艺容器", "立式"),
+        }
+        for input_type, (
+            profile_id,
+            concrete_type,
+            orientation,
+        ) in expected.items():
+            with self.subTest(input_type=input_type):
+                result = matcher.match_one(
+                    {
+                        "equipment_tag": f"V-DELIVERY-{profile_id}",
+                        "equipment_family": "储罐/缓冲罐/回流罐",
+                        "equipment_type": input_type,
+                    },
+                    matcher.load_rules(),
+                    matcher.load_graph(),
+                )
+                bundle = delivery.build_customer_delivery(result)
+                sheet = bundle["equipment_family_datasheet"]["equipment"][0]
+                fields = {
+                    item["field_id"]: item for item in sheet["fields"]
+                }
+
+                self.assertEqual(sheet["profile_ids"], [profile_id])
+                self.assertEqual(
+                    fields["equipment_type"]["value"],
+                    concrete_type,
+                )
+                self.assertEqual(
+                    fields["orientation"]["value"],
+                    orientation,
+                )
+                self.assertIn(
+                    "programmatic_storage_vessel_specification",
+                    fields,
+                )
+                self.assertEqual(
+                    fields["vessel_internals_specification"]["source"][
+                        "kind"
+                    ],
+                    "deterministic_programmatic_storage_vessel_specification",
+                )
+                self.assertEqual(
+                    fields["selected_wall_thickness_mm"]["value"],
+                    6.0,
+                )
+
+    def test_storage_vessel_program_spec_tampering_is_rejected(self) -> None:
+        result = matcher.match_one(
+            {
+                "equipment_tag": "V-DELIVERY-TAMPER",
+                "equipment_family": "储罐/缓冲罐/回流罐",
+                "equipment_type": "回流罐",
+            },
+            matcher.load_rules(),
+            matcher.load_graph(),
+        )
+        result["programmatic_storage_vessel_specification"]["fields"][
+            "diameter_mm"
+        ]["value"] = 999.0
+        with self.assertRaises(delivery.CustomerDeliveryError):
+            delivery.build_customer_delivery(result)
+
+    def test_auxiliary_equipment_specs_are_projected_by_separate_profiles(
+        self,
+    ) -> None:
+        cases = [
+            (
+                {
+                    "equipment_tag": "C-DELIVERY",
+                    "aspen_block_type": "COMPR",
+                    "flow_m3_h": 1000.0,
+                    "inlet_pressure_mpa": 0.1,
+                    "outlet_pressure_mpa": 0.3,
+                    "pressure_basis": "absolute",
+                    "inlet_temperature_c": 25.0,
+                    "heat_capacity_ratio_k": 1.4,
+                    "efficiency_percent": 75.0,
+                    "driver_efficiency_percent": 95.0,
+                    "auxiliary_power_fraction": 0.05,
+                },
+                "T02",
+                "model_designation",
+                "COMP-CENT-1STG-Q1000-PR3.00-P47.8-M55",
+            ),
+            (
+                {
+                    "equipment_tag": "A-DELIVERY",
+                    "equipment_type": "搅拌器",
+                    "volume_m3": 10.0,
+                    "rotational_speed_rpm": 100.0,
+                    "shaft_power_kw": 5.0,
+                },
+                "T16",
+                "model_designation",
+                "AGT-TE-PBT45-D750-N100-P5-M7.5-SHAFT45-S30408-4B",
+            ),
+            (
+                {
+                    "equipment_tag": "M-DELIVERY",
+                    "equipment_type": "静态混合器",
+                    "flow_m3_h": 10.0,
+                    "target_velocity_m_s": 1.5,
+                },
+                "T10",
+                "model_designation",
+                "SMX-KENICS-DN50-6E-L500-S30408-PN16-BW",
+            ),
+        ]
+        for raw, profile_id, field_id, expected_value in cases:
+            with self.subTest(profile_id=profile_id):
+                result = matcher.match_one(
+                    raw,
+                    matcher.load_rules(),
+                    matcher.load_graph(),
+                )
+                bundle = delivery.build_customer_delivery(result)
+                sheet = bundle["equipment_family_datasheet"]["equipment"][0]
+                fields = {
+                    item["field_id"]: item for item in sheet["fields"]
+                }
+
+                self.assertEqual(sheet["profile_ids"], [profile_id])
+                self.assertIn("programmatic_auxiliary_specification", fields)
+                self.assertEqual(fields[field_id]["value"], expected_value)
+                self.assertEqual(
+                    fields[field_id]["source"]["kind"],
+                    "deterministic_programmatic_auxiliary_equipment_specification",
+                )
+                self.assertTrue(fields[field_id]["source"]["program_generated"])
+                self.assertFalse(fields[field_id]["source"]["llm_used"])
+
+    def test_auxiliary_equipment_program_spec_tampering_is_rejected(
+        self,
+    ) -> None:
+        result = matcher.match_one(
+            {
+                "equipment_tag": "M-DELIVERY-TAMPER",
+                "equipment_type": "静态混合器",
+                "flow_m3_h": 10.0,
+                "target_velocity_m_s": 1.5,
+            },
+            matcher.load_rules(),
+            matcher.load_graph(),
+        )
+        result["programmatic_auxiliary_specification"]["fields"][
+            "selected_dn"
+        ]["value"] = 999
+        with self.assertRaises(delivery.CustomerDeliveryError):
+            delivery.build_customer_delivery(result)
+
+    def test_membrane_and_package_branches_use_separate_verified_profiles(
+        self,
+    ) -> None:
+        cases = [
+            (
+                {
+                    "equipment_tag": "MEM-DELIVERY",
+                    "equipment_type": "膜组件",
+                },
+                "T17",
+                "MEM-SW8040-10E-2PV5-PA-TFC-A370-PN16",
+                "membrane_area_m2",
+                370.0,
+            ),
+            (
+                {
+                    "equipment_tag": "F-DELIVERY",
+                    "aspen_block_type": "FILTER",
+                },
+                "T18",
+                "FP-RECESSED-800-10C-A8-增强PP-P06",
+                "selected_filter_area_m2",
+                8.0,
+            ),
+            (
+                {
+                    "equipment_tag": "D-DELIVERY",
+                    "aspen_block_type": "DRYER",
+                },
+                "T19",
+                "DRY-BELT-HA-W1.5-L4-A6-E100-Q97.2-2Z-S30408",
+                "belt_area_m2",
+                6.0,
+            ),
+            (
+                {
+                    "equipment_tag": "PKG-DELIVERY",
+                    "equipment_type": "成套设备",
+                },
+                "T20",
+                "PKG-TSA-2T-DN500-BED0.2M3-ALUMINA-C8H-PN16",
+                "bed_volume_m3_per_tower",
+                0.2,
+            ),
+        ]
+        for raw, profile_id, designation, detail_field, detail_value in cases:
+            with self.subTest(profile_id=profile_id):
+                result = matcher.match_one(
+                    raw,
+                    matcher.load_rules(),
+                    matcher.load_graph(),
+                )
+                bundle = delivery.build_customer_delivery(result)
+                sheet = bundle["equipment_family_datasheet"]["equipment"][0]
+                fields = {
+                    item["field_id"]: item for item in sheet["fields"]
+                }
+
+                self.assertEqual(sheet["profile_ids"], [profile_id])
+                self.assertEqual(
+                    fields["model_designation"]["value"],
+                    designation,
+                )
+                self.assertEqual(fields[detail_field]["value"], detail_value)
+                self.assertIn(
+                    "programmatic_membrane_package_specification",
+                    fields,
+                )
+                self.assertEqual(
+                    fields[detail_field]["source"]["kind"],
+                    "deterministic_programmatic_membrane_package_specification",
+                )
+                self.assertTrue(
+                    fields[detail_field]["source"]["program_generated"]
+                )
+                self.assertFalse(fields[detail_field]["source"]["llm_used"])
+
+    def test_membrane_package_program_spec_tampering_is_rejected(
+        self,
+    ) -> None:
+        result = matcher.match_one(
+            {
+                "equipment_tag": "MEM-DELIVERY-TAMPER",
+                "equipment_type": "膜组件",
+            },
+            matcher.load_rules(),
+            matcher.load_graph(),
+        )
+        result["programmatic_membrane_package_specification"]["fields"][
+            "membrane_area_m2"
+        ]["value"] = 999.0
+        with self.assertRaises(delivery.CustomerDeliveryError):
+            delivery.build_customer_delivery(result)
+
+    def test_turbine_branches_project_program_specs_into_authority_profiles(
+        self,
+    ) -> None:
+        cases = [
+            (
+                {
+                    "equipment_tag": "HPRT-DELIVERY",
+                    "equipment_type": "液力透平",
+                    "flow_m3_h": 50.0,
+                    "density_kg_m3": 1000.0,
+                    "inlet_pressure_mpa": 0.5,
+                    "outlet_pressure_mpa": 0.2,
+                    "pressure_basis": "absolute",
+                    "efficiency_percent": 75.0,
+                },
+                "T03",
+                "HPRT-PAT-1STG-Q50-PR2.50-P3.1-G5.5-N2900",
+                "generator_power_kw",
+                5.5,
+            ),
+            (
+                {
+                    "equipment_tag": "EXP-DELIVERY",
+                    "equipment_type": "气体膨胀机",
+                    "flow_m3_h": 1000.0,
+                    "gas_molecular_weight": 28.97,
+                    "compressibility_factor": 1.0,
+                    "heat_capacity_ratio_k": 1.3,
+                    "gas_density_kg_m3": 3.6,
+                    "inlet_temperature_c": 25.0,
+                    "inlet_pressure_mpa": 1.0,
+                    "outlet_pressure_mpa": 0.3,
+                    "pressure_basis": "absolute",
+                    "efficiency_percent": 80.0,
+                },
+                "T04",
+                "EXP-RAD-2STG-Q1000-PR3.33-P233.6-G250-N30000",
+                "runaway_speed_rpm",
+                36000.0,
+            ),
+        ]
+        for raw, profile_id, designation, detail_field, detail_value in cases:
+            with self.subTest(profile_id=profile_id):
+                result = matcher.match_one(
+                    raw,
+                    matcher.load_rules(),
+                    matcher.load_graph(),
+                )
+                bundle = delivery.build_customer_delivery(result)
+                sheet = bundle["equipment_family_datasheet"]["equipment"][0]
+                fields = {
+                    item["field_id"]: item for item in sheet["fields"]
+                }
+
+                self.assertEqual(sheet["profile_ids"], [profile_id])
+                self.assertEqual(
+                    fields["model_designation"]["value"],
+                    designation,
+                )
+                self.assertEqual(fields[detail_field]["value"], detail_value)
+                self.assertIn(
+                    "programmatic_turbine_specification",
+                    fields,
+                )
+                self.assertEqual(
+                    fields[detail_field]["source"]["kind"],
+                    "deterministic_programmatic_turbine_specification",
+                )
+                self.assertTrue(
+                    fields[detail_field]["source"]["program_generated"]
+                )
+                self.assertFalse(fields[detail_field]["source"]["llm_used"])
+
+    def test_turbine_program_spec_tampering_is_rejected(self) -> None:
+        result = matcher.match_one(
+            {
+                "equipment_tag": "HPRT-DELIVERY-TAMPER",
+                "equipment_type": "液力透平",
+                "flow_m3_h": 50.0,
+                "density_kg_m3": 1000.0,
+                "inlet_pressure_mpa": 0.5,
+                "outlet_pressure_mpa": 0.2,
+                "pressure_basis": "absolute",
+                "efficiency_percent": 75.0,
+            },
+            matcher.load_rules(),
+            matcher.load_graph(),
+        )
+        result["programmatic_turbine_specification"]["fields"][
+            "generator_power_kw"
+        ]["value"] = 999.0
+        with self.assertRaises(delivery.CustomerDeliveryError):
+            delivery.build_customer_delivery(result)
+
+    def test_all_registered_families_export_a_program_generated_model_cell(
+        self,
+    ) -> None:
+        family_inputs = {
+            "family_fixed_tubesheet_exchanger": {
+                "equipment_type": "固定管板式换热器",
+            },
+            "family_other_heat_exchanger": {
+                "equipment_type": "板式换热器",
+            },
+            "family_tower": {"equipment_type": "填料塔"},
+            "family_reactor_vessel_separator": {
+                "equipment_type": "反应器",
+            },
+            "family_storage_vessel": {"equipment_type": "储罐"},
+            "family_pump": {"equipment_type": "离心泵"},
+            "family_compressor": {"aspen_block_type": "COMPR"},
+            "family_agitator": {"equipment_type": "搅拌器"},
+            "family_static_mixer": {"equipment_type": "静态混合器"},
+            "family_membrane": {"equipment_type": "膜组件"},
+            "family_package_equipment": {"equipment_type": "成套设备"},
+            "family_liquid_power_recovery_turbine": {
+                "equipment_type": "液力透平",
+            },
+            "family_gas_expander_turbine": {
+                "equipment_type": "气体膨胀机",
+            },
+            "family_process_piping": {"equipment_type": "工艺管道"},
+            "family_pipe_fitting": {"equipment_type": "弯头"},
+            "family_flange_gasket": {"equipment_type": "法兰"},
+            "family_valve": {"equipment_type": "阀门"},
+        }
+        rules = matcher.load_rules()
+        graph = matcher.load_graph()
+        registered_families = {
+            family["id"]: family for family in rules["families"]
+        }
+        self.assertEqual(set(family_inputs), set(registered_families))
+
+        for family_id, family in registered_families.items():
+            with self.subTest(family_id=family_id):
+                result = matcher.match_one(
+                    {
+                        "equipment_tag": f"DELIVERY-{family_id}",
+                        "equipment_family": family["aliases"][0],
+                        **family_inputs[family_id],
+                    },
+                    rules,
+                    graph,
+                )
+                bundle = delivery.build_customer_delivery(result)
+                sheet = bundle["equipment_family_datasheet"]["equipment"][0]
+                fields = {
+                    item["field_id"]: item for item in sheet["fields"]
+                }
+                model = fields["model_designation"]
+                designation = str(model.get("value") or "")
+                source_kind = str(
+                    model.get("source", {}).get("kind") or ""
+                )
+
+                self.assertTrue(designation.strip())
+                self.assertNotIn("非标准型", designation)
+                self.assertTrue(source_kind.startswith("deterministic_"))
+                self.assertTrue(
+                    model.get("source", {}).get(
+                        "program_generated",
+                        True,
+                    )
+                )
+                self.assertFalse(
+                    model.get("source", {}).get("llm_used", False)
+                )
 
 
 if __name__ == "__main__":

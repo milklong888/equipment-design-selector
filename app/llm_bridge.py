@@ -57,7 +57,17 @@ INJECTION_POINT_POLICIES: dict[str, dict[str, Any]] = {
     },
     "textual_condition_judgment": {
         "change_fields": set(),
-        "sections": {"condition_assessments", "terminal_selection_assists", "calculation_assists"},
+        "sections": {
+            "condition_assessments", "terminal_selection_assists",
+            "engineering_choice_assists", "calculation_assists",
+        },
+    },
+    "engineering_choice": {
+        "change_fields": set(),
+        "sections": {
+            "condition_assessments", "terminal_selection_assists",
+            "engineering_choice_assists", "calculation_assists",
+        },
     },
     "ambiguity_resolution": {
         "change_fields": {"equipment_type", "process_function", "phase"},
@@ -75,16 +85,20 @@ INJECTION_POINT_POLICIES: dict[str, dict[str, Any]] = {
 
 STEP_OUTPUT_KEYS = {
     "schema", "injection_point", "context_sha256", "summary", "citations",
-    "proposed_changes", "condition_assessments", "terminal_selection_assists", "calculation_assists", "retrieval_plan",
+    "proposed_changes", "condition_assessments", "terminal_selection_assists",
+    "engineering_choice_assists", "calculation_assists", "retrieval_plan",
     "ambiguity_decision", "audit_findings", "output_composition",
 }
-STEP_OUTPUT_REQUIRED_KEYS = STEP_OUTPUT_KEYS - {"terminal_selection_assists"}
+STEP_OUTPUT_REQUIRED_KEYS = STEP_OUTPUT_KEYS - {
+    "terminal_selection_assists", "engineering_choice_assists",
+}
 
 OUTPUT_SECTION_OPERATIONS = {
     "summary": "explain_result",
     "proposed_changes": "propose_descriptive_change",
     "condition_assessments": "assess_conditions",
     "terminal_selection_assists": "select_registered_terminal_form",
+    "engineering_choice_assists": "select_registered_engineering_package",
     "calculation_assists": "supplement_calculation_input",
     "retrieval_plan": "plan_knowledge_retrieval",
     "ambiguity_decision": "resolve_ambiguity",
@@ -111,6 +125,11 @@ MODEL_INFERENCE_ASSIST_KEYS = {
 
 TERMINAL_SELECTION_ASSIST_KEYS = {
     "assist_id", "terminal_rule_id", "condition_id", "selection_context_sha256",
+    "reason", "citations",
+}
+
+ENGINEERING_CHOICE_ASSIST_KEYS = {
+    "assist_id", "axis_id", "choice_id", "selection_context_sha256",
     "reason", "citations",
 }
 
@@ -412,6 +431,7 @@ def _minimal_deterministic_context(result: dict[str, Any]) -> dict[str, Any]:
             "recommended_type": model.get("recommended_type"),
             "terminal_selection": model.get("terminal_selection"),
             "terminal_type_rule_registry": model.get("terminal_type_rule_registry", []),
+            "engineering_choice_registry": model.get("engineering_choice_registry", {}),
             "candidates": model.get("candidates", []),
             "formal_promotion_blockers": model.get("formal_promotion_blockers", []),
             "formal_model_gate": model.get("formal_model_gate"),
@@ -606,6 +626,97 @@ def _terminal_type_rule_registry(value: Any) -> list[dict[str, Any]]:
     return sorted(
         collected.values(),
         key=lambda item: (item["selection_context_sha256"], item["rule_id"]),
+    )
+
+
+def _engineering_choice_registry(value: Any) -> list[dict[str, Any]]:
+    """Flatten only frozen, case-bound material/component choices for the model."""
+
+    collected: dict[str, dict[str, Any]] = {}
+
+    def visit(node: Any) -> None:
+        if isinstance(node, list):
+            for item in node:
+                visit(item)
+            return
+        if not isinstance(node, dict):
+            return
+        recommendation = node.get("model_recommendation")
+        if isinstance(recommendation, dict):
+            registry = recommendation.get("engineering_choice_registry")
+            if isinstance(registry, dict):
+                family_id = str(registry.get("family_id") or "").strip()
+                family_background = str(registry.get("background") or "").strip()
+                context_sha256 = str(
+                    registry.get("selection_context_sha256") or ""
+                ).strip().upper()
+                choice_context_sha256 = str(
+                    registry.get("choice_context_sha256") or ""
+                ).strip().upper()
+                for axis in registry.get("material_component_axes", []):
+                    if not isinstance(axis, dict):
+                        continue
+                    axis_id = str(axis.get("axis_id") or "").strip()
+                    axis_title = str(axis.get("title") or "").strip()
+                    axis_background = str(axis.get("background") or "").strip()
+                    for choice in axis.get("choices", []):
+                        if not isinstance(choice, dict):
+                            continue
+                        choice_id = str(choice.get("choice_id") or "").strip()
+                        field_values = choice.get("field_values")
+                        if not all((
+                            family_id, context_sha256, axis_id, choice_id,
+                            isinstance(field_values, dict), field_values,
+                        )):
+                            continue
+                        record = {
+                            "family_id": family_id,
+                            "family_background": family_background,
+                            "axis_id": axis_id,
+                            "axis_title": axis_title,
+                            "axis_background": axis_background,
+                            "choice_id": choice_id,
+                            "label": str(choice.get("label") or "").strip(),
+                            "trigger_condition_text": str(
+                                choice.get("trigger_condition_text") or ""
+                            ).strip(),
+                            "selection_basis": str(
+                                choice.get("selection_basis") or ""
+                            ).strip(),
+                            "source_refs": list(choice.get("source_refs", [])),
+                            "field_values": json.loads(json.dumps(
+                                field_values,
+                                ensure_ascii=False,
+                            )),
+                            "warning": str(choice.get("warning") or "").strip(),
+                            "current_field_state": choice.get(
+                                "current_field_state", {}
+                            ),
+                            "eligible_for_ai_selection": (
+                                choice.get("eligible_for_ai_selection") is True
+                            ),
+                            "application_policy": str(
+                                choice.get("application_policy") or ""
+                            ).strip(),
+                            "selection_context_sha256": context_sha256,
+                            "choice_context_sha256": choice_context_sha256,
+                            "evidence_class_if_applied": "J",
+                            "promotion_cap": "TYPE_SCREENING",
+                        }
+                        collected[_canonical_sha256(record)] = record
+        for key in ("result", "items", "equipment", "piping", "match_result"):
+            child = node.get(key)
+            if isinstance(child, (dict, list)):
+                visit(child)
+
+    visit(value)
+    return sorted(
+        collected.values(),
+        key=lambda item: (
+            item["selection_context_sha256"],
+            item["axis_id"],
+            item["choice_id"],
+        ),
     )
 
 
@@ -915,6 +1026,9 @@ def build_context_pack(
         "candidate_registry": _candidate_registry(deterministic_result),
         "condition_registry": _condition_registry(deterministic_result),
         "terminal_type_rule_registry": _terminal_type_rule_registry(deterministic_result),
+        "engineering_choice_registry": _engineering_choice_registry(
+            deterministic_result
+        ),
         "calculation_recipe_catalog": calculation_recipe_catalog(),
         "missing_input_registry": _missing_input_registry(deterministic_result),
         "model_estimate_policy": {
@@ -927,6 +1041,16 @@ def build_context_pack(
             "promotion_cap": "TYPE_SCREENING",
             "formal_model_promotion_allowed": False,
             "script_conflict_policy": "deterministic_script_wins",
+        },
+        "engineering_choice_policy": {
+            "enabled": True,
+            "registered_choice_ids_only": True,
+            "fill_missing_fields_only": True,
+            "existing_value_overwrite_allowed": False,
+            "program_replay_required": True,
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "formal_model_promotion_allowed": False,
         },
         "sources": sources,
     }
@@ -1825,12 +1949,125 @@ def validate_terminal_selection_assists(
     return validations
 
 
+def validate_engineering_choice_assists(
+    assists: list[dict[str, Any]],
+    context_pack: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Validate registered material/component packages without free-text authority."""
+
+    registry = {
+        (
+            str(item.get("choice_id") or "").strip(),
+            str(item.get("selection_context_sha256") or "").strip().upper(),
+        ): item
+        for item in context_pack.get("engineering_choice_registry", [])
+        if isinstance(item, dict)
+    }
+    validations: list[dict[str, Any]] = []
+    for assist in assists:
+        record = {
+            "assist_id": assist["assist_id"],
+            "axis_id": assist["axis_id"],
+            "choice_id": assist["choice_id"],
+            "selection_context_sha256": assist["selection_context_sha256"],
+            "resolved_field_values": {},
+            "auto_apply": False,
+            "status": "REJECTED_NONBLOCKING_UNKNOWN_REGISTERED_CHOICE",
+            "detail": "choice is not present in the frozen case-bound registry",
+        }
+        choice = registry.get((
+            assist["choice_id"],
+            assist["selection_context_sha256"],
+        ))
+        if choice is None:
+            validations.append(record)
+            continue
+        record.update({
+            "family_id": choice.get("family_id"),
+            "label": choice.get("label"),
+            "trigger_condition_text": choice.get("trigger_condition_text"),
+            "selection_basis": choice.get("selection_basis"),
+            "source_refs": choice.get("source_refs", []),
+            "warning": choice.get("warning"),
+            "current_field_state": choice.get("current_field_state", {}),
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "citations": assist.get("citations", []),
+            "reason": assist.get("reason"),
+        })
+        if assist["axis_id"] != choice.get("axis_id"):
+            record.update({
+                "status": "REJECTED_NONBLOCKING_CHOICE_AXIS_MISMATCH",
+                "detail": "axis_id does not own the selected registered choice",
+            })
+            validations.append(record)
+            continue
+        if choice.get("eligible_for_ai_selection") is not True:
+            record.update({
+                "status": "REJECTED_NONBLOCKING_CHOICE_NOT_APPLICABLE",
+                "detail": str(
+                    choice.get("application_policy")
+                    or "registered choice cannot fill this current case"
+                ),
+            })
+            validations.append(record)
+            continue
+        field_values = choice.get("field_values")
+        if not isinstance(field_values, dict) or not field_values:
+            record.update({
+                "status": "REJECTED_NONBLOCKING_CHOICE_WITHOUT_FIELDS",
+                "detail": "registered choice has no field_values",
+            })
+            validations.append(record)
+            continue
+        record.update({
+            "status": "VERIFIED_REGISTERED_ENGINEERING_CHOICE",
+            "auto_apply": True,
+            "resolved_field_values": json.loads(json.dumps(
+                field_values,
+                ensure_ascii=False,
+            )),
+            "detail": choice.get("selection_basis"),
+        })
+        validations.append(record)
+
+    by_axis_context: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for record in validations:
+        if record["status"] != "VERIFIED_REGISTERED_ENGINEERING_CHOICE":
+            continue
+        key = (record["selection_context_sha256"], record["axis_id"])
+        by_axis_context.setdefault(key, []).append(record)
+    for (context_sha256, axis_id), records in by_axis_context.items():
+        selected_choices = {record["choice_id"] for record in records}
+        if len(selected_choices) <= 1:
+            for duplicate in records[1:]:
+                duplicate.update({
+                    "status": "DUPLICATE_VERIFIED_REGISTERED_ENGINEERING_CHOICE",
+                    "auto_apply": False,
+                    "detail": (
+                        f"duplicate registered choice for {context_sha256}:{axis_id}"
+                    ),
+                })
+            continue
+        for record in records:
+            record.update({
+                "status": "REJECTED_NONBLOCKING_ENGINEERING_CHOICE_CONFLICT",
+                "auto_apply": False,
+                "detail": (
+                    f"multiple registered choices selected for "
+                    f"{context_sha256}:{axis_id}"
+                ),
+            })
+    return validations
+
+
 def _nonempty_output_sections(validated: dict[str, Any]) -> set[str]:
     sections: set[str] = set()
     if str(validated.get("summary", "")).strip():
         sections.add("summary")
     for section in (
-        "proposed_changes", "condition_assessments", "terminal_selection_assists", "calculation_assists",
+        "proposed_changes", "condition_assessments", "terminal_selection_assists",
+        "engineering_choice_assists", "calculation_assists",
         "retrieval_plan", "audit_findings",
     ):
         if validated.get(section):
@@ -2079,6 +2316,7 @@ def validate_step_output(output: dict[str, Any], context_pack: dict[str, Any]) -
         "proposed_changes": [],
         "condition_assessments": [],
         "terminal_selection_assists": [],
+        "engineering_choice_assists": [],
         "calculation_assists": [],
         "retrieval_plan": [],
         "ambiguity_decision": None,
@@ -2186,6 +2424,51 @@ def validate_step_output(output: dict[str, Any], context_pack: dict[str, Any]) -
             "selection_context_sha256": selection_context_sha256,
             "reason": _string(item.get("reason"), f"{label}.reason"),
             "citations": _citations(item.get("citations"), known_ids, f"{label}.citations"),
+        })
+
+    engineering_assists = output.get("engineering_choice_assists", [])
+    if not isinstance(engineering_assists, list):
+        raise ValueError("engineering_choice_assists must be an array.")
+    if (
+        engineering_assists
+        and "engineering_choice_assists" not in policy["sections"]
+    ):
+        raise ValueError(
+            f"{injection_point} does not allow engineering_choice_assists."
+        )
+    if len(engineering_assists) > 32:
+        raise ValueError("engineering_choice_assists 最多允许 32 条。")
+    seen_engineering_assist_ids: set[str] = set()
+    for index, item in enumerate(engineering_assists):
+        label = f"engineering_choice_assists[{index}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{label} must be an object.")
+        _require_exact_keys(item, ENGINEERING_CHOICE_ASSIST_KEYS, label)
+        assist_id = _string(item.get("assist_id"), f"{label}.assist_id")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", assist_id):
+            raise ValueError(f"{label}.assist_id has an invalid format.")
+        if assist_id in seen_engineering_assist_ids:
+            raise ValueError(f"duplicate engineering choice assist_id: {assist_id}")
+        seen_engineering_assist_ids.add(assist_id)
+        selection_context_sha256 = _string(
+            item.get("selection_context_sha256"),
+            f"{label}.selection_context_sha256",
+        ).upper()
+        if not re.fullmatch(r"[A-F0-9]{64}", selection_context_sha256):
+            raise ValueError(
+                f"{label}.selection_context_sha256 has an invalid format."
+            )
+        normalized["engineering_choice_assists"].append({
+            "assist_id": assist_id,
+            "axis_id": _string(item.get("axis_id"), f"{label}.axis_id"),
+            "choice_id": _string(item.get("choice_id"), f"{label}.choice_id"),
+            "selection_context_sha256": selection_context_sha256,
+            "reason": _string(item.get("reason"), f"{label}.reason"),
+            "citations": _citations(
+                item.get("citations"),
+                known_ids,
+                f"{label}.citations",
+            ),
         })
 
     calculation_assists = output.get("calculation_assists")
@@ -2465,6 +2748,7 @@ def _step_output_contract(injection_point: str, context_sha256: str) -> dict[str
         "proposed_changes",
         "condition_assessments",
         "terminal_selection_assists",
+        "engineering_choice_assists",
         "calculation_assists",
         "retrieval_plan",
         "ambiguity_decision",
@@ -2491,6 +2775,7 @@ def _step_output_contract(injection_point: str, context_sha256: str) -> dict[str
             "proposed_changes": [],
             "condition_assessments": [],
             "terminal_selection_assists": [],
+            "engineering_choice_assists": [],
             "calculation_assists": [],
             "retrieval_plan": [],
             "ambiguity_decision": None,
@@ -2504,6 +2789,7 @@ def _step_output_contract(injection_point: str, context_sha256: str) -> dict[str
             "proposed_changes": [],
             "condition_assessments": [],
             "terminal_selection_assists": [],
+            "engineering_choice_assists": [],
             "calculation_assists": [],
             "retrieval_plan": [],
             "ambiguity_decision": None,
@@ -2522,6 +2808,13 @@ def _step_output_contract(injection_point: str, context_sha256: str) -> dict[str
             "Only when the deterministic terminal selection is DEFAULTED may the model cite a frozen registered "
             "condition, reference its exact terminal rule and selection-context hash, and request a program replay. "
             "Free equipment-type text is forbidden; unsupported or invented rules retain the deterministic default."
+        ),
+        "engineering_choice_policy": (
+            "The model may select only an exact eligible choice_id from engineering_choice_registry, together with "
+            "its owning axis_id and case selection-context hash. The program fills only missing fields, verifies every "
+            "field/value pair against the frozen registry, records evidence class J and replays the deterministic "
+            "selector. Existing Aspen/user/program values are never overwritten; free material or component text is "
+            "forbidden."
         ),
         "candidate_policy": (
             "candidate_model text is forbidden; ambiguity_resolution may only reference an existing "
@@ -2628,6 +2921,10 @@ def hybrid_continue(prepared: dict[str, Any], step_output: dict[str, Any]) -> di
         validated["condition_assessments"],
         context_pack,
     )
+    engineering_choice_validation = validate_engineering_choice_assists(
+        validated["engineering_choice_assists"],
+        context_pack,
+    )
     verified_calculation_inputs = {
         item["target_field"]: item["resolved_value"]
         for item in calculation_validation
@@ -2668,6 +2965,39 @@ def hybrid_continue(prepared: dict[str, Any], step_output: dict[str, Any]) -> di
         if len(verified_terminal_selection_overrides) == 1
         else None
     )
+    verified_engineering_choice_inputs: dict[str, Any] = {}
+    verified_engineering_choice_lineage: dict[str, dict[str, Any]] = {}
+    for item in engineering_choice_validation:
+        if (
+            item.get("status") != "VERIFIED_REGISTERED_ENGINEERING_CHOICE"
+            or item.get("auto_apply") is not True
+        ):
+            continue
+        for field, value in item.get("resolved_field_values", {}).items():
+            if (
+                field in verified_engineering_choice_inputs
+                and verified_engineering_choice_inputs[field] != value
+            ):
+                raise ValueError(
+                    f"registered engineering choices conflict on field {field}"
+                )
+            verified_engineering_choice_inputs[field] = value
+            verified_engineering_choice_lineage[field] = {
+                "assist_id": item.get("assist_id"),
+                "axis_id": item.get("axis_id"),
+                "choice_id": item.get("choice_id"),
+                "selection_context_sha256": item.get(
+                    "selection_context_sha256"
+                ),
+                "resolved_value": value,
+                "reason": item.get("reason"),
+                "selection_basis": item.get("selection_basis"),
+                "source_refs": item.get("source_refs", []),
+                "citations": item.get("citations", []),
+                "warning": item.get("warning"),
+                "evidence_class": "J",
+                "promotion_cap": "TYPE_SCREENING",
+            }
     legacy_proposal = {
         "summary": validated["summary"],
         "recommended_action": "review",
@@ -2727,6 +3057,19 @@ def hybrid_continue(prepared: dict[str, Any], step_output: dict[str, Any]) -> di
                 if item["status"] != "VERIFIED_REGISTERED_CONDITION_SELECTION"
             ],
         })
+    if engineering_choice_validation:
+        next_actions.append({
+            "action": "apply_verified_registered_engineering_choices_and_replay",
+            "requires_explicit_approval": False,
+            "requires_deterministic_replay": bool(
+                verified_engineering_choice_inputs
+            ),
+            "verified_inputs": verified_engineering_choice_inputs,
+            "nonblocking_items": [
+                item for item in engineering_choice_validation
+                if item["status"] != "VERIFIED_REGISTERED_ENGINEERING_CHOICE"
+            ],
+        })
     if validated.get("ambiguity_decision"):
         next_actions.append({
             "action": "replay_and_revalidate_candidate_reference",
@@ -2746,6 +3089,7 @@ def hybrid_continue(prepared: dict[str, Any], step_output: dict[str, Any]) -> di
         or verified_calculation_inputs
         or verified_model_estimate_inputs
         or verified_terminal_selection_overrides
+        or verified_engineering_choice_inputs
     )
     timeline = interleaved_timeline(
         context_pack,
@@ -2770,6 +3114,9 @@ def hybrid_continue(prepared: dict[str, Any], step_output: dict[str, Any]) -> di
         "terminal_selection_assist_validation": terminal_selection_validation,
         "verified_terminal_selection_overrides": verified_terminal_selection_overrides,
         "verified_terminal_selection_override_id": verified_terminal_selection_override_id,
+        "engineering_choice_assist_validation": engineering_choice_validation,
+        "verified_engineering_choice_inputs": verified_engineering_choice_inputs,
+        "verified_engineering_choice_lineage": verified_engineering_choice_lineage,
         "output_composition": validated["output_composition"],
         "execution_timeline": timeline,
         "proposal": legacy_proposal,
@@ -2789,6 +3136,9 @@ def hybrid_continue(prepared: dict[str, Any], step_output: dict[str, Any]) -> di
             "hard_parameter_override_allowed": False,
             "verified_missing_input_auto_apply_allowed": bool(verified_calculation_inputs),
             "registered_terminal_selection_auto_apply_allowed": bool(verified_terminal_selection_overrides),
+            "registered_engineering_choice_auto_apply_allowed": bool(
+                verified_engineering_choice_inputs
+            ),
             "model_inference_auto_apply_allowed": bool(verified_model_estimate_inputs),
             "model_inference_auto_apply_scope": "missing_preliminary_fields_only",
             "model_inference_evidence_class": "J",
@@ -2865,6 +3215,12 @@ def _request_step_output(config: dict[str, Any], prepared: dict[str, Any]) -> tu
         "from terminal_type_rule_registry, marking its registered condition supported, and returning the bound rule, "
         "condition and selection-context hash in terminal_selection_assists. If no registered condition is supported, "
         "retain the deterministic default. Never invent equipment-type text. "
+        "For materials and components, inspect every eligible entry in engineering_choice_registry. Use its family and "
+        "axis background, trigger_condition_text, selection_basis, source_refs, current field state and warning. Select "
+        "a package only when the immutable case facts support its trigger; return the exact choice_id, owning axis_id and "
+        "selection-context hash in engineering_choice_assists. Never write free material/component names and never select "
+        "an ineligible choice. The program verifies every registered field/value pair, fills missing fields only, records "
+        "J-class provenance and reruns the deterministic selector. "
         "Do not invent candidate_model text. A candidate may only be referenced from candidate_registry with its exact "
         "candidate_id, designation, selection_feature_vector_sha256 and selection_context_sha256. Cite context_id values. "
         "The active_output_policy is mandatory. Only its allowed_sections may contain non-empty values. Every entry in "

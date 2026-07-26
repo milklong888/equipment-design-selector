@@ -35,6 +35,9 @@ else:
     WORKSPACE_ROOT = SCRIPT_PATH.parents[2]
 RULES_PATH = PACKAGE_ROOT / "knowledge_graph" / "equipment_match_rules.json"
 MODEL_RULES_PATH = PACKAGE_ROOT / "knowledge_graph" / "equipment_model_recommendation_rules.json"
+AI_ENGINEERING_CHOICE_REGISTRY_PATH = (
+    PACKAGE_ROOT / "knowledge_graph" / "ai_engineering_choice_registry.json"
+)
 PARAMETER_TEMPLATES_PATH = PACKAGE_ROOT / "knowledge_graph" / "equipment_parameter_chain_templates.json"
 CUSTOMER_OUTPUT_PROFILES_PATH = PACKAGE_ROOT / "knowledge_graph" / "equipment_customer_output_profiles.json"
 PUMP_STANDARD_POINTS_PATH = PACKAGE_ROOT / "data" / "pump_gbt5662_2013_design_points.csv"
@@ -64,7 +67,12 @@ SOURCE_LAYER_DOCUMENTS = (
     / "source_layer"
     / "documents"
 )
-ENGINE_VERSION = "2.4.0"
+ENGINE_VERSION = "2.4.2"
+EXCHANGER_DEFAULT_PARAMETER_POLICY_ID = "HEX-DEFAULT-PARAMETERS-2026-01"
+TOWER_DEFAULT_PARAMETER_POLICY_ID = "TOWER-DEFAULT-PARAMETERS-2026-01"
+VESSEL_SEPARATOR_DEFAULT_PARAMETER_POLICY_ID = (
+    "VESSEL-SEPARATOR-DEFAULT-PARAMETERS-2026-01"
+)
 PASS_WORDS = {"pass", "passed", "通过", "合格", "true", "1", "yes"}
 APPROVED_WORDS = {"approved", "通过", "批准", "accepted", "final"}
 PRESSURE_BASIS_WORDS = {
@@ -827,6 +835,7 @@ NON_PROFILE_FIELDS = {
     "candidate_model", "vendor_model", "verification_result", "approval_status",
     "evidence_manifest_path", "evidence_manifest_sha256",
     "audit_approval_path", "audit_approval_sha256",
+    "pump_material_route_override_id",
 }
 
 FIELD_UNITS: dict[str, str] = {
@@ -851,7 +860,20 @@ FIELD_UNITS: dict[str, str] = {
     "tube_outer_diameter_mm": "mm",
     "tube_length_mm": "mm",
     "tube_or_plate_count": "count",
+    "tube_pass_count": "count",
     "shell_pass_count": "count",
+    "hot_side_allowable_pressure_drop_kpa": "kPa",
+    "cold_side_allowable_pressure_drop_kpa": "kPa",
+    "hot_side_target_velocity_m_s": "m/s",
+    "cold_side_target_velocity_m_s": "m/s",
+    "hot_side_fouling_resistance_m2k_w": "m2.K/W",
+    "cold_side_fouling_resistance_m2k_w": "m2.K/W",
+    "tube_pitch_ratio": "dimensionless",
+    "baffle_cut_percent": "%",
+    "baffle_spacing_ratio": "dimensionless",
+    "plate_thickness_mm": "mm",
+    "plate_gap_mm": "mm",
+    "plate_effective_area_m2": "m2",
     "lmtd_correction_factor": "dimensionless",
     "diameter_mm": "mm",
     "height_mm": "mm",
@@ -866,6 +888,12 @@ FIELD_UNITS: dict[str, str] = {
     "pressure_drop_power_component_kw": "kW",
     "pressure_component_shaft_power_screening_kw": "kW",
     "pressure_drop_head_component_m": "m",
+    "shutoff_head_m": "m",
+    "shutoff_head_factor": "dimensionless",
+    "dynamic_viscosity_mpa_s": "mPa*s",
+    "solid_fraction": "dimensionless",
+    "chloride_ppm": "mg/L",
+    "ph_value": "dimensionless",
     "cavitation_margin_m": "m",
     "required_inner_diameter_mm": "mm",
     "actual_velocity_m_s": "m/s",
@@ -886,6 +914,51 @@ FIELD_UNITS: dict[str, str] = {
     "tower_downcomer_residence_time_s": "s",
     "bottom_liquid_height_m": "m",
     "tower_internal_height_m": "m",
+    "packing_specific_area_m2_m3": "m2/m3",
+    "packing_void_fraction": "dimensionless",
+    "packing_corrugation_angle_deg": "deg",
+    "packing_design_flood_fraction": "dimensionless",
+    "packing_hetp_m": "m",
+    "packing_pressure_drop_kpa_m": "kPa/m",
+    "packing_bed_section_max_height_m": "m",
+    "packing_bed_height_m": "m",
+    "packing_section_count": "count",
+    "liquid_redistributor_count": "count",
+    "packing_total_pressure_drop_kpa": "kPa",
+    "corrosion_allowance_mm": "mm",
+    "gas_flow_m3_h": "m3/h",
+    "liquid_flow_m3_h": "m3/h",
+    "gas_density_kg_m3": "kg/m3",
+    "liquid_density_kg_m3": "kg/m3",
+    "design_droplet_size_um": "um",
+    "souders_brown_k_m_s": "m/s",
+    "liquid_retention_time_min": "min",
+    "normal_liquid_level_percent": "%",
+    "demister_pressure_drop_kpa": "kPa",
+    "inlet_nozzle_target_velocity_m_s": "m/s",
+    "gas_outlet_nozzle_target_velocity_m_s": "m/s",
+    "liquid_outlet_nozzle_target_velocity_m_s": "m/s",
+    "inlet_nozzle_dn": "mm",
+    "gas_outlet_nozzle_dn": "mm",
+    "liquid_outlet_nozzle_dn": "mm",
+    "height_or_length_mm": "mm",
+    "quantity_count": "count",
+    "catalyst_bed_volume_m3": "m3",
+    "reaction_tube_count": "count",
+    "baffle_count": "count",
+    "impeller_diameter_ratio": "dimensionless",
+    "agitator_power_density_kw_m3": "kW/m3",
+    "motor_power_kw": "kW",
+    "active_tube_inner_diameter_mm": "mm",
+    "active_tube_length_screening_mm": "mm",
+    "one_tube_geometric_screening_volume_m3": "m3",
+    "required_total_reactor_volume_m3": "m3",
+    "selected_tube_count": "count",
+    "reactor_shell_inner_diameter_mm": "mm",
+    "nominal_process_tube_wall_thickness_mm": "mm",
+    "nominal_shell_wall_thickness_mm": "mm",
+    "preliminary_nominal_shell_thickness_mm": "mm",
+    "preliminary_nominal_head_thickness_mm": "mm",
     "cylinder_calculated_thickness_mm": "mm",
     "head_calculated_thickness_mm": "mm",
     "compression_pressure_ratio": "dimensionless",
@@ -894,11 +967,61 @@ FIELD_UNITS: dict[str, str] = {
     "driver_efficiency_percent": "%",
     "auxiliary_power_fraction": "dimensionless",
     "total_power_kw": "kW",
+    "generator_efficiency_percent": "%",
+    "electrical_power_kw": "kW",
+    "generator_power_kw": "kW",
+    "expander_isentropic_specific_work_kj_kg": "kJ/kg",
+    "expander_actual_specific_work_kj_kg": "kJ/kg",
+    "mass_flow_kg_s": "kg/s",
+    "runaway_speed_rpm": "r/min",
+    "intercooler_count": "count",
+    "per_stage_pressure_ratio": "dimensionless",
+    "impeller_diameter_mm": "mm",
+    "shaft_diameter_mm": "mm",
+    "gearbox_ratio": "dimensionless",
+    "torque_nm": "N*m",
+    "length_mm": "mm",
+    "element_length_to_diameter_ratio": "dimensionless",
+    "local_resistance_coefficient_per_element": "dimensionless",
+    "loading_coefficient": "dimensionless",
     "membrane_area_m2": "m2",
+    "membrane_area_per_element_m2": "m2",
+    "element_outer_diameter_mm": "mm",
+    "element_length_mm": "mm",
+    "elements_per_pressure_vessel": "count",
+    "pressure_vessel_count": "count",
+    "permeate_flow_m3_h": "m3/h",
+    "feed_flow_m3_h": "m3/h",
+    "concentrate_flow_m3_h": "m3/h",
+    "calculated_filter_area_m2": "m2",
+    "selected_filter_area_m2": "m2",
+    "plate_size_mm": "mm",
+    "filter_area_per_chamber_m2": "m2",
+    "chamber_count": "count",
+    "filtration_pressure_mpa": "MPa",
+    "hydraulic_closing_pressure_mpa": "MPa",
+    "evaporation_loading_kg_m2_h": "kg/(m2*h)",
+    "belt_width_m": "m",
+    "belt_length_m": "m",
+    "belt_area_m2": "m2",
+    "drying_zone_count": "count",
+    "residence_time_h": "h",
+    "fan_power_kw": "kW",
+    "belt_drive_power_kw": "kW",
+    "total_installed_power_kw": "kW",
+    "tower_count": "count",
+    "adsorption_time_h": "h",
+    "vessel_diameter_mm": "mm",
+    "bed_volume_m3_per_tower": "m3",
+    "bed_height_mm": "mm",
+    "adsorbent_bulk_density_kg_m3": "kg/m3",
+    "adsorbent_mass_kg_per_tower": "kg",
     "cycle_time_h": "h",
     "slurry_flow_m3_h": "m3/h",
     "working_volume_m3": "m3",
     "crystal_yield_kg_h": "kg/h",
+    "crystallizer_height_to_diameter_ratio": "dimensionless",
+    "vessel_geometry_ratio": "dimensionless",
     "solids_feed_kg_h": "kg/h",
     "filtrate_flow_kg_h": "kg/h",
     "cake_moisture_percent": "%",
@@ -918,21 +1041,38 @@ FIELD_UNITS: dict[str, str] = {
 
 FIELD_ALIASES: dict[str, list[str]] = {
     "equipment_tag": ["equipment_tag", "tag", "设备位号", "位号", "设备编号"],
+    "equipment_name": ["equipment_name", "设备名称", "名称"],
     "equipment_family": ["equipment_family", "family", "设备族", "设备类别id"],
     "equipment_type": ["equipment_type", "type", "设备类型", "设备类别", "型式", "结构型式"],
     "terminal_type_rule_override_id": [
         "terminal_type_rule_override_id", "terminal_rule_id", "终选型式规则id", "条件选型规则id"
     ],
+    "pump_material_route_override_id": [
+        "pump_material_route_override_id", "pump_material_route_id", "泵材料密封路线id"
+    ],
     "aspen_block_type": ["aspen_block_type", "block_type", "aspen类型", "aspen块类型", "模块类型"],
     "process_function": ["process_function", "service", "duty", "工艺功能", "设备作用", "用途", "服务"],
+    "main_medium": ["main_medium", "medium_name", "medium", "主要介质", "介质名称", "介质"],
     "phase": ["phase", "相态"],
+    "corrosivity": ["corrosivity", "corrosive", "腐蚀性", "腐蚀等级"],
+    "toxicity": ["toxicity", "toxic", "毒性", "毒性等级"],
+    "flammability": ["flammability", "flammable", "可燃性", "易燃性"],
     "pressure_basis": ["pressure_basis", "压力基准", "压力basis", "absolute_or_gauge"],
     "design_pressure_basis": ["design_pressure_basis", "设计压力基准", "design_pressure_absolute_or_gauge"],
     "material": ["material", "材质", "材料"],
     "flow_m3_h": ["flow_m3_h", "flow_m3_s", "flow_m3_min", "flow_l_s", "volumetric_flow_m3_h", "q_m3_h", "q_m3_s", "体积流量", "流量m3h", "流量"],
     "mass_flow_kg_h": ["mass_flow_kg_h", "mass_flow_kg_s", "mass_flow_t_h", "质量流量", "质量流量kgh"],
     "head_m": ["head_m", "扬程", "扬程m"],
+    "shutoff_head_m": ["shutoff_head_m", "关死扬程", "零流量扬程", "截止扬程"],
+    "shutoff_head_factor": ["shutoff_head_factor", "关死扬程系数", "零流量扬程系数"],
     "density_kg_m3": ["density_kg_m3", "rho_kg_m3", "密度", "密度kgm3"],
+    "dynamic_viscosity_mpa_s": [
+        "dynamic_viscosity_mpa_s", "viscosity_mpa_s", "液体动力黏度",
+        "动力黏度", "黏度mpas", "粘度mpas",
+    ],
+    "solid_fraction": ["solid_fraction", "固含率", "固相分率"],
+    "chloride_ppm": ["chloride_ppm", "氯离子浓度", "氯离子ppm"],
+    "ph_value": ["ph_value", "ph", "pH值"],
     "efficiency_percent": ["efficiency_percent", "efficiency_fraction", "efficiency", "效率", "效率percent"],
     "inlet_pressure_mpa": ["inlet_pressure_mpa", "inlet_pressure_bar", "inlet_pressure_kpa", "inlet_pressure_pa", "pin_mpa", "pin_bar", "进口压力", "入口压力"],
     "outlet_pressure_mpa": ["outlet_pressure_mpa", "outlet_pressure_bar", "outlet_pressure_kpa", "outlet_pressure_pa", "pout_mpa", "pout_bar", "出口压力"],
@@ -954,9 +1094,47 @@ FIELD_ALIASES: dict[str, list[str]] = {
     "tube_outer_diameter_mm": ["tube_outer_diameter_mm", "换热管外径"],
     "tube_length_mm": ["tube_length_mm", "换热管长度", "管长"],
     "tube_or_plate_count": ["tube_or_plate_count", "换热管数量", "换热管根数", "板片数量"],
+    "tube_pass_count": ["tube_pass_count", "管程数"],
     "shell_pass_count": ["shell_pass_count", "壳程数"],
+    "hot_side_allowable_pressure_drop_kpa": [
+        "hot_side_allowable_pressure_drop_kpa", "热侧允许压降", "热流体允许压降",
+    ],
+    "cold_side_allowable_pressure_drop_kpa": [
+        "cold_side_allowable_pressure_drop_kpa", "冷侧允许压降", "冷流体允许压降",
+    ],
+    "hot_side_target_velocity_m_s": [
+        "hot_side_target_velocity_m_s", "热侧目标流速", "热侧设计流速",
+    ],
+    "cold_side_target_velocity_m_s": [
+        "cold_side_target_velocity_m_s", "冷侧目标流速", "冷侧设计流速",
+    ],
+    "hot_side_fouling_resistance_m2k_w": [
+        "hot_side_fouling_resistance_m2k_w", "热侧污垢热阻", "热流体污垢热阻",
+    ],
+    "cold_side_fouling_resistance_m2k_w": [
+        "cold_side_fouling_resistance_m2k_w", "冷侧污垢热阻", "冷流体污垢热阻",
+    ],
+    "tube_pitch_ratio": ["tube_pitch_ratio", "管间距管外径比", "管间距比"],
+    "baffle_cut_percent": ["baffle_cut_percent", "折流板切口率", "折流板切口百分数"],
+    "baffle_spacing_ratio": ["baffle_spacing_ratio", "折流板间距壳径比", "折流板间距比"],
+    "tube_layout": ["tube_layout", "布管型式", "换热管排列型式"],
     "tube_material_grade": ["tube_material_grade", "tube_side_material", "管程材料", "换热管材料"],
     "shell_material_grade": ["shell_material_grade", "shell_side_material", "壳程材料", "壳体材料"],
+    "heat_transfer_plate_material_grade": [
+        "heat_transfer_plate_material_grade", "换热板片材料", "传热板材料",
+    ],
+    "plate_gasket_material_grade": [
+        "plate_gasket_material_grade", "板式换热器垫片材料", "板片密封垫材料",
+    ],
+    "plate_pattern": ["plate_pattern", "板片波纹型式", "板片型式"],
+    "plate_thickness_mm": ["plate_thickness_mm", "换热板片厚度", "板片厚度"],
+    "plate_gap_mm": ["plate_gap_mm", "板间通道间隙", "板片间隙"],
+    "plate_effective_area_m2": [
+        "plate_effective_area_m2", "单片有效换热面积", "板片有效面积",
+    ],
+    "plate_pass_arrangement": [
+        "plate_pass_arrangement", "板式换热器流程组合", "板片流程组合",
+    ],
     "overall_u_w_m2k": ["overall_u_w_m2k", "总传热系数", "传热系数"],
     "lmtd_k": ["lmtd_k", "对数平均温差", "lmtd"],
     "lmtd_correction_factor": ["lmtd_correction_factor", "lmtd修正系数", "温差修正系数", "修正系数f"],
@@ -973,6 +1151,225 @@ FIELD_ALIASES: dict[str, list[str]] = {
     "straight_shell_geometric_volume_m3": ["straight_shell_geometric_volume_m3", "直筒段几何容积"],
     "stage_count": ["stage_count", "理论级数", "塔板数", "级数"],
     "retention_time_min": ["retention_time_min", "停留时间", "持液时间"],
+    "orientation": ["orientation", "设备方向", "立式卧式", "立式/卧式"],
+    "demister_type": ["demister_type", "除沫器型式", "除沫结构", "丝网除沫器型式"],
+    "gas_flow_m3_h": ["gas_flow_m3_h", "气相流量", "气相负荷"],
+    "liquid_flow_m3_h": ["liquid_flow_m3_h", "液相流量", "液相负荷"],
+    "gas_density_kg_m3": ["gas_density_kg_m3", "气相密度", "气体密度"],
+    "liquid_density_kg_m3": ["liquid_density_kg_m3", "液相密度", "液体密度"],
+    "design_droplet_size_um": ["design_droplet_size_um", "设计液滴粒径", "分离液滴粒径"],
+    "souders_brown_k_m_s": ["souders_brown_k_m_s", "souders_brown_k", "Souders-Brown系数"],
+    "liquid_retention_time_min": ["liquid_retention_time_min", "液相停留时间", "液体停留时间"],
+    "normal_liquid_level_percent": ["normal_liquid_level_percent", "正常液位", "正常液位百分比"],
+    "demister_pressure_drop_kpa": ["demister_pressure_drop_kpa", "除沫器压降", "除沫层压降"],
+    "allowable_entrainment": ["allowable_entrainment", "允许夹带", "允许气相夹带"],
+    "inlet_nozzle_target_velocity_m_s": [
+        "inlet_nozzle_target_velocity_m_s", "入口接管目标流速", "入口接管设计流速"
+    ],
+    "gas_outlet_nozzle_target_velocity_m_s": [
+        "gas_outlet_nozzle_target_velocity_m_s", "气相出口接管目标流速", "气相出口设计流速"
+    ],
+    "liquid_outlet_nozzle_target_velocity_m_s": [
+        "liquid_outlet_nozzle_target_velocity_m_s", "液相出口接管目标流速", "液相出口设计流速"
+    ],
+    "inlet_nozzle_dn": ["inlet_nozzle_dn", "入口接管DN", "进口接管DN"],
+    "gas_outlet_nozzle_dn": ["gas_outlet_nozzle_dn", "气相出口接管DN", "气体出口接管DN"],
+    "liquid_outlet_nozzle_dn": ["liquid_outlet_nozzle_dn", "液相出口接管DN", "液体出口接管DN"],
+    "height_or_length_mm": ["height_or_length_mm", "高度或长度", "高度/长度"],
+    "quantity_count": ["quantity_count", "设备数量", "数量", "台数"],
+    "technical_specification": [
+        "technical_specification", "技术规格", "规格描述"
+    ],
+    "catalyst_bed_volume_m3": [
+        "catalyst_bed_volume_m3", "催化剂床层容积", "床层容积"
+    ],
+    "reaction_tube_material_grade": [
+        "reaction_tube_material_grade", "反应管材料牌号", "反应管材质"
+    ],
+    "jacket_material_grade": [
+        "jacket_material_grade", "夹套材料牌号", "夹套材质"
+    ],
+    "jacket_type": ["jacket_type", "夹套型式", "夹套类型"],
+    "reaction_tube_count": [
+        "reaction_tube_count", "反应管数量", "列管数", "反应管数"
+    ],
+    "agitator_type": ["agitator_type", "搅拌器型式", "搅拌型式"],
+    "agitator_material_grade": [
+        "agitator_material_grade", "搅拌器材料牌号", "搅拌器材质"
+    ],
+    "baffle_count": ["baffle_count", "挡板数量", "挡板数"],
+    "impeller_diameter_ratio": [
+        "impeller_diameter_ratio", "叶轮直径比", "搅拌桨径釜径比"
+    ],
+    "agitator_power_density_kw_m3": [
+        "agitator_power_density_kw_m3", "搅拌功率密度", "单位容积搅拌功率"
+    ],
+    "motor_power_kw": ["motor_power_kw", "电机功率", "驱动电机功率"],
+    "active_tube_inner_diameter_mm": [
+        "active_tube_inner_diameter_mm", "单根有效反应管内径"
+    ],
+    "active_tube_length_screening_mm": [
+        "active_tube_length_screening_mm", "单根有效反应管长度"
+    ],
+    "required_total_reactor_volume_m3": [
+        "required_total_reactor_volume_m3", "所需反应器总体积"
+    ],
+    "selected_tube_count": ["selected_tube_count", "选定反应管数"],
+    "reactor_shell_inner_diameter_mm": [
+        "reactor_shell_inner_diameter_mm", "反应器壳体内径"
+    ],
+    "nominal_process_tube_wall_thickness_mm": [
+        "nominal_process_tube_wall_thickness_mm", "反应管名义壁厚"
+    ],
+    "nominal_shell_wall_thickness_mm": [
+        "nominal_shell_wall_thickness_mm", "反应器壳体名义壁厚"
+    ],
+    "intercooler_count": ["intercooler_count", "级间冷却器数量"],
+    "per_stage_pressure_ratio": ["per_stage_pressure_ratio", "单级压比"],
+    "cooling_arrangement": ["cooling_arrangement", "冷却方式", "冷却配置"],
+    "driver_type": ["driver_type", "驱动型式", "驱动方式"],
+    "casing_material_grade": ["casing_material_grade", "机壳材料牌号", "壳体材质"],
+    "impeller_material_grade": ["impeller_material_grade", "叶轮材料牌号", "叶轮材质"],
+    "shaft_material_grade": ["shaft_material_grade", "轴材料牌号", "轴材质"],
+    "seal_type": ["seal_type", "轴封型式", "密封型式"],
+    "impeller_diameter_mm": ["impeller_diameter_mm", "叶轮直径", "搅拌桨直径"],
+    "shaft_diameter_mm": ["shaft_diameter_mm", "轴径", "搅拌轴直径"],
+    "gearbox_ratio": ["gearbox_ratio", "减速比", "传动比"],
+    "element_type": ["element_type", "元件型式", "混合元件型式"],
+    "length_mm": ["length_mm", "设备长度", "混合器长度"],
+    "element_length_to_diameter_ratio": [
+        "element_length_to_diameter_ratio", "单元长径比"
+    ],
+    "local_resistance_coefficient_per_element": [
+        "local_resistance_coefficient_per_element", "单元局部阻力系数"
+    ],
+    "loading_coefficient": ["loading_coefficient", "装载系数"],
+    "blockage_cleaning_boundary": [
+        "blockage_cleaning_boundary", "堵塞清洗边界", "清洗边界"
+    ],
+    "element_standard_designation": [
+        "element_standard_designation", "膜元件规格", "膜元件标准规格"
+    ],
+    "element_outer_diameter_mm": [
+        "element_outer_diameter_mm", "膜元件外径", "膜元件直径"
+    ],
+    "element_length_mm": ["element_length_mm", "膜元件长度"],
+    "membrane_area_per_element_m2": [
+        "membrane_area_per_element_m2", "单支膜面积", "膜元件面积"
+    ],
+    "elements_per_pressure_vessel": [
+        "elements_per_pressure_vessel", "每支压力容器膜元件数"
+    ],
+    "pressure_vessel_count": [
+        "pressure_vessel_count", "膜壳数量", "压力容器数量"
+    ],
+    "permeate_flow_m3_h": [
+        "permeate_flow_m3_h", "产水流量", "渗透液流量"
+    ],
+    "feed_flow_m3_h": ["feed_flow_m3_h", "膜装置进料流量"],
+    "concentrate_flow_m3_h": [
+        "concentrate_flow_m3_h", "浓水流量", "浓缩液流量"
+    ],
+    "membrane_material_grade": [
+        "membrane_material_grade", "膜材料", "膜材质"
+    ],
+    "pressure_vessel_material_grade": [
+        "pressure_vessel_material_grade", "膜壳材料", "压力容器材料"
+    ],
+    "center_tube_material_grade": [
+        "center_tube_material_grade", "膜中心管材料"
+    ],
+    "service_route": ["service_route", "膜分离路线", "服务路线"],
+    "calculated_filter_area_m2": [
+        "calculated_filter_area_m2", "计算过滤面积"
+    ],
+    "selected_filter_area_m2": [
+        "selected_filter_area_m2", "选定过滤面积"
+    ],
+    "plate_size_mm": ["plate_size_mm", "滤板规格", "滤板尺寸"],
+    "filter_area_per_chamber_m2": [
+        "filter_area_per_chamber_m2", "单腔过滤面积"
+    ],
+    "chamber_count": ["chamber_count", "滤室数量", "厢数"],
+    "filtration_pressure_mpa": ["filtration_pressure_mpa", "过滤压力"],
+    "plate_material_grade": ["plate_material_grade", "滤板材料"],
+    "filter_cloth_material_grade": [
+        "filter_cloth_material_grade", "滤布材料"
+    ],
+    "frame_material_grade": ["frame_material_grade", "机架材料"],
+    "hydraulic_closing_pressure_mpa": [
+        "hydraulic_closing_pressure_mpa", "液压压紧压力"
+    ],
+    "washing_arrangement": [
+        "washing_arrangement", "洗涤配置", "滤饼洗涤方式"
+    ],
+    "evaporation_loading_kg_m2_h": [
+        "evaporation_loading_kg_m2_h", "单位面积蒸发强度"
+    ],
+    "belt_width_m": ["belt_width_m", "网带宽度"],
+    "belt_length_m": ["belt_length_m", "有效干燥长度", "网带长度"],
+    "belt_area_m2": ["belt_area_m2", "有效网带面积"],
+    "drying_zone_count": ["drying_zone_count", "干燥温区数量"],
+    "residence_time_h": ["residence_time_h", "干燥停留时间"],
+    "enclosure_material_grade": [
+        "enclosure_material_grade", "干燥器外壳材料"
+    ],
+    "fan_power_kw": ["fan_power_kw", "循环风机功率"],
+    "belt_drive_power_kw": ["belt_drive_power_kw", "网带驱动功率"],
+    "total_installed_power_kw": [
+        "total_installed_power_kw", "成套装机功率"
+    ],
+    "tower_count": ["tower_count", "吸附塔数量"],
+    "adsorption_time_h": ["adsorption_time_h", "单塔吸附时间"],
+    "vessel_diameter_mm": ["vessel_diameter_mm", "吸附塔直径"],
+    "bed_volume_m3_per_tower": [
+        "bed_volume_m3_per_tower", "单塔吸附剂床层容积"
+    ],
+    "bed_height_mm": ["bed_height_mm", "吸附床层高度"],
+    "adsorbent_type": ["adsorbent_type", "吸附剂类型"],
+    "adsorbent_bulk_density_kg_m3": [
+        "adsorbent_bulk_density_kg_m3", "吸附剂堆积密度"
+    ],
+    "adsorbent_mass_kg_per_tower": [
+        "adsorbent_mass_kg_per_tower", "单塔吸附剂装填量"
+    ],
+    "regeneration_method": ["regeneration_method", "再生方式"],
+    "capacity_basis": ["capacity_basis", "处理能力基准"],
+    "generator_efficiency_percent": [
+        "generator_efficiency_percent", "发电机效率"
+    ],
+    "electrical_power_kw": ["electrical_power_kw", "发电输出功率"],
+    "generator_power_kw": ["generator_power_kw", "发电机额定功率"],
+    "expander_isentropic_specific_work_kj_kg": [
+        "expander_isentropic_specific_work_kj_kg", "膨胀机等熵比功"
+    ],
+    "expander_actual_specific_work_kj_kg": [
+        "expander_actual_specific_work_kj_kg", "膨胀机实际比功"
+    ],
+    "mass_flow_kg_s": ["mass_flow_kg_s", "质量流量kgs"],
+    "runaway_speed_rpm": ["runaway_speed_rpm", "飞逸转速"],
+    "bearing_type": ["bearing_type", "轴承型式"],
+    "coupling_type": ["coupling_type", "联轴器型式", "联轴器"],
+    "crystallizer_height_to_diameter_ratio": [
+        "crystallizer_height_to_diameter_ratio", "结晶器高径比"
+    ],
+    "draft_tube_specification": [
+        "draft_tube_specification", "导流筒规格", "结晶器导流筒规格"
+    ],
+    "external_circulation_exchanger_specification": [
+        "external_circulation_exchanger_specification",
+        "外循环换热器规格",
+        "结晶器外循环换热器规格",
+    ],
+    "wetted_surface_material_grade": [
+        "wetted_surface_material_grade", "湿接触表面材料", "接液表面材质"
+    ],
+    "vessel_geometry_ratio": [
+        "vessel_geometry_ratio", "容器几何比", "高径比", "长径比"
+    ],
+    "vessel_internals_specification": [
+        "vessel_internals_specification", "容器内件规格", "罐内件规格"
+    ],
     "fill_fraction": ["fill_fraction", "装填系数", "充装系数"],
     "tower_design_velocity_m_s": ["tower_design_velocity_m_s", "塔径初估表观速度", "塔设计气速"],
     "tower_downcomer_area_fraction": ["tower_downcomer_area_fraction", "降液管面积分率"],
@@ -989,6 +1386,34 @@ FIELD_ALIASES: dict[str, list[str]] = {
     "tower_weir_height_mm": ["tower_weir_height_mm", "出口堰高", "堰高"],
     "tower_downcomer_residence_time_s": ["tower_downcomer_residence_time_s", "降液管停留时间"],
     "tower_internal_height_m": ["tower_internal_height_m", "塔板有效高度", "填料高度"],
+    "tower_internals_type": ["tower_internals_type", "塔内件型式", "塔内件类型"],
+    "packing_or_tray_specification": [
+        "packing_or_tray_specification", "填料或塔板规格", "填料塔板规格",
+    ],
+    "packing_type": ["packing_type", "填料型式", "填料类型", "填料型号"],
+    "packing_material_grade": ["packing_material_grade", "填料材料牌号", "填料材质"],
+    "packing_specific_area_m2_m3": [
+        "packing_specific_area_m2_m3", "填料比表面积", "比表面积",
+    ],
+    "packing_void_fraction": ["packing_void_fraction", "填料空隙率", "空隙率"],
+    "packing_corrugation_angle_deg": [
+        "packing_corrugation_angle_deg", "填料波纹倾角", "波纹倾角",
+    ],
+    "packing_design_flood_fraction": [
+        "packing_design_flood_fraction", "设计泛点率", "泛点率",
+    ],
+    "packing_hetp_m": ["packing_hetp_m", "填料等板高度", "hetp"],
+    "packing_pressure_drop_kpa_m": [
+        "packing_pressure_drop_kpa_m", "填料单位床层压降", "填料压降梯度",
+    ],
+    "packing_bed_section_max_height_m": [
+        "packing_bed_section_max_height_m", "单段填料最大高度", "填料分段高度",
+    ],
+    "corrosion_allowance_mm": ["corrosion_allowance_mm", "腐蚀裕量", "腐蚀裕量mm"],
+    "internals_material_grade": [
+        "internals_material_grade", "塔内件材料牌号", "内件材料牌号", "内件材质",
+    ],
+    "skirt_material_grade": ["skirt_material_grade", "裙座材料牌号", "裙座材质"],
     "insulation_spec": ["insulation_spec", "insulation_layer", "保温层", "保温规格"],
     "protective_layer": ["protective_layer", "保护层", "外护层"],
     "target_velocity_m_s": ["target_velocity_m_s", "目标流速", "设计流速"],
@@ -1102,9 +1527,30 @@ FIELD_ALIASES: dict[str, list[str]] = {
 
 
 STRING_FIELDS = {
-    "equipment_tag", "equipment_family", "equipment_type", "terminal_type_rule_override_id", "aspen_block_type",
-    "process_function", "phase", "pressure_basis", "design_pressure_basis", "volume_basis",
-    "material", "tube_material_grade", "shell_material_grade", "insulation_spec", "protective_layer",
+    "equipment_tag", "equipment_name", "equipment_family", "equipment_type",
+    "terminal_type_rule_override_id", "pump_material_route_override_id", "aspen_block_type",
+    "process_function", "main_medium", "phase", "corrosivity", "toxicity", "flammability",
+    "pressure_basis", "design_pressure_basis", "volume_basis",
+    "material", "tube_material_grade", "shell_material_grade", "internals_material_grade",
+    "skirt_material_grade", "tower_internals_type", "packing_or_tray_specification",
+    "packing_type", "packing_material_grade", "insulation_spec", "protective_layer",
+    "orientation", "demister_type", "allowable_entrainment",
+    "technical_specification",
+    "reaction_tube_material_grade", "jacket_material_grade", "jacket_type",
+    "agitator_type", "agitator_material_grade",
+    "draft_tube_specification", "external_circulation_exchanger_specification",
+    "wetted_surface_material_grade", "vessel_internals_specification",
+    "cooling_arrangement", "driver_type", "casing_material_grade",
+    "impeller_material_grade", "shaft_material_grade", "seal_type",
+    "element_type", "blockage_cleaning_boundary",
+    "element_standard_designation", "membrane_material_grade",
+    "pressure_vessel_material_grade", "center_tube_material_grade",
+    "service_route", "plate_material_grade", "filter_cloth_material_grade",
+    "frame_material_grade", "washing_arrangement",
+    "enclosure_material_grade", "adsorbent_type", "regeneration_method",
+    "capacity_basis", "bearing_type", "coupling_type",
+    "tube_layout", "heat_transfer_plate_material_grade",
+    "plate_gasket_material_grade", "plate_pattern", "plate_pass_arrangement",
     "wall_series", "fitting_type", "head_type", "membrane_geometry_type",
     "npshr_evidence_scope", "surge_margin_evidence_scope",
     "connection_type", "pressure_class", "flange_face", "gasket_material",
@@ -1169,7 +1615,12 @@ def unit_group(field: str) -> str | None:
         return "pressure"
     if field in {"pressure_drop_kpa", "allowable_pressure_drop_kpa", "maximum_pressure_drop_kpa"}:
         return "pressure_drop"
-    if field == "flow_m3_h":
+    if field in {
+        "flow_m3_h",
+        "permeate_flow_m3_h",
+        "feed_flow_m3_h",
+        "concentrate_flow_m3_h",
+    }:
         return "volume_flow"
     if field == "mass_flow_kg_h":
         return "mass_flow"
@@ -1179,10 +1630,18 @@ def unit_group(field: str) -> str | None:
         "diameter_mm", "height_mm", "inner_diameter_mm", "straight_shell_length_mm",
         "tube_outer_diameter_mm", "tube_length_mm", "selected_outer_diameter_mm",
         "selected_wall_thickness_mm", "channel_inner_diameter_mm",
+        "element_outer_diameter_mm", "element_length_mm", "plate_size_mm",
+        "vessel_diameter_mm", "bed_height_mm",
         "cylinder_calculated_thickness_mm", "head_calculated_thickness_mm",
     }:
         return "length_mm"
-    if field in {"efficiency_percent", "recovery_percent", "surge_margin_percent", "required_surge_margin_percent"}:
+    if field in {
+        "efficiency_percent",
+        "generator_efficiency_percent",
+        "recovery_percent",
+        "surge_margin_percent",
+        "required_surge_margin_percent",
+    }:
         return "percent"
     if field in {
         "head_m", "pressure_drop_head_component_m", "npsha_m", "npshr_m",
@@ -1194,9 +1653,19 @@ def unit_group(field: str) -> str | None:
     if field in {
         "heat_duty_kw", "shaft_power_kw", "hydraulic_power_kw",
         "pressure_drop_power_component_kw", "pressure_component_shaft_power_screening_kw",
+        "fan_power_kw", "belt_drive_power_kw", "total_installed_power_kw",
+        "electrical_power_kw", "generator_power_kw",
     }:
         return "power"
-    if field in {"heat_transfer_area_m2", "membrane_area_m2"}:
+    if field in {
+        "heat_transfer_area_m2",
+        "membrane_area_m2",
+        "membrane_area_per_element_m2",
+        "calculated_filter_area_m2",
+        "selected_filter_area_m2",
+        "filter_area_per_chamber_m2",
+        "belt_area_m2",
+    }:
         return "area"
     if field == "retention_time_min":
         return "time_min"
@@ -1599,6 +2068,116 @@ def load_rules(path: Path = RULES_PATH) -> dict[str, Any]:
 
 def load_model_rules(path: Path = MODEL_RULES_PATH) -> dict[str, Any]:
     return load_json(path)
+
+
+def load_ai_engineering_choice_registry(
+    path: Path = AI_ENGINEERING_CHOICE_REGISTRY_PATH,
+) -> dict[str, Any]:
+    registry = load_json(path)
+    if not isinstance(registry, dict):
+        raise ValueError("AI engineering choice registry must be a JSON object")
+    if registry.get("schema") != "equipment-ai-engineering-choice-registry-v1":
+        raise ValueError("AI engineering choice registry schema is invalid")
+    return registry
+
+
+def ai_engineering_family_registry(
+    family_id: str,
+    registry: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    active_registry = registry or load_ai_engineering_choice_registry()
+    return next(
+        (
+            item for item in active_registry.get("families", [])
+            if isinstance(item, dict) and item.get("family_id") == family_id
+        ),
+        {},
+    )
+
+
+def _build_ai_engineering_choice_context(
+    family_id: str,
+    params: dict[str, Any],
+    selection_context_sha256: str | None,
+) -> dict[str, Any]:
+    """Bind frozen material/component choices to the current deterministic case.
+
+    Existing values are compared before the choice reaches an LLM.  A conflicting
+    package is visibly unavailable; a compatible package may fill only fields
+    that are still missing.  The returned registry is data, not an instruction
+    to mutate the deterministic result.
+    """
+
+    registry = load_ai_engineering_choice_registry()
+    family = ai_engineering_family_registry(family_id, registry)
+    axes: list[dict[str, Any]] = []
+    for raw_axis in family.get("material_component_axes", []):
+        if not isinstance(raw_axis, dict):
+            continue
+        axis = {
+            key: json.loads(json.dumps(value, ensure_ascii=False))
+            for key, value in raw_axis.items()
+            if key != "choices"
+        }
+        choices: list[dict[str, Any]] = []
+        for raw_choice in raw_axis.get("choices", []):
+            if not isinstance(raw_choice, dict):
+                continue
+            choice = json.loads(json.dumps(raw_choice, ensure_ascii=False))
+            field_values = choice.get("field_values")
+            if not isinstance(field_values, dict) or not field_values:
+                continue
+            existing_values = {
+                field: params.get(field)
+                for field in field_values
+                if present(params, field)
+            }
+            conflicts = {
+                field: {
+                    "current_value": existing_values[field],
+                    "registered_value": expected,
+                }
+                for field, expected in field_values.items()
+                if field in existing_values and existing_values[field] != expected
+            }
+            missing_fields = [
+                field for field in field_values if not present(params, field)
+            ]
+            choice["current_field_state"] = {
+                "existing_values": existing_values,
+                "missing_fields": missing_fields,
+                "conflicts": conflicts,
+            }
+            choice["eligible_for_ai_selection"] = bool(missing_fields) and not conflicts
+            choice["application_policy"] = (
+                "fill_missing_fields_only"
+                if choice["eligible_for_ai_selection"]
+                else "blocked_existing_value_conflict"
+                if conflicts
+                else "not_needed_all_registered_values_already_present"
+            )
+            choice["selection_context_sha256"] = selection_context_sha256
+            choices.append(choice)
+        axis["choices"] = choices
+        axes.append(axis)
+    context = {
+        "schema": registry["schema"],
+        "version": registry.get("version"),
+        "family_id": family_id,
+        "background": family.get("background"),
+        "source_refs": family.get("source_refs", []),
+        "policy": registry.get("policy", {}),
+        "selection_context_sha256": selection_context_sha256,
+        "material_component_axes": axes,
+        "registry_path": AI_ENGINEERING_CHOICE_REGISTRY_PATH.relative_to(
+            PACKAGE_ROOT
+        ).as_posix(),
+        "registry_sha256": hashlib.sha256(
+            AI_ENGINEERING_CHOICE_REGISTRY_PATH.read_bytes()
+        ).hexdigest().upper(),
+    }
+    context["choice_context_sha256"] = _canonical_sha256(context)
+    return context
 
 
 def _profile_family_ids(profile: dict[str, Any]) -> list[str]:
@@ -2095,6 +2674,9 @@ FALLBACK_CONSTRUCTION_FIELDS = {
     "tower_downcomer_residence_time_s", "tower_top_bottom_allowance_mm",
     "tube_outer_diameter_mm", "tube_length_mm", "shell_pass_count",
     "tube_material_grade", "shell_material_grade", "insulation_spec", "protective_layer",
+    "heat_transfer_plate_material_grade", "plate_gasket_material_grade",
+    "plate_pattern", "plate_thickness_mm", "plate_gap_mm",
+    "plate_effective_area_m2", "plate_pass_arrangement", "frame_material_grade",
 }
 
 
@@ -2145,6 +2727,436 @@ def _material_fallback(policy: dict[str, Any], params: dict[str, Any]) -> tuple[
         "介质腐蚀性、洁净要求和温度材料边界尚未闭合；该材料仅是预设计经济基线。",
         ["no_specific_material_profile_matched"],
     )
+
+
+def _is_plate_exchanger_branch(text: str) -> bool:
+    normalized_text = str(text or "").casefold()
+    if any(
+        exclusion in normalized_text
+        for exclusion in (
+            "固定管板",
+            "管壳式",
+            "shell and tube",
+            "shell-and-tube",
+        )
+    ):
+        return False
+    return any(
+        marker in normalized_text
+        for marker in (
+            "板式换热",
+            "板式热交换",
+            "plate heat exchanger",
+            "plate exchanger",
+        )
+    )
+
+
+def _exchanger_material_route(
+    params: dict[str, Any],
+    policy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return concrete preliminary shell/tube grades for exchanger fallback.
+
+    The route keeps an exchanger calculable and its construction visible when
+    the project has not split the hot- and cold-side metallurgy.  It is an
+    internal screening route, not a corrosion compatibility or procurement
+    approval.
+    """
+    service_text = " ".join(
+        str(params.get(field) or "")
+        for field in (
+            "equipment_type",
+            "material",
+            "main_medium",
+            "medium",
+            "hot_side_medium",
+            "cold_side_medium",
+            "process_function",
+            "corrosivity",
+            "dominant_components",
+        )
+    ).casefold()
+    temperatures = [
+        float(params[field])
+        for field in (
+            "design_temperature_c",
+            "temperature_c",
+            "inlet_temperature_c",
+            "outlet_temperature_c",
+        )
+        if present(params, field)
+        and isinstance(params[field], (int, float))
+        and not isinstance(params[field], bool)
+    ]
+    maximum_temperature = max(temperatures) if temperatures else 60.0
+    minimum_temperature = min(temperatures) if temperatures else 60.0
+    supplied_shell = str(params.get("shell_material_grade") or "").strip()
+    supplied_tube = str(params.get("tube_material_grade") or "").strip()
+    supplied_general = str(params.get("material") or "").strip()
+    supplied_general_key = supplied_general.upper().replace(" ", "")
+    plate_profile = (
+        (policy or {})
+        .get("exchanger_preliminary_fallback_profiles", {})
+        .get("gasketed_chevron_plate", {})
+    )
+    if not isinstance(plate_profile, dict):
+        plate_profile = {}
+    selected_plate_grade = str(
+        params.get("heat_transfer_plate_material_grade")
+        or plate_profile.get("heat_transfer_plate_material_grade")
+        or "S31603"
+    )
+    selected_plate_gasket = str(
+        params.get("plate_gasket_material_grade")
+        or plate_profile.get("plate_gasket_material_grade")
+        or "EPDM"
+    )
+    selected_plate_frame = str(
+        params.get("frame_material_grade")
+        or plate_profile.get("frame_material_grade")
+        or "Q345R环氧涂层"
+    )
+    plate_exchanger_branch = _is_plate_exchanger_branch(service_text)
+
+    if plate_exchanger_branch:
+        route_id = "GASKETED_PLATE_EXCHANGER_S31603_EPDM_ROUTE"
+        shell_grade = (
+            supplied_shell
+            or (
+                f"{selected_plate_frame}"
+                "框架（板式分支，无壳程壳体）"
+            )
+        )
+        tube_grade = (
+            supplied_tube
+            or (
+                f"{selected_plate_grade}"
+                "传热板（板式分支，无换热管）"
+            )
+        )
+    elif supplied_general_key in {"S31603", "316L"}:
+        route_id = "USER_GENERAL_S31603_SPLIT"
+        shell_grade = supplied_shell or "S31603"
+        tube_grade = supplied_tube or "S31603"
+    elif supplied_general_key == "S30408":
+        route_id = "USER_GENERAL_S30408_SPLIT"
+        shell_grade = supplied_shell or "S30408"
+        tube_grade = supplied_tube or "S30408"
+    elif supplied_general_key == "Q345R":
+        route_id = "USER_GENERAL_Q345R_WITH_CARBON_STEEL_TUBES"
+        shell_grade = supplied_shell or "Q345R"
+        tube_grade = supplied_tube or "10"
+    elif any(
+        marker in service_text
+        for marker in (
+            "盐酸",
+            "hydrochloric",
+            "强腐蚀",
+            "severe corrosion",
+            "浓硫酸",
+            "strong acid",
+        )
+    ):
+        route_id = "SEVERE_ACID_N06625_WETTED_ROUTE"
+        shell_grade = supplied_shell or "Q345R+N06625复合板"
+        tube_grade = supplied_tube or "N06625"
+    elif any(
+        marker in service_text
+        for marker in ("氯离子", "氯化物", "chloride")
+    ):
+        route_id = "CHLORIDE_S31603_PRELIMINARY_ROUTE"
+        shell_grade = supplied_shell or "Q345R+S31603复合板"
+        tube_grade = supplied_tube or "S31603"
+    elif any(
+        marker in service_text
+        for marker in (
+            "食品",
+            "医药",
+            "卫生",
+            "纯水",
+            "洁净",
+            "food",
+            "pharma",
+            "sanitary",
+            "high purity",
+        )
+    ):
+        route_id = "SANITARY_STAINLESS_ROUTE"
+        shell_grade = supplied_shell or "S30408"
+        tube_grade = supplied_tube or "S31603"
+    elif minimum_temperature <= -20.0:
+        route_id = "LOW_TEMPERATURE_TOUGHNESS_ROUTE"
+        shell_grade = supplied_shell or "16MnDR"
+        tube_grade = supplied_tube or "S30408"
+    elif maximum_temperature >= 400.0:
+        route_id = "HIGH_TEMPERATURE_HEAT_RESISTANT_ROUTE"
+        shell_grade = supplied_shell or "15CrMoR"
+        tube_grade = supplied_tube or "S32168"
+    else:
+        route_id = "GENERAL_CARBON_STEEL_EXCHANGER_ROUTE"
+        shell_grade = supplied_shell or "Q345R"
+        tube_grade = supplied_tube or "10"
+
+    summary = (
+        (
+            f"{selected_plate_grade}"
+            "传热板+"
+            f"{selected_plate_gasket}"
+            "垫片+"
+            f"{selected_plate_frame}"
+            "框架"
+        )
+        if plate_exchanger_branch
+        else f"{shell_grade}壳体+{tube_grade}换热管"
+    )
+    return {
+        "route_id": route_id,
+        "material_summary": summary,
+        "shell_material_grade": shell_grade,
+        "tube_material_grade": tube_grade,
+        "basis": [
+            f"exchanger_material_route:{route_id}",
+            (
+                "fallback_profile:"
+                f"{plate_profile.get('profile_id')}"
+                if plate_exchanger_branch and plate_profile.get("profile_id")
+                else "fallback_profile:not_applicable"
+            ),
+            f"service_context:{service_text or 'not_provided'}",
+            f"temperature_range_c:{minimum_temperature:g}..{maximum_temperature:g}",
+        ],
+        "warning": (
+            "壳体与换热管牌号为程序可见的预设计材料分支；正式选材必须按冷热侧"
+            "完整组成、浓度、温度、腐蚀/冲蚀、焊接、热处理、管板连接和设计寿命"
+            "复核。氯化物体系尤其不得把S31603候选视为抗点蚀保证。"
+        ),
+    }
+
+
+def _tower_material_route(params: dict[str, Any]) -> dict[str, Any]:
+    """Select concrete preliminary shell/internals grades for a tower.
+
+    The grades are an auditable routing decision, not a substitute for the
+    thickness-temperature table cell, corrosion review, impact test, or
+    procurement specification.
+    """
+    temperatures = [
+        float(params[field])
+        for field in (
+            "design_temperature_c",
+            "temperature_c",
+            "inlet_temperature_c",
+        )
+        if present(params, field) and isinstance(params[field], (int, float))
+    ]
+    controlling_temperature = max(temperatures) if temperatures else 60.0
+    minimum_temperature = min(temperatures) if temperatures else 60.0
+    text = " ".join(
+        str(params.get(field, ""))
+        for field in (
+            "main_medium",
+            "process_function",
+            "corrosivity",
+            "dominant_components",
+        )
+    ).casefold()
+    strong_corrosion = any(
+        marker in text
+        for marker in (
+            "强腐蚀",
+            "severe corrosion",
+            "hydrochloric",
+            "盐酸",
+            "氯化物",
+            "chloride",
+            "硫酸",
+            "sulfuric",
+        )
+    )
+    supplied_shell = str(
+        params.get("shell_material_grade") or params.get("material") or ""
+    ).upper()
+    supplied_clad = any(
+        marker in supplied_shell
+        for marker in ("复层", "基层", "复合板", "CLAD")
+    )
+    if supplied_clad and any(
+        marker in supplied_shell for marker in ("S31603", "316L")
+    ):
+        return {
+            "route_id": "USER_Q345R_S31603_CLAD_TOWER",
+            "shell_material_grade": str(
+                params.get("shell_material_grade")
+                or params.get("material")
+            ),
+            "internals_material_grade": "S31603",
+            "skirt_material_grade": "Q345R",
+            "shell_standard_route": [
+                "GB/T 150.2-2024",
+                "GB/T 713.2-2023",
+                "NB/T 47002.1（复合板路线，版本/供货状态待项目确认）",
+            ],
+            "internals_standard_route": [
+                "GB/T 4237-2015",
+                "NB/T 47041-2014",
+            ],
+            "basis": ["user_or_project_shell_material_is_clad_with:S31603_or_316L"],
+            "warning": (
+                "壳体沿用用户给定Q345R+S31603/316L复合板路线，程序同步选择S31603内件；"
+                "基层厚度、复层厚度、腐蚀裕量、结合质量和焊接工艺仍须复核。"
+            ),
+        }
+    if any(marker in supplied_shell for marker in ("S31603", "316L")):
+        return {
+            "route_id": "USER_S31603_STAINLESS_TOWER",
+            "shell_material_grade": str(
+                params.get("shell_material_grade")
+                or params.get("material")
+            ),
+            "internals_material_grade": "S31603",
+            "skirt_material_grade": "Q345R（异种钢连接与隔热过渡待复核）",
+            "shell_standard_route": [
+                "GB/T 150.2-2024",
+                "GB/T 4237-2015",
+            ],
+            "internals_standard_route": [
+                "GB/T 4237-2015",
+                "NB/T 47041-2014",
+            ],
+            "basis": ["user_or_project_shell_material_contains:S31603_or_316L"],
+            "warning": (
+                "壳体沿用用户给定S31603/316L路线，程序同步选择S31603内件；"
+                "板材供货标准、晶间腐蚀、氯化物应力腐蚀和异种钢裙座连接仍须复核。"
+            ),
+        }
+    if strong_corrosion:
+        return {
+            "route_id": "Q345R_S31603_CLAD_CORROSIVE",
+            "shell_material_grade": (
+                "Q345R基层+S31603复层（复合板程序预选）"
+            ),
+            "internals_material_grade": "S31603",
+            "skirt_material_grade": "Q345R",
+            "shell_standard_route": [
+                "GB/T 150.2-2024",
+                "GB/T 713.2-2023",
+                "NB/T 47002.1（复合板路线，版本/供货状态待项目确认）",
+            ],
+            "internals_standard_route": [
+                "GB/T 4237-2015",
+                "NB/T 47041-2014",
+            ],
+            "basis": [
+                "strong_corrosion_marker",
+                f"design_temperature_c:{controlling_temperature:g}",
+            ],
+            "warning": (
+                "程序按强腐蚀标记选择Q345R+S31603复合板和S31603内件；"
+                "腐蚀介质浓度、氯离子、温度、应力腐蚀和复层厚度未闭合时不得正式采用。"
+            ),
+        }
+    if minimum_temperature < -20.0:
+        return {
+            "route_id": "16MNDR_LOW_TEMPERATURE",
+            "shell_material_grade": "16MnDR（低温压力容器板程序预选）",
+            "internals_material_grade": "S30408",
+            "skirt_material_grade": "Q345R（裙座，低温过渡段待复核）",
+            "shell_standard_route": [
+                "GB/T 150.2-2024",
+                "GB/T 713.4-2023",
+            ],
+            "internals_standard_route": [
+                "GB/T 4237-2015",
+                "NB/T 47041-2014",
+            ],
+            "basis": [f"minimum_design_temperature_c:{minimum_temperature:g}"],
+            "warning": (
+                "程序按低于-20°C选择16MnDR壳体和S30408内件；"
+                "最低设计金属温度、板厚、冲击试验、焊后热处理和裙座过渡仍须按项目闭合。"
+            ),
+        }
+    if controlling_temperature > 350.0:
+        return {
+            "route_id": "15CRMOR_HIGH_TEMPERATURE",
+            "shell_material_grade": "15CrMoR（耐热压力容器板程序预选）",
+            "internals_material_grade": "S30408（高温适用性待复核）",
+            "skirt_material_grade": "Q345R（隔热过渡裙座程序预选）",
+            "shell_standard_route": [
+                "GB/T 150.2-2024",
+                "GB/T 713.2-2023",
+            ],
+            "internals_standard_route": [
+                "GB/T 4237-2015",
+                "NB/T 47041-2014",
+            ],
+            "basis": [f"design_temperature_c:{controlling_temperature:g}"],
+            "warning": (
+                "程序按高于350°C选择15CrMoR壳体路线；"
+                "蠕变、回火脆化、焊后热处理、内件高温强度和实际温度上限仍须查表复核。"
+            ),
+        }
+    return {
+        "route_id": "Q345R_S30408_GENERAL_TOWER",
+        "shell_material_grade": "Q345R",
+        "internals_material_grade": "S30408",
+        "skirt_material_grade": "Q345R",
+        "shell_standard_route": [
+            "GB/T 150.2-2024",
+            "GB/T 713.2-2023",
+        ],
+        "internals_standard_route": [
+            "GB/T 4237-2015",
+            "NB/T 47041-2014",
+        ],
+        "basis": [
+            "general_nonsevere_corrosion_tower_service",
+            f"design_temperature_c:{controlling_temperature:g}",
+        ],
+        "warning": (
+            "程序按一般塔器选择Q345R壳体、S30408塔盘/内件和Q345R裙座；"
+            "介质腐蚀数据、最低设计金属温度、板厚温度表格和焊接要求未闭合时仅可作预选。"
+        ),
+    }
+
+
+def _vessel_material_route(params: dict[str, Any]) -> dict[str, Any]:
+    """Return concrete preliminary pressure-vessel and internal grades.
+
+    The temperature/corrosion routing is intentionally shared with the tower
+    shell route so the same supplied material has one deterministic answer.
+    Vessel-specific labels prevent the result from masquerading as a tower
+    internals calculation.
+    """
+    tower_route = _tower_material_route(params)
+    route_id = str(tower_route.get("route_id") or "UNKNOWN").replace(
+        "_TOWER",
+        "_VESSEL",
+    )
+    warning = str(tower_route.get("warning") or "")
+    warning = warning.replace("塔器", "容器/分离器").replace(
+        "塔盘/内件",
+        "容器内件",
+    )
+    return {
+        "route_id": route_id,
+        "shell_material_grade": tower_route.get("shell_material_grade"),
+        "internals_material_grade": tower_route.get(
+            "internals_material_grade"
+        ),
+        "support_material_grade": tower_route.get("skirt_material_grade"),
+        "shell_standard_route": list(
+            tower_route.get("shell_standard_route", [])
+        ),
+        "internals_standard_route": list(
+            tower_route.get("internals_standard_route", [])
+        ),
+        "basis": [
+            *list(tower_route.get("basis", [])),
+            "pressure_vessel_material_route_reused",
+        ],
+        "warning": warning,
+    }
 
 
 def _exchanger_u_fallback(params: dict[str, Any], default_value: float) -> tuple[float, list[str]]:
@@ -2322,25 +3334,278 @@ def apply_design_fallbacks(
             )
 
     if not present(work, "material"):
-        value, tier, warning, basis = _material_fallback(policy, work)
-        add("material", value, tier, "Context-conditioned material route or final economic baseline.", warning, basis)
+        if family_id in {
+            "family_tower",
+            "family_reactor_vessel_separator",
+        }:
+            pressure_material_route = (
+                _tower_material_route(work)
+                if family_id == "family_tower"
+                else _vessel_material_route(work)
+            )
+            add(
+                "material",
+                pressure_material_route["shell_material_grade"],
+                "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+                "Select a concrete preliminary pressure-vessel shell grade from temperature and corrosion context.",
+                pressure_material_route["warning"],
+                pressure_material_route["basis"],
+            )
+        elif family_id in {
+            "family_fixed_tubesheet_exchanger",
+            "family_other_heat_exchanger",
+        }:
+            exchanger_material_route = _exchanger_material_route(
+                work,
+                policy,
+            )
+            add(
+                "material",
+                exchanger_material_route["material_summary"],
+                "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+                "Select concrete preliminary exchanger shell and tube grades from service and temperature context.",
+                exchanger_material_route["warning"],
+                exchanger_material_route["basis"],
+            )
+        else:
+            value, tier, warning, basis = _material_fallback(policy, work)
+            add("material", value, tier, "Context-conditioned material route or final economic baseline.", warning, basis)
 
     pressure_vessel_families = {
         "family_tower", "family_reactor_vessel_separator", "family_storage_vessel",
     }
     exchanger_families = {"family_fixed_tubesheet_exchanger", "family_other_heat_exchanger"}
     if family_id in exchanger_families and present(work, "material"):
+        exchanger_material_route = _exchanger_material_route(work, policy)
         add(
-            "tube_material_grade", work["material"], "EXPLICIT_FINAL_FALLBACK_DEFAULT",
-            "Use the current preliminary material route for the tube side until corrosion and fabrication split it.",
-            "管程材料暂沿用设备材料预设计路线；正式牌号须按冷热侧介质分别做腐蚀、温度和制造复核。",
-            ["material_route_inherited_for_preliminary_tube_side"],
+            "tube_material_grade",
+            exchanger_material_route["tube_material_grade"],
+            "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+            "Select a concrete preliminary heat-transfer-tube grade from the active exchanger material route.",
+            exchanger_material_route["warning"],
+            exchanger_material_route["basis"],
         )
         add(
-            "shell_material_grade", work["material"], "EXPLICIT_FINAL_FALLBACK_DEFAULT",
-            "Use the current preliminary material route for the shell side until corrosion and fabrication split it.",
-            "壳程材料暂沿用设备材料预设计路线；正式牌号须按冷热侧介质分别做腐蚀、温度和制造复核。",
-            ["material_route_inherited_for_preliminary_shell_side"],
+            "shell_material_grade",
+            exchanger_material_route["shell_material_grade"],
+            "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+            "Select a concrete preliminary exchanger-shell grade from the active exchanger material route.",
+            exchanger_material_route["warning"],
+            exchanger_material_route["basis"],
+        )
+    if family_id == "family_tower":
+        tower_material_route = _tower_material_route(work)
+        requested_internals = " ".join(
+            str(work.get(field) or "")
+            for field in (
+                "tower_internals_type",
+                "packing_type",
+                "packing_or_tray_specification",
+            )
+        )
+        if not present(work, "equipment_type") and requested_internals.strip():
+            if "填料" in requested_internals or "packing" in requested_internals.casefold():
+                requested_tower_type = "规整填料塔"
+            elif "双溢流" in requested_internals:
+                requested_tower_type = "双溢流筛板塔"
+            elif "浮阀" in requested_internals:
+                requested_tower_type = "单溢流浮阀塔"
+            else:
+                requested_tower_type = "单溢流筛板塔"
+            add(
+                "equipment_type",
+                requested_tower_type,
+                "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+                "Resolve a concrete tower terminal type from the user's explicit internals specification.",
+                (
+                    "塔型由用户给出的内件/填料规格映射；若该规格只是备选而非采用方案，"
+                    "用户必须撤销或改写后重算。"
+                ),
+                [f"user_internals_specification:{requested_internals}"],
+            )
+        add(
+            "shell_material_grade",
+            work.get("material") or tower_material_route["shell_material_grade"],
+            "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+            "Use the selected tower shell material route as a concrete preliminary grade.",
+            tower_material_route["warning"],
+            tower_material_route["basis"],
+        )
+        add(
+            "internals_material_grade",
+            tower_material_route["internals_material_grade"],
+            "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+            "Select a concrete tray/packing-support material grade from the tower service route.",
+            tower_material_route["warning"],
+            tower_material_route["basis"],
+        )
+        add(
+            "skirt_material_grade",
+            tower_material_route["skirt_material_grade"],
+            "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+            "Select a concrete preliminary skirt material grade from the same tower material route.",
+            tower_material_route["warning"],
+            tower_material_route["basis"],
+        )
+        shell_grade = str(
+            work.get("shell_material_grade")
+            or work.get("material")
+            or tower_material_route["shell_material_grade"]
+        ).upper()
+        if any(marker in shell_grade for marker in ("复层", "CLAD", "复合板")):
+            material_mechanical_defaults = {
+                "route_id": "CLAD_BASE_METAL_INTERNAL_SCREENING_CURVE",
+                "allowable_stress_mpa": 120.0,
+                "corrosion_allowance_mm": 0.0,
+                "basis": ["clad_shell_base_metal_strength_route"],
+            }
+        elif any(marker in shell_grade for marker in ("S30408", "S31603", "316L")):
+            material_mechanical_defaults = {
+                "route_id": "STAINLESS_SHELL_INTERNAL_SCREENING_CURVE",
+                "allowable_stress_mpa": 100.0,
+                "corrosion_allowance_mm": 0.0,
+                "basis": ["stainless_shell_grade_marker"],
+            }
+        elif "15CRMOR" in shell_grade:
+            material_mechanical_defaults = {
+                "route_id": "15CRMOR_INTERNAL_SCREENING_CURVE",
+                "allowable_stress_mpa": 110.0,
+                "corrosion_allowance_mm": 2.0,
+                "basis": ["15CrMoR_shell_grade_marker"],
+            }
+        elif "16MNDR" in shell_grade:
+            material_mechanical_defaults = {
+                "route_id": "16MNDR_INTERNAL_SCREENING_CURVE",
+                "allowable_stress_mpa": 110.0,
+                "corrosion_allowance_mm": 2.0,
+                "basis": ["16MnDR_shell_grade_marker"],
+            }
+        else:
+            material_mechanical_defaults = {
+                "route_id": "Q345R_INTERNAL_SCREENING_CURVE",
+                "allowable_stress_mpa": 120.0,
+                "corrosion_allowance_mm": 2.0,
+                "basis": ["general_carbon_steel_shell_grade_route"],
+            }
+        add(
+            "allowable_stress_mpa",
+            material_mechanical_defaults["allowable_stress_mpa"],
+            "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+            "Select the registered conservative internal screening value linked to the preliminary shell grade.",
+            (
+                "该许用应力是程序内部保守筛查曲线，不是GB/T 150.2材料表格单元格；"
+                "正式设计必须按牌号、板厚和设计温度查表替换。"
+            ),
+            [
+                f"tower_material_route:{tower_material_route['route_id']}",
+                f"mechanical_screening_route:{material_mechanical_defaults['route_id']}",
+                *material_mechanical_defaults["basis"],
+            ],
+        )
+        add(
+            "corrosion_allowance_mm",
+            material_mechanical_defaults["corrosion_allowance_mm"],
+            "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+            "Select a preliminary corrosion allowance linked to the active shell-material route.",
+            (
+                "腐蚀裕量是材料路线保底值，不代表腐蚀速率、设计寿命、衬里/复层厚度或"
+                "点蚀余量已经闭合；用户给值后必须重算名义厚度候选。"
+            ),
+            [
+                f"tower_material_route:{tower_material_route['route_id']}",
+                f"mechanical_screening_route:{material_mechanical_defaults['route_id']}",
+            ],
+        )
+    if family_id == "family_reactor_vessel_separator":
+        vessel_material_route = _vessel_material_route(work)
+        add(
+            "shell_material_grade",
+            work.get("material")
+            or vessel_material_route["shell_material_grade"],
+            "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+            "Use the selected vessel shell route as a concrete preliminary grade.",
+            vessel_material_route["warning"],
+            vessel_material_route["basis"],
+        )
+        add(
+            "internals_material_grade",
+            vessel_material_route["internals_material_grade"],
+            "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+            "Select a concrete preliminary separator/reactor internal grade.",
+            vessel_material_route["warning"],
+            vessel_material_route["basis"],
+        )
+        shell_grade = str(
+            work.get("shell_material_grade")
+            or work.get("material")
+            or vessel_material_route["shell_material_grade"]
+        ).upper()
+        if any(marker in shell_grade for marker in ("复层", "CLAD", "复合板")):
+            vessel_mechanical_defaults = {
+                "route_id": "CLAD_BASE_METAL_INTERNAL_SCREENING_CURVE",
+                "allowable_stress_mpa": 120.0,
+                "corrosion_allowance_mm": 0.0,
+            }
+        elif any(
+            marker in shell_grade
+            for marker in ("S30408", "S31603", "316L")
+        ):
+            vessel_mechanical_defaults = {
+                "route_id": "STAINLESS_SHELL_INTERNAL_SCREENING_CURVE",
+                "allowable_stress_mpa": 100.0,
+                "corrosion_allowance_mm": 0.0,
+            }
+        elif "15CRMOR" in shell_grade:
+            vessel_mechanical_defaults = {
+                "route_id": "15CRMOR_INTERNAL_SCREENING_CURVE",
+                "allowable_stress_mpa": 110.0,
+                "corrosion_allowance_mm": 2.0,
+            }
+        elif "16MNDR" in shell_grade:
+            vessel_mechanical_defaults = {
+                "route_id": "16MNDR_INTERNAL_SCREENING_CURVE",
+                "allowable_stress_mpa": 110.0,
+                "corrosion_allowance_mm": 2.0,
+            }
+        else:
+            vessel_mechanical_defaults = {
+                "route_id": "Q345R_INTERNAL_SCREENING_CURVE",
+                "allowable_stress_mpa": 120.0,
+                "corrosion_allowance_mm": 2.0,
+            }
+        add(
+            "allowable_stress_mpa",
+            vessel_mechanical_defaults["allowable_stress_mpa"],
+            "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+            "Select the registered internal screening stress linked to the preliminary vessel shell grade.",
+            (
+                "该许用应力是程序内部保守筛查值，不是GB/T 150.2材料表格单元格；"
+                "正式设计必须按牌号、板厚和设计温度查表替换。"
+            ),
+            [
+                f"vessel_material_route:{vessel_material_route['route_id']}",
+                (
+                    "mechanical_screening_route:"
+                    f"{vessel_mechanical_defaults['route_id']}"
+                ),
+            ],
+        )
+        add(
+            "corrosion_allowance_mm",
+            vessel_mechanical_defaults["corrosion_allowance_mm"],
+            "KNOWLEDGE_GRAPH_CONDITIONAL_RECOMMENDATION",
+            "Select a preliminary corrosion allowance linked to the vessel shell route.",
+            (
+                "腐蚀裕量是材料路线保底值，不代表腐蚀速率、寿命、衬里/复层厚度"
+                "或点蚀余量已经闭合；用户给值后必须重算厚度候选。"
+            ),
+            [
+                f"vessel_material_route:{vessel_material_route['route_id']}",
+                (
+                    "mechanical_screening_route:"
+                    f"{vessel_mechanical_defaults['route_id']}"
+                ),
+            ],
         )
     if family_id in pressure_vessel_families:
         add(
@@ -2444,6 +3709,14 @@ def apply_design_fallbacks(
     elif block_type in {"FILTER", "DRYER"}:
         for field in ("capacity", "cycle_time_h", "allowable_pressure_drop_kpa"):
             conditional_defaults.pop(field, None)
+    if family_id == "family_reactor_vessel_separator":
+        if present(work, "inner_diameter_mm"):
+            conditional_defaults.pop("diameter_mm", None)
+        if present(work, "straight_shell_length_mm") or present(
+            work,
+            "height_or_length_mm",
+        ):
+            conditional_defaults.pop("height_mm", None)
 
     # Family defaults are the terminal safety net, not competitors to a
     # closeable same-case equation.  Remove any fallback target whose exact
@@ -2474,7 +3747,114 @@ def apply_design_fallbacks(
         default_u = float(conditional_defaults.get("overall_u_w_m2k", 300.0))
         u_value, u_basis = _exchanger_u_fallback(work, default_u)
         conditional_defaults["overall_u_w_m2k"] = u_value
-        exchanger_basis = {"overall_u_w_m2k": u_basis}
+        exchanger_type_text = " ".join(
+            str(work.get(field) or "")
+            for field in ("equipment_type", "process_function")
+        ).casefold()
+        plate_exchanger_branch = _is_plate_exchanger_branch(
+            exchanger_type_text
+        )
+        if plate_exchanger_branch:
+            plate_profile = (
+                policy.get("exchanger_preliminary_fallback_profiles", {})
+                .get("gasketed_chevron_plate", {})
+            )
+            if not isinstance(plate_profile, dict):
+                plate_profile = {}
+            for field in (
+                "tube_outer_diameter_mm",
+                "tube_length_mm",
+                "tube_pass_count",
+                "shell_pass_count",
+                "tube_pitch_ratio",
+                "baffle_cut_percent",
+                "baffle_spacing_ratio",
+                "tube_layout",
+            ):
+                conditional_defaults.pop(field, None)
+            conditional_defaults.update(
+                {
+                    field: plate_profile[field]
+                    for field in (
+                        "heat_transfer_plate_material_grade",
+                        "plate_gasket_material_grade",
+                        "frame_material_grade",
+                        "plate_pattern",
+                        "plate_thickness_mm",
+                        "plate_gap_mm",
+                        "plate_effective_area_m2",
+                        "plate_pass_arrangement",
+                    )
+                    if plate_profile.get(field) not in (None, "")
+                }
+            )
+        exchanger_phase = canonical_phase(work.get("phase"))
+        exchanger_velocity = {
+            "vapor": 12.0,
+            "mixed": 3.0,
+            "liquid": 1.5,
+        }.get(exchanger_phase, 1.5)
+        conditional_defaults["hot_side_target_velocity_m_s"] = exchanger_velocity
+        conditional_defaults["cold_side_target_velocity_m_s"] = exchanger_velocity
+        exchanger_basis = {
+            "overall_u_w_m2k": u_basis,
+            "hot_side_target_velocity_m_s": [
+                f"available_phase:{exchanger_phase or 'unknown'}",
+                "phase_conditioned_preliminary_velocity",
+            ],
+            "cold_side_target_velocity_m_s": [
+                f"available_phase:{exchanger_phase or 'unknown'}",
+                "phase_conditioned_preliminary_velocity",
+            ],
+            "hot_side_allowable_pressure_drop_kpa": [
+                "generic_preliminary_side_pressure_drop_allowance",
+            ],
+            "cold_side_allowable_pressure_drop_kpa": [
+                "generic_preliminary_side_pressure_drop_allowance",
+            ],
+            "hot_side_fouling_resistance_m2k_w": [
+                "generic_water_like_preliminary_fouling_basis",
+            ],
+            "cold_side_fouling_resistance_m2k_w": [
+                "generic_water_like_preliminary_fouling_basis",
+            ],
+            "tube_pass_count": ["generic_shell_and_tube_preliminary_layout"],
+            "shell_pass_count": ["generic_shell_and_tube_preliminary_layout"],
+            "tube_pitch_ratio": ["generic_shell_and_tube_preliminary_layout"],
+            "baffle_cut_percent": ["generic_shell_and_tube_preliminary_layout"],
+            "baffle_spacing_ratio": ["generic_shell_and_tube_preliminary_layout"],
+            "tube_layout": ["generic_shell_and_tube_preliminary_layout"],
+            "heat_transfer_plate_material_grade": [
+                "gasketed_plate_exchanger_preliminary_construction_branch",
+                (
+                    "fallback_profile:"
+                    f"{plate_profile.get('profile_id')}"
+                    if plate_exchanger_branch
+                    else "fallback_profile:not_applicable"
+                ),
+            ],
+            "plate_gasket_material_grade": [
+                "gasketed_plate_exchanger_preliminary_construction_branch",
+            ],
+            "frame_material_grade": [
+                "gasketed_plate_exchanger_preliminary_construction_branch",
+            ],
+            "plate_pattern": [
+                "gasketed_plate_exchanger_preliminary_construction_branch",
+            ],
+            "plate_thickness_mm": [
+                "gasketed_plate_exchanger_preliminary_construction_branch",
+            ],
+            "plate_gap_mm": [
+                "gasketed_plate_exchanger_preliminary_construction_branch",
+            ],
+            "plate_effective_area_m2": [
+                "gasketed_plate_exchanger_preliminary_area_per_plate",
+            ],
+            "plate_pass_arrangement": [
+                "gasketed_plate_exchanger_preliminary_construction_branch",
+            ],
+        }
         sensible_inputs = ("mass_flow_kg_h", "inlet_temperature_c", "outlet_temperature_c")
         if all(present(work, field) for field in sensible_inputs):
             phase = canonical_phase(work.get("phase"))
@@ -2494,6 +3874,37 @@ def apply_design_fallbacks(
         exchanger_basis = {}
     if family_id == "family_tower":
         phase = canonical_phase(work.get("phase"))
+        tower_service_text = " ".join(
+            str(work.get(field) or "")
+            for field in (
+                "equipment_type",
+                "process_function",
+                "terminal_type_rule_override_id",
+            )
+        ).casefold()
+        packed_tower_branch = any(
+            marker in tower_service_text
+            for marker in ("填料", "packing", "structured_packing")
+        )
+        packing_profile = policy.get("tower_packing_fallback_profile", {})
+        if packed_tower_branch and isinstance(packing_profile, dict):
+            for field in (
+                "packing_type",
+                "packing_specific_area_m2_m3",
+                "packing_void_fraction",
+                "packing_corrugation_angle_deg",
+                "packing_design_flood_fraction",
+                "packing_hetp_m",
+                "packing_pressure_drop_kpa_m",
+                "packing_bed_section_max_height_m",
+            ):
+                if packing_profile.get(field) not in (None, ""):
+                    conditional_defaults.setdefault(field, packing_profile[field])
+            conditional_defaults.setdefault(
+                "packing_material_grade",
+                work.get("internals_material_grade")
+                or packing_profile.get("packing_material_grade", "S30408"),
+            )
         if not present(work, "inner_diameter_mm") and not present(work, "diameter_mm"):
             conditional_defaults["tower_design_velocity_m_s"] = {
                 "vapor": 1.5, "mixed": 1.0, "liquid": 0.5,
@@ -2543,6 +3954,81 @@ def apply_design_fallbacks(
         if gauge_pressure is not None and gauge_pressure < 0:
             conditional_defaults["tower_weir_height_mm"] = 25.0
 
+    exchanger_fallback_warnings = {
+        "hot_side_allowable_pressure_drop_kpa": (
+            "热侧允许压降50 kPa是程序保底约束，不代表管路/控制阀余压已闭合；"
+            "用户或项目给值后必须按单设备重算。"
+        ),
+        "cold_side_allowable_pressure_drop_kpa": (
+            "冷侧允许压降50 kPa是程序保底约束，不代表管路/控制阀余压已闭合；"
+            "用户或项目给值后必须按单设备重算。"
+        ),
+        "hot_side_target_velocity_m_s": (
+            "热侧目标流速仅按现有相态作保底；气液两侧相态、物性和通道分配未分别闭合，"
+            "不能据此宣称水力校核通过。"
+        ),
+        "cold_side_target_velocity_m_s": (
+            "冷侧目标流速仅按现有相态作保底；气液两侧相态、物性和通道分配未分别闭合，"
+            "不能据此宣称水力校核通过。"
+        ),
+        "hot_side_fouling_resistance_m2k_w": (
+            "热侧污垢热阻采用0.0002 m²·K/W水样/一般洁净液体保底；"
+            "结垢、聚合、浆液、冷却水水质或清洗周期不明时必须替换。"
+        ),
+        "cold_side_fouling_resistance_m2k_w": (
+            "冷侧污垢热阻采用0.0002 m²·K/W水样/一般洁净液体保底；"
+            "结垢、聚合、浆液、冷却水水质或清洗周期不明时必须替换。"
+        ),
+        "tube_pass_count": "2管程仅为固定管板式预布置保底；须由管程流速、压降和清洗要求改选。",
+        "shell_pass_count": "1壳程仅为固定管板式预布置保底；须由温差交叉、F值和压降改选。",
+        "tube_pitch_ratio": "管间距比1.25仅为初步布管保底；机械清洗、振动和压降可能要求放大。",
+        "baffle_cut_percent": "折流板切口25%仅为初步壳程水力保底；须由压降、传热和振动联合校核。",
+        "baffle_spacing_ratio": "折流板间距/壳径0.5仅为初步保底；须由壳程压降、振动和支承跨距联合校核。",
+        "tube_layout": "30°三角形布管仅为紧凑布置保底；需机械清洗时应改选方形或转角方形布管。",
+        "heat_transfer_plate_material_grade": (
+            "S31603板片是可拆式板式换热器的一般耐蚀程序候选；"
+            "氯离子、温度、缝隙腐蚀和清洗介质可能要求钛、双相钢或镍基材料。"
+        ),
+        "plate_gasket_material_grade": (
+            "EPDM垫片仅适用于一般水样介质保底；油品、溶剂、蒸汽、氧化剂、"
+            "温度和清洗剂可能要求NBR、FKM或无垫片结构。"
+        ),
+        "frame_material_grade": "Q345R环氧涂层框架为程序保底；框架载荷、腐蚀环境和涂层体系须复核。",
+        "plate_pattern": "H型人字波纹仅为通用传热强化分支；压降和易堵塞性须用厂家板型计算闭合。",
+        "plate_thickness_mm": "0.6 mm板厚为预选值；设计压力、腐蚀、冲蚀和厂家模压板型可能改变板厚。",
+        "plate_gap_mm": "3.0 mm板间隙为清洁液体保底；含固、纤维、高黏或易结垢介质必须放大流道。",
+        "plate_effective_area_m2": "0.5 m²/片仅用于估算板片数量，不对应任何厂家板型保证值。",
+        "plate_pass_arrangement": "1×1单流程仅为预布置保底；端温差、流速和压降可能要求多流程组合。",
+    }
+    tower_fallback_warnings = {
+        "packing_type": (
+            "250Y金属孔板波纹规整填料是填料塔分支的具体保底型式；"
+            "不能替代厂家容量、压降、传质效率和机械安装数据。"
+        ),
+        "packing_material_grade": (
+            "填料材质暂沿用程序选择的塔内件牌号；腐蚀、厚度、表面处理和供货状态仍须闭合。"
+        ),
+        "packing_specific_area_m2_m3": (
+            "250 m²/m³按250Y名义等级保底，不是对特定厂牌产品实测几何的保证。"
+        ),
+        "packing_void_fraction": "0.97为空隙率预设计值；实际值必须由所选厂家/内件数据替换。",
+        "packing_corrugation_angle_deg": "45°按Y型规整填料预设计；实际波纹几何必须与供货型号一致。",
+        "packing_design_flood_fraction": (
+            "70%泛点率是一般预选目标，不代表已计算泛点；须补气液负荷、密度、黏度、表面张力后重算。"
+        ),
+        "packing_hetp_m": (
+            "HETP=0.50 m仅用于缺传质数据时的床层高度保底；组分体系、相平衡和操作点改变时必须替换。"
+        ),
+        "packing_pressure_drop_kpa_m": (
+            "0.40 kPa/m仅为清洁体系单位床层压降保底；不是干/湿压降曲线或厂家保证点。"
+        ),
+        "packing_bed_section_max_height_m": (
+            "单段6 m仅用于预布置分段和再分布器数量；最终分段由液体分布质量、塔径和厂家结构确定。"
+        ),
+        "corrosion_allowance_mm": (
+            "腐蚀裕量按壳体材料路线保底；实际腐蚀速率、寿命和衬里/复层边界未闭合。"
+        ),
+    }
     for field, value in conditional_defaults.items():
         if field in {"overall_u_w_m2k", "lmtd_k", "lmtd_correction_factor", "tower_design_velocity_m_s"}:
             tier = "BUILT_IN_RECOMMENDED_FORMULA"
@@ -2552,7 +4038,13 @@ def apply_design_fallbacks(
         add(
             field, value, tier,
             "Registered family fallback selected from the deterministic equipment family and available context.",
-            "该值只用于保持预设计与候选生成不中停；替换为同工况数据后必须自动重算。",
+            exchanger_fallback_warnings.get(
+                field,
+                tower_fallback_warnings.get(
+                    field,
+                    "该值只用于保持预设计与候选生成不中停；替换为同工况数据后必须自动重算。",
+                ),
+            ),
             [f"family:{family_id}", *extra_basis],
         )
 
@@ -2656,6 +4148,120 @@ def build_model_estimate_fallbacks(
             "fallback_tier": "LLM_LAST_RESORT_ENGINEERING_ESTIMATE",
         }
     return ledger, lineage
+
+
+def build_registered_engineering_choice_fallbacks(
+    normalized: dict[str, Any],
+    choice_lineage: dict[str, Any] | None,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Verify and disclose already validated registered AI choices.
+
+    This path is separate from free model estimates.  Every value must exactly
+    match a field/value pair in the bundled choice registry and must carry the
+    same choice and axis IDs.  The staged agent is the only caller that supplies
+    this internal lineage; ordinary matcher input cannot mint J-class choice
+    provenance.
+    """
+
+    if not isinstance(choice_lineage, dict):
+        return [], {}
+    registry = load_ai_engineering_choice_registry()
+    registered: dict[tuple[str, str, str], Any] = {}
+    registered_metadata: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for family in registry.get("families", []):
+        if not isinstance(family, dict):
+            continue
+        family_id = str(family.get("family_id") or "")
+        for axis in family.get("material_component_axes", []):
+            if not isinstance(axis, dict):
+                continue
+            axis_id = str(axis.get("axis_id") or "")
+            for choice in axis.get("choices", []):
+                if not isinstance(choice, dict):
+                    continue
+                choice_id = str(choice.get("choice_id") or "")
+                field_values = choice.get("field_values")
+                if not choice_id or not isinstance(field_values, dict):
+                    continue
+                for field, value in field_values.items():
+                    key = (axis_id, choice_id, str(field))
+                    registered[key] = value
+                    registered_metadata[key] = {
+                        "family_id": family_id,
+                        "label": choice.get("label"),
+                        "selection_basis": choice.get("selection_basis"),
+                        "source_refs": choice.get("source_refs", []),
+                        "warning": choice.get("warning"),
+                    }
+
+    ledger: list[dict[str, Any]] = []
+    calculation_lineage: dict[str, dict[str, Any]] = {}
+    forbidden = {
+        "equipment_tag", "equipment_family", "equipment_type", "aspen_block_type",
+        "terminal_type_rule_override_id", "candidate_model", "vendor_model",
+        "verification_result", "approval_status",
+    }
+    for field in sorted(choice_lineage):
+        item = choice_lineage[field]
+        if not isinstance(item, dict):
+            raise ValueError(f"registered engineering choice lineage is invalid: {field}")
+        if field in forbidden or field.endswith(("_path", "_sha256", "_ref")):
+            raise ValueError(f"registered engineering choice target is forbidden: {field}")
+        if field not in normalized:
+            raise ValueError(f"registered engineering choice value is missing: {field}")
+        axis_id = str(item.get("axis_id") or "")
+        choice_id = str(item.get("choice_id") or "")
+        key = (axis_id, choice_id, field)
+        if key not in registered:
+            raise ValueError(
+                f"registered engineering choice field is not in frozen registry: {choice_id}:{field}"
+            )
+        expected = registered[key]
+        actual = normalized[field]
+        if expected != actual or item.get("resolved_value") != actual:
+            raise ValueError(
+                f"registered engineering choice value changed before replay: {choice_id}:{field}"
+            )
+        metadata = registered_metadata[key]
+        record = {
+            "field_id": field,
+            "value": actual,
+            "tier": "AI_REGISTERED_ENGINEERING_CHOICE",
+            "state": "SELECTED_FROM_REGISTERED_CHOICES",
+            "source_kind": "ai_registered_engineering_choice",
+            "reason": item.get("reason") or metadata.get("selection_basis"),
+            "basis": [
+                f"axis_id:{axis_id}",
+                f"choice_id:{choice_id}",
+                f"selection_context_sha256:{item.get('selection_context_sha256')}",
+                f"selection_basis:{metadata.get('selection_basis')}",
+            ],
+            "context_refs": list(item.get("citations", [])),
+            "source_refs": list(metadata.get("source_refs", [])),
+            "evidence_class": "J",
+            "result_status": "PROVISIONAL",
+            "promotion_cap": "TYPE_SCREENING",
+            "auto_applied": True,
+            "overwrite_allowed": False,
+            "warning": metadata.get("warning") or registry.get("policy", {}).get("warning"),
+            "equation_chain": None,
+            "assist_id": item.get("assist_id"),
+            "axis_id": axis_id,
+            "choice_id": choice_id,
+            "choice_label": metadata.get("label"),
+            "selection_context_sha256": item.get("selection_context_sha256"),
+        }
+        ledger.append(record)
+        calculation_lineage[field] = {
+            "calculation_id": f"ai_registered_choice:{choice_id}:{field}",
+            "target_field": field,
+            "release_class": "B",
+            "evidence_class": "J",
+            "result_status": "PROVISIONAL",
+            "promotion_cap": "TYPE_SCREENING",
+            "fallback_tier": "AI_REGISTERED_ENGINEERING_CHOICE",
+        }
+    return ledger, calculation_lineage
 
 
 def build_missing_field_recommendations(
@@ -2796,11 +4402,61 @@ def validate_parameters(params: dict[str, Any]) -> list[dict[str, Any]]:
         "rotational_speed_rpm", "membrane_area_m2", "flux", "selectivity", "capacity", "cv",
         "specific_heat_kj_kgk", "maximum_pressure_drop_factor",
         "pressure_drop_power_component_kw", "pressure_component_shaft_power_screening_kw",
-        "pressure_drop_head_component_m",
+        "pressure_drop_head_component_m", "shutoff_head_m", "shutoff_head_factor",
+        "dynamic_viscosity_mpa_s",
+        "packing_specific_area_m2_m3", "packing_void_fraction",
+        "packing_corrugation_angle_deg", "packing_design_flood_fraction",
+        "packing_hetp_m", "packing_bed_section_max_height_m",
+        "gas_flow_m3_h", "liquid_flow_m3_h", "design_droplet_size_um",
+        "gas_density_kg_m3", "liquid_density_kg_m3",
+        "souders_brown_k_m_s", "liquid_retention_time_min",
+        "inlet_nozzle_target_velocity_m_s",
+        "gas_outlet_nozzle_target_velocity_m_s",
+        "liquid_outlet_nozzle_target_velocity_m_s",
+        "inlet_nozzle_dn", "gas_outlet_nozzle_dn",
+        "liquid_outlet_nozzle_dn", "height_or_length_mm",
+        "quantity_count",
+        "catalyst_bed_volume_m3", "reaction_tube_count", "baffle_count",
+        "impeller_diameter_ratio", "agitator_power_density_kw_m3",
+        "motor_power_kw", "active_tube_inner_diameter_mm",
+        "active_tube_length_screening_mm",
+        "required_total_reactor_volume_m3", "selected_tube_count",
+        "reactor_shell_inner_diameter_mm",
+        "nominal_process_tube_wall_thickness_mm",
+        "nominal_shell_wall_thickness_mm",
+        "crystallizer_height_to_diameter_ratio",
+        "vessel_geometry_ratio",
+        "per_stage_pressure_ratio",
+        "impeller_diameter_mm", "shaft_diameter_mm", "gearbox_ratio",
+        "length_mm", "element_length_to_diameter_ratio",
+        "local_resistance_coefficient_per_element", "loading_coefficient",
+        "membrane_area_per_element_m2", "element_outer_diameter_mm",
+        "element_length_mm", "elements_per_pressure_vessel",
+        "pressure_vessel_count", "permeate_flow_m3_h",
+        "feed_flow_m3_h",
+        "calculated_filter_area_m2", "selected_filter_area_m2",
+        "plate_size_mm", "filter_area_per_chamber_m2", "chamber_count",
+        "filtration_pressure_mpa", "hydraulic_closing_pressure_mpa",
+        "evaporation_loading_kg_m2_h", "belt_width_m", "belt_length_m",
+        "belt_area_m2", "drying_zone_count", "residence_time_h",
+        "fan_power_kw", "belt_drive_power_kw", "total_installed_power_kw",
+        "tower_count", "adsorption_time_h", "vessel_diameter_mm",
+        "bed_volume_m3_per_tower", "bed_height_mm",
+        "adsorbent_bulk_density_kg_m3", "adsorbent_mass_kg_per_tower",
+        "generator_efficiency_percent", "electrical_power_kw",
+        "generator_power_kw",
+        "expander_isentropic_specific_work_kj_kg",
+        "expander_actual_specific_work_kj_kg", "mass_flow_kg_s",
+        "runaway_speed_rpm",
     }
     nonnegative = {
         "head_m", "pressure_drop_kpa", "allowable_pressure_drop_kpa", "maximum_pressure_drop_kpa", "npshr_m",
-        "required_npsh_margin_m", "required_surge_margin_percent",
+        "required_npsh_margin_m", "required_surge_margin_percent", "solid_fraction",
+        "chloride_ppm", "ph_value",
+        "packing_pressure_drop_kpa_m", "corrosion_allowance_mm",
+        "demister_pressure_drop_kpa",
+        "intercooler_count",
+        "concentrate_flow_m3_h",
     }
     for field in strictly_positive:
         if present(params, field) and field not in invalid_numeric and float(params[field]) <= 0:
@@ -2810,12 +4466,59 @@ def validate_parameters(params: dict[str, Any]) -> list[dict[str, Any]]:
             errors.append({"field": field, "code": "MUST_BE_NONNEGATIVE", "value": params[field]})
     if present(params, "maximum_pressure_drop_factor") and "maximum_pressure_drop_factor" not in invalid_numeric and float(params["maximum_pressure_drop_factor"]) < 1.0:
         errors.append({"field": "maximum_pressure_drop_factor", "code": "MUST_BE_AT_LEAST_ONE", "value": params["maximum_pressure_drop_factor"]})
+    if present(params, "shutoff_head_factor") and "shutoff_head_factor" not in invalid_numeric and float(params["shutoff_head_factor"]) < 1.0:
+        errors.append({"field": "shutoff_head_factor", "code": "MUST_BE_AT_LEAST_ONE", "value": params["shutoff_head_factor"]})
     if present(params, "efficiency_percent") and "efficiency_percent" not in invalid_numeric and not 0 < float(params["efficiency_percent"]) <= 100:
         errors.append({"field": "efficiency_percent", "code": "OUT_OF_RANGE_0_100", "value": params["efficiency_percent"]})
+    if (
+        present(params, "generator_efficiency_percent")
+        and "generator_efficiency_percent" not in invalid_numeric
+        and not 0 < float(params["generator_efficiency_percent"]) <= 100
+    ):
+        errors.append({
+            "field": "generator_efficiency_percent",
+            "code": "OUT_OF_RANGE_0_100",
+            "value": params["generator_efficiency_percent"],
+        })
     if present(params, "recovery_percent") and "recovery_percent" not in invalid_numeric and not 0 <= float(params["recovery_percent"]) <= 100:
         errors.append({"field": "recovery_percent", "code": "OUT_OF_RANGE_0_100", "value": params["recovery_percent"]})
+    if (
+        present(params, "normal_liquid_level_percent")
+        and "normal_liquid_level_percent" not in invalid_numeric
+        and not 0 < float(params["normal_liquid_level_percent"]) < 100
+    ):
+        errors.append({
+            "field": "normal_liquid_level_percent",
+            "code": "OUT_OF_RANGE_0_100_EXCLUSIVE",
+            "value": params["normal_liquid_level_percent"],
+        })
     if present(params, "fill_fraction") and "fill_fraction" not in invalid_numeric and not 0 < float(params["fill_fraction"]) <= 1:
         errors.append({"field": "fill_fraction", "code": "OUT_OF_RANGE_0_1", "value": params["fill_fraction"]})
+    if present(params, "solid_fraction") and "solid_fraction" not in invalid_numeric and not 0 <= float(params["solid_fraction"]) <= 1:
+        errors.append({"field": "solid_fraction", "code": "OUT_OF_RANGE_0_1", "value": params["solid_fraction"]})
+    for field in ("packing_void_fraction", "packing_design_flood_fraction"):
+        if (
+            present(params, field)
+            and field not in invalid_numeric
+            and not 0 < float(params[field]) <= 1
+        ):
+            errors.append({
+                "field": field,
+                "code": "OUT_OF_RANGE_0_1",
+                "value": params[field],
+            })
+    if (
+        present(params, "packing_corrugation_angle_deg")
+        and "packing_corrugation_angle_deg" not in invalid_numeric
+        and not 0 < float(params["packing_corrugation_angle_deg"]) < 90
+    ):
+        errors.append({
+            "field": "packing_corrugation_angle_deg",
+            "code": "OUT_OF_RANGE_0_90_EXCLUSIVE",
+            "value": params["packing_corrugation_angle_deg"],
+        })
+    if present(params, "ph_value") and "ph_value" not in invalid_numeric and not 0 <= float(params["ph_value"]) <= 14:
+        errors.append({"field": "ph_value", "code": "OUT_OF_RANGE_0_14", "value": params["ph_value"]})
     if present(params, "weld_efficiency") and "weld_efficiency" not in invalid_numeric and not 0 < float(params["weld_efficiency"]) <= 1:
         errors.append({"field": "weld_efficiency", "code": "OUT_OF_RANGE_0_1", "value": params["weld_efficiency"]})
     if present(params, "lmtd_correction_factor") and "lmtd_correction_factor" not in invalid_numeric and not 0 < float(params["lmtd_correction_factor"]) <= 1:
@@ -2836,7 +4539,21 @@ def validate_parameters(params: dict[str, Any]) -> list[dict[str, Any]]:
     if present(params, "selected_outer_diameter_mm") and present(params, "selected_wall_thickness_mm") and not {"selected_outer_diameter_mm", "selected_wall_thickness_mm"} & invalid_numeric:
         if 2 * float(params["selected_wall_thickness_mm"]) >= float(params["selected_outer_diameter_mm"]):
             errors.append({"field": "selected_wall_thickness_mm", "code": "NO_POSITIVE_INNER_DIAMETER", "value": params["selected_wall_thickness_mm"]})
-    for field in ("stage_count", "element_count", "channel_count"):
+    for field in (
+        "stage_count",
+        "element_count",
+        "channel_count",
+        "quantity_count",
+        "reaction_tube_count",
+        "baffle_count",
+        "selected_tube_count",
+        "intercooler_count",
+        "elements_per_pressure_vessel",
+        "pressure_vessel_count",
+        "chamber_count",
+        "drying_zone_count",
+        "tower_count",
+    ):
         if present(params, field) and field not in invalid_numeric and not float(params[field]).is_integer():
             errors.append({"field": field, "code": "MUST_BE_INTEGER", "value": params[field]})
     basis = params.get("pressure_basis")
@@ -5017,6 +6734,6187 @@ def _canonical_sha256(value: Any) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest().upper()
 
 
+def build_exchanger_default_parameter_package(
+    family_id: str,
+    normalized: dict[str, Any],
+    derived: dict[str, Any],
+    fallback_ledger: list[dict[str, Any]],
+    calculations: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Expose the exchanger thermal/hydraulic fallback chain as one auditable package.
+
+    This package is deliberately descriptive.  It neither creates a second
+    calculation authority nor promotes fallback values beyond preliminary
+    screening.  Every supplied value remains higher priority than a registered
+    fallback, and every field remains independently editable/recalculable.
+    """
+    if family_id not in {
+        "family_fixed_tubesheet_exchanger",
+        "family_other_heat_exchanger",
+    }:
+        return None
+    exchanger_type_text = " ".join(
+        str(normalized.get(field) or "")
+        for field in ("equipment_type", "process_function")
+    ).casefold()
+    plate_exchanger_branch = _is_plate_exchanger_branch(
+        exchanger_type_text
+    )
+
+    field_groups = {
+        "thermal_basis": [
+            "heat_duty_kw",
+            "specific_heat_kj_kgk",
+            "overall_u_w_m2k",
+            "lmtd_k",
+            "lmtd_correction_factor",
+            "heat_transfer_area_m2",
+        ],
+        "hydraulic_basis": [
+            "hot_side_allowable_pressure_drop_kpa",
+            "cold_side_allowable_pressure_drop_kpa",
+            "hot_side_target_velocity_m_s",
+            "cold_side_target_velocity_m_s",
+            "hot_side_fouling_resistance_m2k_w",
+            "cold_side_fouling_resistance_m2k_w",
+        ],
+        "preliminary_layout": [
+            "tube_outer_diameter_mm",
+            "tube_length_mm",
+            "tube_or_plate_count",
+            "tube_pass_count",
+            "shell_pass_count",
+            "tube_pitch_ratio",
+            "baffle_cut_percent",
+            "baffle_spacing_ratio",
+            "tube_layout",
+        ],
+        "materials_and_design_conditions": [
+            "tube_material_grade",
+            "shell_material_grade",
+            "design_pressure_mpa",
+            "design_pressure_basis",
+            "design_temperature_c",
+        ],
+    }
+    if plate_exchanger_branch:
+        field_groups["preliminary_layout"] = [
+            "tube_or_plate_count",
+            "plate_effective_area_m2",
+            "plate_pattern",
+            "plate_thickness_mm",
+            "plate_gap_mm",
+            "plate_pass_arrangement",
+        ]
+        field_groups["materials_and_design_conditions"] = [
+            "heat_transfer_plate_material_grade",
+            "plate_gasket_material_grade",
+            "frame_material_grade",
+            "design_pressure_mpa",
+            "design_pressure_basis",
+            "design_temperature_c",
+        ]
+    fallback_by_field = {
+        str(item.get("field_id")): dict(item)
+        for item in fallback_ledger
+        if item.get("field_id")
+    }
+    calculation_by_target = {
+        str(item.get("target_field")): item
+        for item in calculations
+        if item.get("target_field") and item.get("adopted_as_canonical", True)
+    }
+    plate_count_estimate = None
+    if plate_exchanger_branch:
+        plate_area = numeric(normalized.get("plate_effective_area_m2"))
+        required_area = numeric(
+            derived.get("heat_transfer_area_m2")
+            if "heat_transfer_area_m2" in derived
+            else normalized.get("heat_transfer_area_m2")
+        )
+        if (
+            plate_area is not None
+            and plate_area > 0
+            and required_area is not None
+            and required_area > 0
+        ):
+            plate_count_estimate = max(
+                4,
+                int(math.ceil(required_area / plate_area)) + 2,
+            )
+
+    def parameter_row(field_id: str) -> dict[str, Any]:
+        fallback = fallback_by_field.get(field_id)
+        calculation = calculation_by_target.get(field_id)
+        if field_id == "tube_or_plate_count" and plate_count_estimate:
+            value = plate_count_estimate
+            origin = "DETERMINISTIC_CALCULATION"
+            state = "CALCULATED"
+        elif field_id in derived:
+            value = derived[field_id]
+            origin = "DETERMINISTIC_CALCULATION"
+            state = "CALCULATED"
+        elif present(normalized, field_id):
+            value = normalized[field_id]
+            if fallback:
+                origin = str(
+                    fallback.get(
+                        "source_kind",
+                        "registered_final_fallback_default",
+                    )
+                ).upper()
+                state = str(fallback.get("state") or "DEFAULTED")
+            else:
+                origin = "USER_PROJECT_OR_ASPEN_INPUT"
+                state = "PROVIDED"
+        else:
+            value = None
+            origin = "MISSING"
+            state = "MISSING"
+        return {
+            "field_id": field_id,
+            "value": value,
+            "unit": FIELD_UNITS.get(field_id),
+            "state": state,
+            "origin": origin,
+            "fallback_policy_id": (
+                EXCHANGER_DEFAULT_PARAMETER_POLICY_ID if fallback else None
+            ),
+            "fallback_tier": fallback.get("tier") if fallback else None,
+            "basis": list(fallback.get("basis", [])) if fallback else [],
+            "warning": fallback.get("warning") if fallback else None,
+            "equation_chain": (
+                (
+                    "Nplate=ceil(Arequired/Aeffective,plate)+2 end plates"
+                    if field_id == "tube_or_plate_count"
+                    and plate_count_estimate
+                    else calculation.get("equation_chain")
+                )
+                if calculation
+                else (
+                    "Nplate=ceil(Arequired/Aeffective,plate)+2 end plates"
+                    if field_id == "tube_or_plate_count"
+                    and plate_count_estimate
+                    else fallback.get("equation_chain") if fallback else None
+                )
+            ),
+            "user_override_allowed": True,
+            "single_equipment_recalculation_required_after_override": bool(
+                fallback
+                or calculation
+                or (
+                    field_id == "tube_or_plate_count"
+                    and plate_count_estimate is not None
+                )
+            ),
+        }
+
+    groups: list[dict[str, Any]] = []
+    parameters: dict[str, dict[str, Any]] = {}
+    for group_id, field_ids in field_groups.items():
+        rows = [parameter_row(field_id) for field_id in field_ids]
+        groups.append({"group_id": group_id, "parameters": rows})
+        parameters.update({row["field_id"]: row for row in rows})
+
+    default_fields = sorted(
+        field_id
+        for field_id in parameters
+        if field_id in fallback_by_field
+    )
+    calculated_fields = sorted(
+        field_id
+        for field_id in parameters
+        if field_id in derived
+        or (
+            field_id == "tube_or_plate_count"
+            and plate_count_estimate is not None
+        )
+    )
+    direct_fields = sorted(
+        field_id
+        for field_id, row in parameters.items()
+        if row["origin"] == "USER_PROJECT_OR_ASPEN_INPUT"
+    )
+    calculation_chain = [
+        {
+            "calculation_id": item.get("calculation_id"),
+            "target_field": item.get("target_field"),
+            "status": item.get("status"),
+            "equation_chain": item.get("equation_chain"),
+            "formula_chain": item.get("formula_chain"),
+            "adopted_as_canonical": item.get("adopted_as_canonical", True),
+        }
+        for item in calculations
+        if str(item.get("target_field") or "") in parameters
+    ]
+    if plate_count_estimate is not None:
+        calculation_chain.append(
+            {
+                "calculation_id": "plate_exchanger_plate_count_screening",
+                "target_field": "tube_or_plate_count",
+                "status": "CALCULATED",
+                "equation_chain": (
+                    "Nplate=ceil(Arequired/Aeffective,plate)+2 end plates"
+                ),
+                "formula_chain": (
+                    "Nplate=ceil(Arequired/Aeffective,plate)+2 end plates"
+                ),
+                "adopted_as_canonical": True,
+            }
+        )
+    area_value = numeric(
+        parameters.get("heat_transfer_area_m2", {}).get("value")
+    )
+    if plate_exchanger_branch:
+        selected_material = parameters.get(
+            "heat_transfer_plate_material_grade", {}
+        ).get("value")
+        selected_gasket = parameters.get(
+            "plate_gasket_material_grade", {}
+        ).get("value")
+        preliminary_designation = (
+            "PHE-GASKETED-CHEVRON"
+            f"-A{area_value:.1f}" if area_value is not None else
+            "PHE-GASKETED-CHEVRON-AOPEN"
+        )
+        preliminary_designation += (
+            f"-N{plate_count_estimate or 'OPEN'}"
+            f"-{selected_material or 'MOC-OPEN'}"
+            f"-{selected_gasket or 'GASKET-OPEN'}"
+        )
+        construction_selection = {
+            "branch_id": "GASKETED_CHEVRON_PLATE_HEAT_EXCHANGER",
+            "selected_type": "可拆式人字波纹垫片板式换热器",
+            "preliminary_model_designation": preliminary_designation,
+        }
+    else:
+        tube_count = parameters.get("tube_or_plate_count", {}).get("value")
+        tube_od = parameters.get("tube_outer_diameter_mm", {}).get("value")
+        tube_length = parameters.get("tube_length_mm", {}).get("value")
+        shell_material = parameters.get(
+            "shell_material_grade", {}
+        ).get("value")
+        tube_material = parameters.get(
+            "tube_material_grade", {}
+        ).get("value")
+        preliminary_designation = (
+            "STHE-FT-1S2T"
+            f"-A{area_value:.1f}" if area_value is not None else
+            "STHE-FT-1S2T-AOPEN"
+        )
+        preliminary_designation += (
+            f"-D{tube_od or 'OPEN'}"
+            f"-L{tube_length or 'OPEN'}"
+            f"-N{tube_count or 'OPEN'}"
+            f"-{shell_material or 'SHELL-MOC-OPEN'}"
+            f"-{tube_material or 'TUBE-MOC-OPEN'}"
+        )
+        construction_selection = {
+            "branch_id": "FIXED_TUBESHEET_SHELL_AND_TUBE_EXCHANGER",
+            "selected_type": "固定管板式管壳换热器",
+            "preliminary_model_designation": preliminary_designation,
+        }
+    package = {
+        "schema": "exchanger-default-parameter-package-v1",
+        "policy_id": EXCHANGER_DEFAULT_PARAMETER_POLICY_ID,
+        "family_id": family_id,
+        "status": (
+            "PRELIMINARY_WITH_REGISTERED_DEFAULTS"
+            if default_fields
+            else "DIRECT_OR_DETERMINISTIC_PARAMETERS_ONLY"
+        ),
+        "program_generated": True,
+        "llm_used": False,
+        "formal_design_ready": False,
+        "construction_selection": construction_selection,
+        "source_priority": [
+            "user_or_project_same_case_value",
+            "aspen_same_case_value_or_deterministic_derivation",
+            "registered_context_conditioned_recommendation",
+            "registered_explicit_final_fallback",
+        ],
+        "groups": groups,
+        "parameters": parameters,
+        "default_fields_used": default_fields,
+        "direct_fields_used": direct_fields,
+        "deterministically_calculated_fields": calculated_fields,
+        "calculation_chain": calculation_chain,
+        "user_control": {
+            "every_parameter_independently_editable": True,
+            "supplied_value_overwrites_default": True,
+            "single_equipment_recalculation_supported": True,
+            "restore_registered_default_supported": True,
+        },
+        "assumption_boundary": {
+            "water_like_or_generic_clean_liquid_basis_fields": [
+                "hot_side_fouling_resistance_m2k_w",
+                "cold_side_fouling_resistance_m2k_w",
+            ],
+            "phase_conditioned_but_not_two_side_closed_fields": [
+                "hot_side_target_velocity_m_s",
+                "cold_side_target_velocity_m_s",
+            ],
+            "not_yet_proven": [
+                "hot_and_cold_side_stream_assignment",
+                "two_side_thermophysical_properties",
+                "two_side_pressure_drop_calculation",
+                "film_coefficients_and_clean_overall_u",
+                "fouling_service_and_cleaning_cycle",
+                "tube_vibration_and_mechanical_layout",
+            ],
+        },
+        "warning": (
+            "程序保底参数只用于换热面积、管数和结构候选的不中断预设计；"
+            "污垢热阻、允许压降、目标流速和布管参数没有同工况依据时均不能作为正式设计结论。"
+            "用户补充任一参数后应触发该设备重算，并保留修改前后链条。"
+        ),
+    }
+    package["package_sha256"] = _canonical_sha256(package)
+    return package
+
+
+def _preliminary_nominal_plate_thickness_mm(
+    formula_thickness_mm: Any,
+    corrosion_allowance_mm: Any,
+) -> tuple[float | None, dict[str, Any]]:
+    formula = numeric(formula_thickness_mm)
+    corrosion = numeric(corrosion_allowance_mm)
+    if formula is None or formula < 0 or corrosion is None or corrosion < 0:
+        return None, {
+            "status": "OPEN_MISSING_FORMULA_OR_CORROSION_ALLOWANCE",
+            "required_fields": [
+                "formula_calculated_thickness_mm",
+                "corrosion_allowance_mm",
+            ],
+        }
+    fabrication_rounding_margin_mm = 1.0
+    required_candidate = formula + corrosion + fabrication_rounding_margin_mm
+    plate_series_mm = [
+        6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0,
+        25.0, 28.0, 30.0, 32.0, 36.0, 40.0, 45.0, 50.0, 60.0,
+        70.0, 80.0, 90.0, 100.0,
+    ]
+    selected = next(
+        (item for item in plate_series_mm if item >= required_candidate),
+        math.ceil(required_candidate / 10.0) * 10.0,
+    )
+    return selected, {
+        "status": "PRELIMINARY_PLATE_SERIES_CANDIDATE",
+        "formula_thickness_mm": formula,
+        "corrosion_allowance_mm": corrosion,
+        "fabrication_rounding_margin_mm": fabrication_rounding_margin_mm,
+        "required_candidate_before_series_rounding_mm": required_candidate,
+        "selected_series_candidate_mm": selected,
+        "equation_chain": (
+            "t_candidate = next_plate_series("
+            f"t_formula + C2 + 1.0) = next_plate_series("
+            f"{formula:g} + {corrosion:g} + 1.0) = {selected:g} mm"
+        ),
+        "claim_boundary": (
+            "Internal preliminary series only; nominal thickness is not formally "
+            "selected until negative tolerance, forming thinning, external "
+            "pressure, wind/seismic, openings and exact material tables close."
+        ),
+    }
+
+
+def build_programmatic_tower_specification(
+    family_id: str,
+    normalized: dict[str, Any],
+    derived: dict[str, Any],
+    fallback_ledger: list[dict[str, Any]],
+    calculations: list[dict[str, Any]],
+    model_recommendation: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build one concrete, auditable preliminary tower specification.
+
+    Formal tower geometry remains protected.  This package exists so the
+    customer can see what the deterministic program actually selected, which
+    water/hydraulic branch it used, and which values are only fallbacks.
+    """
+    if family_id != "family_tower":
+        return None
+
+    values = {**normalized, **derived}
+    fallback_by_field = {
+        str(item.get("field_id")): dict(item)
+        for item in fallback_ledger
+        if item.get("field_id")
+    }
+    calculation_by_target = {
+        str(item.get("target_field")): dict(item)
+        for item in calculations
+        if item.get("target_field") and item.get("adopted_as_canonical", True)
+    }
+    leading = (
+        dict(model_recommendation.get("leading_candidate"))
+        if isinstance(model_recommendation.get("leading_candidate"), dict)
+        else {}
+    )
+    terminal = (
+        dict(leading.get("terminal_selection"))
+        if isinstance(leading.get("terminal_selection"), dict)
+        else {}
+    )
+    selected_type = str(
+        leading.get("recommended_type")
+        or terminal.get("recommended_type")
+        or values.get("equipment_type")
+        or "单溢流筛板塔"
+    )
+    packed_branch = "填料" in selected_type or "packing" in selected_type.casefold()
+    material_route = _tower_material_route(values)
+    packing_profile = (
+        load_model_rules()
+        .get("design_fallback_policy", {})
+        .get("tower_packing_fallback_profile", {})
+    )
+    if not isinstance(packing_profile, dict):
+        packing_profile = {}
+
+    def descriptor(
+        field_id: str,
+        value: Any = None,
+        *,
+        origin: str | None = None,
+        state: str | None = None,
+        equation_chain: str | None = None,
+        warning: str | None = None,
+        basis: list[str] | None = None,
+        active: bool = True,
+    ) -> dict[str, Any]:
+        fallback = fallback_by_field.get(field_id)
+        calculation = calculation_by_target.get(field_id)
+        resolved = values.get(field_id) if value is None else value
+        if origin is None:
+            if field_id in derived:
+                origin = "DETERMINISTIC_CALCULATION"
+                state = state or "CALCULATED"
+            elif present(normalized, field_id):
+                if fallback:
+                    origin = str(
+                        fallback.get(
+                            "source_kind",
+                            "registered_final_fallback_default",
+                        )
+                    ).upper()
+                    state = state or str(fallback.get("state") or "DEFAULTED")
+                else:
+                    origin = "USER_PROJECT_OR_ASPEN_INPUT"
+                    state = state or "PROVIDED"
+            else:
+                origin = "PROGRAMMATIC_TOWER_SELECTOR"
+                state = state or ("CALCULATED" if resolved is not None else "OPEN")
+        return {
+            "field_id": field_id,
+            "value": resolved,
+            "unit": FIELD_UNITS.get(field_id),
+            "state": state or (
+                "CALCULATED" if resolved is not None else "OPEN"
+            ),
+            "origin": origin,
+            "active_in_selected_branch": active,
+            "evidence_class": "J",
+            "result_status": "PROVISIONAL",
+            "promotion_cap": "TYPE_SCREENING",
+            "formal_design_evidence": False,
+            "fallback_policy_id": (
+                TOWER_DEFAULT_PARAMETER_POLICY_ID
+                if fallback or origin == "REGISTERED_PACKING_FALLBACK_PROFILE"
+                else None
+            ),
+            "fallback_tier": fallback.get("tier") if fallback else None,
+            "basis": list(
+                basis
+                if basis is not None
+                else fallback.get("basis", []) if fallback else []
+            ),
+            "warning": (
+                warning
+                if warning is not None
+                else fallback.get("warning") if fallback else None
+            ),
+            "equation_chain": (
+                equation_chain
+                or (
+                    calculation.get("equation_chain")
+                    if calculation
+                    else fallback.get("equation_chain") if fallback else None
+                )
+            ),
+            "user_override_allowed": True,
+            "single_equipment_recalculation_required_after_override": True,
+        }
+
+    diameter_screening = numeric(values.get("inner_diameter_mm"))
+    height_screening = numeric(values.get("height_mm"))
+    stage_count = numeric(values.get("stage_count"))
+    packing_parameters: dict[str, Any] = {}
+    packing_default_fields = (
+        "packing_type",
+        "packing_specific_area_m2_m3",
+        "packing_void_fraction",
+        "packing_corrugation_angle_deg",
+        "packing_design_flood_fraction",
+        "packing_hetp_m",
+        "packing_pressure_drop_kpa_m",
+        "packing_bed_section_max_height_m",
+    )
+    for field_id in packing_default_fields:
+        if present(values, field_id):
+            packing_parameters[field_id] = values[field_id]
+        else:
+            packing_parameters[field_id] = packing_profile.get(field_id)
+    packing_parameters["packing_material_grade"] = (
+        values.get("packing_material_grade")
+        or values.get("internals_material_grade")
+        or packing_profile.get("packing_material_grade")
+        or "S30408"
+    )
+
+    packing_bed_height_m = None
+    packing_section_count = None
+    liquid_redistributor_count = None
+    packing_total_pressure_drop_kpa = None
+    if packed_branch and stage_count is not None:
+        hetp = numeric(packing_parameters.get("packing_hetp_m"))
+        section_max = numeric(
+            packing_parameters.get("packing_bed_section_max_height_m")
+        )
+        dp_gradient = numeric(
+            packing_parameters.get("packing_pressure_drop_kpa_m")
+        )
+        if hetp is not None and hetp > 0:
+            packing_bed_height_m = stage_count * hetp
+            if section_max is not None and section_max > 0:
+                packing_section_count = max(
+                    1,
+                    int(math.ceil(packing_bed_height_m / section_max)),
+                )
+                liquid_redistributor_count = max(0, packing_section_count - 1)
+            if dp_gradient is not None and dp_gradient >= 0:
+                packing_total_pressure_drop_kpa = (
+                    packing_bed_height_m * dp_gradient
+                )
+            allowance_mm = numeric(values.get("tower_top_bottom_allowance_mm"))
+            if allowance_mm is None:
+                allowance_mm = 3000.0
+            height_screening = (
+                packing_bed_height_m * 1000.0
+                + allowance_mm
+                + 1000.0 * (liquid_redistributor_count or 0)
+            )
+
+    if packed_branch:
+        internals_type = str(packing_parameters["packing_type"])
+        packing_or_tray_specification = (
+            f"{packing_parameters['packing_type']}；"
+            f"材料={packing_parameters['packing_material_grade']}；"
+            f"比表面积={packing_parameters['packing_specific_area_m2_m3']:g} m²/m³；"
+            f"空隙率={packing_parameters['packing_void_fraction']:g}；"
+            f"波纹角={packing_parameters['packing_corrugation_angle_deg']:g}°；"
+            f"设计泛点率={packing_parameters['packing_design_flood_fraction'] * 100:g}%"
+        )
+        internals_branch_id = "PACKED_TOWER_REGISTERED_250Y_FALLBACK_OR_USER_OVERRIDE"
+    else:
+        tray_spacing = numeric(values.get("tray_spacing_mm"))
+        open_area = numeric(values.get("tower_open_area_fraction"))
+        weir_height = numeric(values.get("tower_weir_height_mm"))
+        tray_spacing_text = (
+            f"{tray_spacing:g}" if tray_spacing is not None else "OPEN"
+        )
+        open_area_text = (
+            f"{open_area * 100:g}" if open_area is not None else "OPEN"
+        )
+        weir_height_text = (
+            f"{weir_height:g}" if weir_height is not None else "OPEN"
+        )
+        tray_name = (
+            "双溢流筛板塔盘"
+            if "双溢流" in selected_type
+            else "单溢流浮阀塔盘"
+            if "浮阀" in selected_type
+            else "单溢流筛板塔盘"
+        )
+        internals_type = tray_name
+        packing_or_tray_specification = (
+            f"{tray_name}；"
+            f"板间距={tray_spacing_text} mm；"
+            f"有效区开孔率={open_area_text}%；"
+            f"出口堰高={weir_height_text} mm；"
+            f"内件材料={values.get('internals_material_grade')}"
+        )
+        internals_branch_id = (
+            "DOUBLE_PASS_SIEVE_TRAY"
+            if "双溢流" in selected_type
+            else "SINGLE_PASS_VALVE_TRAY"
+            if "浮阀" in selected_type
+            else "SINGLE_PASS_SIEVE_TRAY_REGISTERED_DEFAULT"
+        )
+
+    corrosion_allowance = numeric(values.get("corrosion_allowance_mm"))
+    nominal_shell, shell_margin = _preliminary_nominal_plate_thickness_mm(
+        values.get("cylinder_calculated_thickness_mm"),
+        corrosion_allowance,
+    )
+    nominal_head, head_margin = _preliminary_nominal_plate_thickness_mm(
+        values.get("head_calculated_thickness_mm"),
+        corrosion_allowance,
+    )
+    diameter_token = (
+        f"{diameter_screening:g}"
+        if diameter_screening is not None
+        else "OPEN"
+    )
+    height_token = (
+        f"{height_screening:g}"
+        if height_screening is not None
+        else "OPEN"
+    )
+    stage_token = f"{stage_count:g}" if stage_count is not None else "OPEN"
+    shell_thickness_token = (
+        f"{nominal_shell:g}" if nominal_shell is not None else "OPEN"
+    )
+    head_thickness_token = (
+        f"{nominal_head:g}" if nominal_head is not None else "OPEN"
+    )
+    shell_grade = str(values.get("shell_material_grade") or "MOC-OPEN")
+    internals_grade = str(
+        values.get("internals_material_grade") or "MOC-OPEN"
+    )
+    internals_code = (
+        "PACK250Y"
+        if packed_branch
+        else "TRAY-2P-SIEVE"
+        if "双溢流" in selected_type
+        else "TRAY-1P-VALVE"
+        if "浮阀" in selected_type
+        else "TRAY-1P-SIEVE"
+    )
+    programmatic_equipment_code = (
+        f"TWR-{internals_code}-DN{diameter_token}-H{height_token}-"
+        f"N{stage_token}-{shell_grade}-{internals_grade}-"
+        f"TS{shell_thickness_token}-TH{head_thickness_token}"
+    )
+    upstream_safe_designation = str(leading.get("designation") or "")
+    if (
+        "N_stage_Aspen=" in upstream_safe_designation
+        and "Di_formal=OPEN" in upstream_safe_designation
+        and "H_formal=OPEN" in upstream_safe_designation
+        and all(
+            token not in upstream_safe_designation
+            for token in (
+                "Di_screen=",
+                "H_layout_screen=",
+                "shell_formula_t=",
+            )
+        )
+    ):
+        model_designation = (
+            f"{upstream_safe_designation} | "
+            f"program_candidate_code={programmatic_equipment_code}"
+        )
+    else:
+        model_designation = programmatic_equipment_code
+    technical_specification = (
+        f"{selected_type}；程序候选规格={programmatic_equipment_code}；"
+        f"塔径/总高初筛={diameter_token}/{height_token} mm；"
+        f"理论级/塔板数={stage_token}；内件={packing_or_tray_specification}；"
+        f"壳体/内件/裙座材料={shell_grade}/{internals_grade}/"
+        f"{values.get('skirt_material_grade') or 'MOC-OPEN'}；"
+        f"壳体/封头名义厚度候选={shell_thickness_token}/"
+        f"{head_thickness_token} mm；"
+        f"设计压力={values.get('design_pressure_mpa')} MPa"
+        f"({values.get('design_pressure_basis')})；"
+        f"设计温度={values.get('design_temperature_c')} °C"
+    )
+
+    fields: dict[str, dict[str, Any]] = {
+        "equipment_name": descriptor(
+            "equipment_name",
+            values.get("equipment_name") or selected_type,
+            origin=(
+                "USER_PROJECT_OR_ASPEN_INPUT"
+                if present(normalized, "equipment_name")
+                else "REGISTERED_DISPLAY_FALLBACK_FROM_SELECTED_TYPE"
+            ),
+            state=(
+                "PROVIDED"
+                if present(normalized, "equipment_name")
+                else "DEFAULTED_DISPLAY_IDENTITY"
+            ),
+            warning=(
+                None
+                if present(normalized, "equipment_name")
+                else "设备名称由程序终选型式补全，用户可改为项目正式名称。"
+            ),
+        ),
+        "equipment_type": descriptor(
+            "equipment_type",
+            selected_type,
+            origin="DETERMINISTIC_TERMINAL_TYPE_SELECTOR",
+            state=str(terminal.get("status") or "SELECTED"),
+            basis=[
+                f"terminal_rule_id:{terminal.get('rule_id') or 'unknown'}",
+                f"selection_basis:{terminal.get('selection_basis') or 'unknown'}",
+            ],
+            warning=terminal.get("assumption"),
+        ),
+        "model_designation": descriptor(
+            "model_designation",
+            model_designation,
+            origin="PROGRAMMATIC_TOWER_SELECTOR",
+            state="PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+            basis=[f"internals_branch:{internals_branch_id}"],
+            warning=(
+                "该代号由程序把塔型、初筛几何、内件、材料和名义厚度候选编码，"
+                "不是厂家商品型号，也不表示正式塔径、塔高或机械设计已经闭合。"
+            ),
+        ),
+        "model_status": descriptor(
+            "model_status",
+            "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+            origin="PROGRAMMATIC_TOWER_SELECTOR",
+        ),
+        "technical_specification": descriptor(
+            "technical_specification",
+            technical_specification,
+            origin="PROGRAMMATIC_TOWER_SELECTOR",
+            state="PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        ),
+        "quantity_count": descriptor(
+            "quantity_count",
+            (
+                int(values["quantity_count"])
+                if present(values, "quantity_count")
+                else 1
+            ),
+            origin=(
+                "USER_PROJECT_OR_ASPEN_INPUT"
+                if present(normalized, "quantity_count")
+                else "REGISTERED_DISPLAY_FALLBACK"
+            ),
+            state=(
+                "PROVIDED"
+                if present(normalized, "quantity_count")
+                else "DEFAULTED"
+            ),
+        ),
+        "tower_internals_type": descriptor(
+            "tower_internals_type",
+            internals_type,
+            origin="PROGRAMMATIC_TOWER_SELECTOR",
+            basis=[f"internals_branch:{internals_branch_id}"],
+        ),
+        "packing_or_tray_specification": descriptor(
+            "packing_or_tray_specification",
+            packing_or_tray_specification,
+            origin="PROGRAMMATIC_TOWER_SELECTOR",
+            basis=[f"internals_branch:{internals_branch_id}"],
+        ),
+        "tower_diameter_screening_mm": descriptor(
+            "tower_diameter_screening_mm",
+            diameter_screening,
+            origin="DETERMINISTIC_CALCULATION",
+            equation_chain=(
+                calculation_by_target.get("inner_diameter_mm", {}).get(
+                    "equation_chain"
+                )
+            ),
+            warning=(
+                "塔径为程序水力初筛值，不是按控制塔段、泛点、雾沫夹带、"
+                "降液管或填料厂家容量曲线闭合的正式塔径。"
+            ),
+        ),
+        "tower_height_screening_mm": descriptor(
+            "tower_height_screening_mm",
+            height_screening,
+            origin="DETERMINISTIC_CALCULATION",
+            equation_chain=(
+                "Hscreen = Nstage*HETP + top/bottom allowance + "
+                "redistributor allowances"
+                if packed_branch
+                else calculation_by_target.get("height_mm", {}).get(
+                    "equation_chain"
+                )
+            ),
+            warning=(
+                "塔高为程序布置初筛值；塔顶/塔底空间、进料段、再分布器、"
+                "人孔、支承、裙座和封头尚未正式闭合。"
+            ),
+        ),
+        "stage_count": descriptor("stage_count"),
+        "tower_internal_height_m": descriptor(
+            "tower_internal_height_m",
+            (
+                packing_bed_height_m
+                if packed_branch
+                else values.get("tower_internal_height_m")
+            ),
+            origin="DETERMINISTIC_CALCULATION",
+            equation_chain=(
+                f"Hbed = Nstage*HETP = {stage_count:g}*"
+                f"{packing_parameters['packing_hetp_m']:g} = "
+                f"{packing_bed_height_m:g} m"
+                if packed_branch
+                and stage_count is not None
+                and packing_bed_height_m is not None
+                else calculation_by_target.get(
+                    "tower_internal_height_m", {}
+                ).get("equation_chain")
+            ),
+        ),
+        "shell_material_grade": descriptor("shell_material_grade"),
+        "internals_material_grade": descriptor("internals_material_grade"),
+        "skirt_material_grade": descriptor("skirt_material_grade"),
+        "corrosion_allowance_mm": descriptor("corrosion_allowance_mm"),
+        "allowable_stress_mpa": descriptor("allowable_stress_mpa"),
+        "weld_efficiency": descriptor("weld_efficiency"),
+        "design_pressure_mpa": descriptor("design_pressure_mpa"),
+        "design_pressure_basis": descriptor("design_pressure_basis"),
+        "design_temperature_c": descriptor("design_temperature_c"),
+        "head_type": descriptor("head_type"),
+        "formula_only_shell_thickness_mm": descriptor(
+            "formula_only_shell_thickness_mm",
+            values.get("cylinder_calculated_thickness_mm"),
+            origin="DETERMINISTIC_CALCULATION",
+            equation_chain=calculation_by_target.get(
+                "cylinder_calculated_thickness_mm", {}
+            ).get("equation_chain"),
+            warning="仅为内压公式计算厚度，不是名义厚度。",
+        ),
+        "formula_only_head_thickness_mm": descriptor(
+            "formula_only_head_thickness_mm",
+            values.get("head_calculated_thickness_mm"),
+            origin="DETERMINISTIC_CALCULATION",
+            equation_chain=calculation_by_target.get(
+                "head_calculated_thickness_mm", {}
+            ).get("equation_chain"),
+            warning="仅为内压公式计算厚度，不是名义厚度。",
+        ),
+        "preliminary_nominal_shell_thickness_mm": descriptor(
+            "preliminary_nominal_shell_thickness_mm",
+            nominal_shell,
+            origin="PROGRAMMATIC_PRELIMINARY_PLATE_SERIES",
+            equation_chain=shell_margin.get("equation_chain"),
+            warning=shell_margin.get("claim_boundary"),
+        ),
+        "preliminary_nominal_head_thickness_mm": descriptor(
+            "preliminary_nominal_head_thickness_mm",
+            nominal_head,
+            origin="PROGRAMMATIC_PRELIMINARY_PLATE_SERIES",
+            equation_chain=head_margin.get("equation_chain"),
+            warning=head_margin.get("claim_boundary"),
+        ),
+        "nominal_shell_wall_thickness_selected": descriptor(
+            "nominal_shell_wall_thickness_selected",
+            False,
+            origin="FORMAL_GATE_STATE",
+            state="OPEN_FORMAL_EVIDENCE_GATE",
+        ),
+        "nominal_head_wall_thickness_selected": descriptor(
+            "nominal_head_wall_thickness_selected",
+            False,
+            origin="FORMAL_GATE_STATE",
+            state="OPEN_FORMAL_EVIDENCE_GATE",
+        ),
+        "insulation_spec": descriptor("insulation_spec"),
+        "protective_layer": descriptor("protective_layer"),
+    }
+
+    for field_id in (
+        "tray_spacing_mm",
+        "tower_cross_section_m2",
+        "tower_downcomer_area_fraction",
+        "tower_receiving_area_fraction",
+        "tower_inactive_area_fraction",
+        "tower_active_area_fraction",
+        "tower_active_area_m2",
+        "tower_open_area_fraction",
+        "tower_hole_area_m2",
+        "tower_actual_superficial_velocity_m_s",
+        "tower_weir_length_ratio",
+        "tower_weir_height_mm",
+        "tower_downcomer_residence_time_s",
+        "bottom_liquid_height_m",
+    ):
+        fields[field_id] = descriptor(field_id, active=not packed_branch)
+
+    for field_id, value in packing_parameters.items():
+        fields[field_id] = descriptor(
+            field_id,
+            value,
+            origin=(
+                None
+                if present(normalized, field_id)
+                else "REGISTERED_PACKING_FALLBACK_PROFILE"
+            ),
+            state=(
+                None
+                if present(normalized, field_id)
+                else "DEFAULTED" if packed_branch else "INACTIVE_ALTERNATIVE"
+            ),
+            warning=packing_profile.get("warning"),
+            basis=[
+                f"packing_profile_id:{packing_profile.get('profile_id')}",
+                f"branch_active:{str(packed_branch).lower()}",
+            ],
+            active=packed_branch,
+        )
+    for field_id, value, equation in (
+        (
+            "packing_bed_height_m",
+            packing_bed_height_m,
+            "Hbed = Nstage*HETP",
+        ),
+        (
+            "packing_section_count",
+            packing_section_count,
+            "Nbed = ceil(Hbed/Hbed,max)",
+        ),
+        (
+            "liquid_redistributor_count",
+            liquid_redistributor_count,
+            "Nredistributor = max(Nbed-1, 0)",
+        ),
+        (
+            "packing_total_pressure_drop_kpa",
+            packing_total_pressure_drop_kpa,
+            "dPpacking = Hbed*(dP/H)",
+        ),
+    ):
+        fields[field_id] = descriptor(
+            field_id,
+            value,
+            origin="DETERMINISTIC_CALCULATION",
+            state="CALCULATED" if value is not None else "INACTIVE_ALTERNATIVE",
+            equation_chain=equation,
+            active=packed_branch,
+        )
+
+    package = {
+        "schema": "programmatic-tower-specification-v1",
+        "policy_id": TOWER_DEFAULT_PARAMETER_POLICY_ID,
+        "family_id": family_id,
+        "status": "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "formal_geometry_selected": False,
+        "formal_design_ready": False,
+        "fields": fields,
+        "selection_branch": {
+            "terminal_rule_id": terminal.get("rule_id"),
+            "terminal_status": terminal.get("status"),
+            "selection_basis": terminal.get("selection_basis"),
+            "default_applied": terminal.get("default_applied"),
+            "recommended_type": selected_type,
+            "internals_branch_id": internals_branch_id,
+            "packed_tower_branch": packed_branch,
+            "material_route_id": material_route.get("route_id"),
+            "diameter_branch": (
+                "volume_flow_divided_by_registered_superficial_velocity"
+                if "tower_preliminary_diameter" in {
+                    str(item.get("calculation_id")) for item in calculations
+                }
+                else "registered_minimum_or_supplied_geometry"
+            ),
+            "height_branch": (
+                "stage_count_times_registered_HETP_plus_allowances"
+                if packed_branch
+                else "tray_count_times_diameter_conditioned_spacing_plus_allowances"
+            ),
+        },
+        "material_selection_chain": {
+            **material_route,
+            "allowable_stress_screening_value_mpa": values.get(
+                "allowable_stress_mpa"
+            ),
+            "corrosion_allowance_screening_value_mm": values.get(
+                "corrosion_allowance_mm"
+            ),
+            "exact_standard_table_cell_reused": False,
+        },
+        "selection_margin_structure": {
+            "shell": shell_margin,
+            "head": head_margin,
+            "formal_nominal_thickness_selected": False,
+        },
+        "inactive_alternative": (
+            {
+                "status": "REGISTERED_BUT_NOT_USED_IN_SELECTED_TRAY_BRANCH",
+                "profile": packing_profile,
+            }
+            if not packed_branch
+            else None
+        ),
+        "standard_bundle": [
+            {
+                "standard": "GB/T 150.2-2024",
+                "role": "pressure_vessel_material_selection_and_exact_property_table_gate",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+            {
+                "standard": "GB/T 713.2-2023",
+                "role": "pressure_vessel_steel_plate_product_route",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+            {
+                "standard": "GB/T 4237-2015",
+                "role": "stainless_plate_product_route_for_internals_or_shell",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+            {
+                "standard": "NB/T 47041-2014",
+                "role": "tower_vessel_design_route",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+        ],
+        "formal_open_gates": [
+            "controlling_section_gas_and_liquid_loads",
+            "gas_and_liquid_density_viscosity_and_surface_tension",
+            "flooding_entrainment_weeping_downcomer_and_pressure_drop_rating",
+            "packing_or_tray_vendor_capacity_and_efficiency_evidence",
+            "exact_material_thickness_temperature_allowable_stress_table_cell",
+            "external_pressure_and_vacuum_stability",
+            "wind_seismic_nozzle_platform_support_and_skirt_calculation",
+            "forming_thinning_negative_tolerance_and_nominal_thickness",
+            "drawing_mass_and_procurement_specification",
+        ],
+        "user_control": {
+            "every_displayed_parameter_editable": True,
+            "supplied_value_overwrites_default": True,
+            "single_tower_recalculation_supported": True,
+            "restore_registered_default_supported": True,
+            "branch_override_field": "terminal_type_rule_override_id",
+        },
+        "warning": (
+            "这是程序生成的具体塔器预选规格，不是厂家/塔内件正式水力学或机械设计。"
+            "筛板与填料分支互斥；用户改变型式、物性、负荷、材料或裕量后必须只重算该塔，"
+            "且不得把筛选塔径、塔高和名义厚度候选升级为正式值。"
+        ),
+    }
+    hash_payload = json.loads(json.dumps(package, ensure_ascii=False))
+    for row in hash_payload["fields"].values():
+        row.pop("program_specification_sha256", None)
+    specification_sha256 = _canonical_sha256(hash_payload)
+    package["program_specification_sha256"] = specification_sha256
+    for row in package["fields"].values():
+        row["program_specification_sha256"] = specification_sha256
+    return package
+
+
+def build_programmatic_vessel_separator_specification(
+    family_id: str,
+    normalized: dict[str, Any],
+    derived: dict[str, Any],
+    fallback_ledger: list[dict[str, Any]],
+    calculations: list[dict[str, Any]],
+    model_recommendation: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build a concrete preliminary vessel/separator specification.
+
+    This first branch intentionally excludes reactors and crystallizers.  Their
+    residence-time/kinetics/agitation requirements are different and must not
+    be silently satisfied by a separator fallback.
+    """
+    if family_id != "family_reactor_vessel_separator":
+        return None
+
+    values = {**normalized, **derived}
+    leading = (
+        dict(model_recommendation.get("leading_candidate"))
+        if isinstance(model_recommendation.get("leading_candidate"), dict)
+        else {}
+    )
+    terminal = (
+        dict(leading.get("terminal_selection"))
+        if isinstance(leading.get("terminal_selection"), dict)
+        else {}
+    )
+    selected_type = str(
+        leading.get("recommended_type")
+        or terminal.get("recommended_type")
+        or values.get("equipment_type")
+        or "立式工艺分离罐"
+    )
+    block_type = str(values.get("aspen_block_type") or "").strip().upper()
+    type_token = selected_type.casefold()
+    reactor_branch = (
+        block_type
+        in {
+            "RPLUG",
+            "RCSTR",
+            "RBATCH",
+            "RSTOIC",
+            "RYIELD",
+            "REQUIL",
+            "RGIBBS",
+        }
+        or "反应器" in selected_type
+        or "reactor" in type_token
+    )
+    crystallizer_branch = (
+        block_type == "CRYSTALLIZER"
+        or "结晶" in selected_type
+        or "crystallizer" in type_token
+    )
+    batch_column_branch = block_type == "BATCHSEP" or "间歇筛板精馏塔" in selected_type
+    if reactor_branch or crystallizer_branch or batch_column_branch:
+        return None
+
+    liquid_liquid_branch = (
+        block_type == "DECANTER"
+        or "液液" in selected_type
+        or "decanter" in type_token
+    )
+    horizontal_branch = (
+        block_type in {"FLASH3", "DECANTER"}
+        or "卧式" in selected_type
+        or "horizontal" in type_token
+    )
+    three_phase_branch = (
+        block_type == "FLASH3"
+        or "三相" in selected_type
+        or "three phase" in type_token
+        or "three-phase" in type_token
+    )
+    separator_branch_id = (
+        "HORIZONTAL_LIQUID_LIQUID_DECANTER"
+        if liquid_liquid_branch
+        else "HORIZONTAL_THREE_PHASE_SEPARATOR"
+        if three_phase_branch
+        else "VERTICAL_GAS_LIQUID_SEPARATOR"
+        if not horizontal_branch
+        else "HORIZONTAL_GAS_LIQUID_SEPARATOR"
+    )
+    profile = (
+        load_model_rules()
+        .get("design_fallback_policy", {})
+        .get("vessel_separator_hydraulic_fallback_profile", {})
+    )
+    if not isinstance(profile, dict):
+        profile = {}
+    fallback_by_field = {
+        str(item.get("field_id")): dict(item)
+        for item in fallback_ledger
+        if item.get("field_id")
+    }
+    calculation_by_target = {
+        str(item.get("target_field")): dict(item)
+        for item in calculations
+        if item.get("target_field") and item.get("adopted_as_canonical", True)
+    }
+    material_route = _vessel_material_route(values)
+
+    def profile_value(field_id: str, default: Any = None) -> Any:
+        if present(values, field_id):
+            return values[field_id]
+        value = profile.get(field_id, default)
+        return value
+
+    def descriptor(
+        field_id: str,
+        value: Any = None,
+        *,
+        origin: str | None = None,
+        state: str | None = None,
+        equation_chain: str | None = None,
+        warning: str | None = None,
+        basis: list[str] | None = None,
+        active: bool = True,
+    ) -> dict[str, Any]:
+        fallback = fallback_by_field.get(field_id)
+        calculation = calculation_by_target.get(field_id)
+        resolved = values.get(field_id) if value is None else value
+        if origin is None:
+            if field_id in derived:
+                origin = "DETERMINISTIC_CALCULATION"
+                state = state or "CALCULATED"
+            elif present(normalized, field_id):
+                if fallback:
+                    origin = str(
+                        fallback.get(
+                            "source_kind",
+                            "registered_final_fallback_default",
+                        )
+                    ).upper()
+                    state = state or str(fallback.get("state") or "DEFAULTED")
+                else:
+                    origin = "USER_PROJECT_OR_ASPEN_INPUT"
+                    state = state or "PROVIDED"
+            else:
+                origin = "PROGRAMMATIC_VESSEL_SEPARATOR_SELECTOR"
+                state = state or (
+                    "CALCULATED" if resolved is not None else "OPEN"
+                )
+        return {
+            "field_id": field_id,
+            "value": resolved,
+            "unit": FIELD_UNITS.get(field_id),
+            "state": state
+            or ("CALCULATED" if resolved is not None else "OPEN"),
+            "origin": origin,
+            "active_in_selected_branch": active,
+            "evidence_class": "J",
+            "result_status": "PROVISIONAL",
+            "promotion_cap": "TYPE_SCREENING",
+            "formal_design_evidence": False,
+            "fallback_policy_id": (
+                VESSEL_SEPARATOR_DEFAULT_PARAMETER_POLICY_ID
+                if fallback
+                or origin == "REGISTERED_SEPARATOR_HYDRAULIC_FALLBACK"
+                else None
+            ),
+            "fallback_tier": fallback.get("tier") if fallback else None,
+            "basis": list(
+                basis
+                if basis is not None
+                else fallback.get("basis", [])
+                if fallback
+                else []
+            ),
+            "warning": (
+                warning
+                if warning is not None
+                else fallback.get("warning")
+                if fallback
+                else None
+            ),
+            "equation_chain": (
+                equation_chain
+                or (
+                    calculation.get("equation_chain")
+                    if calculation
+                    else fallback.get("equation_chain")
+                    if fallback
+                    else None
+                )
+            ),
+            "user_override_allowed": True,
+            "single_equipment_recalculation_required_after_override": True,
+        }
+
+    orientation = str(
+        values.get("orientation")
+        or ("卧式" if horizontal_branch else profile.get("orientation", "立式"))
+    )
+    diameter_screening = numeric(
+        values.get("inner_diameter_mm")
+        if present(values, "inner_diameter_mm")
+        else values.get("diameter_mm")
+    )
+    height_screening = numeric(
+        values.get("height_or_length_mm")
+        if present(values, "height_or_length_mm")
+        else values.get("straight_shell_length_mm")
+        if present(values, "straight_shell_length_mm")
+        else values.get("height_mm")
+    )
+    vessel_volume = numeric(
+        values.get("volume_m3")
+        if present(values, "volume_m3")
+        else values.get("straight_shell_geometric_volume_m3")
+    )
+
+    gas_flow = numeric(profile_value("gas_flow_m3_h", 100.0))
+    liquid_flow = numeric(profile_value("liquid_flow_m3_h", 10.0))
+    if liquid_liquid_branch:
+        gas_flow = None
+        liquid_flow = numeric(
+            values.get("liquid_flow_m3_h")
+            if present(values, "liquid_flow_m3_h")
+            else values.get("flow_m3_h")
+            if present(values, "flow_m3_h")
+            else profile.get("liquid_flow_m3_h", 10.0)
+        )
+    else:
+        phase = canonical_phase(values.get("phase"))
+        if present(values, "flow_m3_h"):
+            if phase == "vapor" and not present(values, "gas_flow_m3_h"):
+                gas_flow = numeric(values.get("flow_m3_h"))
+            elif phase == "liquid" and not present(
+                values,
+                "liquid_flow_m3_h",
+            ):
+                liquid_flow = numeric(values.get("flow_m3_h"))
+
+    gas_density = numeric(profile_value("gas_density_kg_m3", 1.2))
+    liquid_density = numeric(
+        profile_value(
+            "liquid_density_kg_m3",
+            values.get("density_kg_m3", 1000.0),
+        )
+    )
+    k_value = numeric(profile_value("souders_brown_k_m_s", 0.107))
+    retention = numeric(
+        profile_value(
+            "liquid_retention_time_min",
+            values.get("retention_time_min", 5.0),
+        )
+    )
+    normal_level = numeric(
+        profile_value("normal_liquid_level_percent", 50.0)
+    )
+    gas_allowable_velocity = None
+    gas_capacity_diameter = None
+    if (
+        gas_flow is not None
+        and gas_flow > 0
+        and gas_density is not None
+        and gas_density > 0
+        and liquid_density is not None
+        and liquid_density > gas_density
+        and k_value is not None
+        and k_value > 0
+    ):
+        gas_allowable_velocity = k_value * math.sqrt(
+            (liquid_density - gas_density) / gas_density
+        )
+        gas_capacity_diameter = (
+            math.sqrt(
+                4.0
+                * (gas_flow / 3600.0)
+                / (math.pi * gas_allowable_velocity)
+            )
+            * 1000.0
+        )
+    liquid_holdup_required = (
+        liquid_flow * retention / 60.0
+        if liquid_flow is not None
+        and liquid_flow >= 0
+        and retention is not None
+        and retention > 0
+        else None
+    )
+    liquid_holdup_available = (
+        vessel_volume * normal_level / 100.0
+        if vessel_volume is not None
+        and normal_level is not None
+        and 0 < normal_level < 100
+        else None
+    )
+
+    standard_dn_series = [
+        int(item)
+        for item in profile.get("standard_dn_series_mm", [])
+        if isinstance(item, (int, float)) and item > 0
+    ]
+    if not standard_dn_series:
+        standard_dn_series = [
+            15,
+            20,
+            25,
+            32,
+            40,
+            50,
+            65,
+            80,
+            100,
+            125,
+            150,
+            200,
+            250,
+            300,
+            350,
+            400,
+            450,
+            500,
+            600,
+            700,
+            800,
+            900,
+            1000,
+        ]
+
+    def nozzle_dn(flow_m3_h: float | None, velocity_m_s: Any) -> tuple[int | None, str | None]:
+        velocity = numeric(velocity_m_s)
+        if (
+            flow_m3_h is None
+            or flow_m3_h <= 0
+            or velocity is None
+            or velocity <= 0
+        ):
+            return None, None
+        required_mm = (
+            math.sqrt(
+                4.0
+                * (flow_m3_h / 3600.0)
+                / (math.pi * velocity)
+            )
+            * 1000.0
+        )
+        selected = next(
+            (item for item in standard_dn_series if item >= required_mm),
+            int(math.ceil(required_mm / 100.0) * 100.0),
+        )
+        return selected, (
+            "Dreq=sqrt(4*Q/(pi*v*3600)); "
+            f"Dreq={required_mm:.3f} mm; "
+            f"DN=next_registered_series(Dreq)={selected}"
+        )
+
+    inlet_flow = (
+        (gas_flow or 0.0) + (liquid_flow or 0.0)
+        if gas_flow is not None or liquid_flow is not None
+        else None
+    )
+    inlet_velocity = profile_value(
+        "inlet_nozzle_target_velocity_m_s",
+        10.0,
+    )
+    gas_outlet_velocity = profile_value(
+        "gas_outlet_nozzle_target_velocity_m_s",
+        15.0,
+    )
+    liquid_outlet_velocity = profile_value(
+        "liquid_outlet_nozzle_target_velocity_m_s",
+        1.5,
+    )
+    inlet_dn, inlet_dn_equation = nozzle_dn(inlet_flow, inlet_velocity)
+    gas_dn, gas_dn_equation = nozzle_dn(gas_flow, gas_outlet_velocity)
+    liquid_dn, liquid_dn_equation = nozzle_dn(
+        liquid_flow,
+        liquid_outlet_velocity,
+    )
+    if present(values, "inlet_nozzle_dn"):
+        inlet_dn = int(float(values["inlet_nozzle_dn"]))
+    if present(values, "gas_outlet_nozzle_dn"):
+        gas_dn = int(float(values["gas_outlet_nozzle_dn"]))
+    if present(values, "liquid_outlet_nozzle_dn"):
+        liquid_dn = int(float(values["liquid_outlet_nozzle_dn"]))
+
+    demister_active = not liquid_liquid_branch
+    demister_type = str(
+        values.get("demister_type")
+        or (
+            profile.get("demister_type")
+            if demister_active
+            else "不设丝网除沫器；采用S30408入口缓冲器、聚结板组件和可调界面堰"
+        )
+    )
+    demister_nominal_diameter = (
+        int(round(diameter_screening / 100.0) * 100)
+        if demister_active and diameter_screening is not None
+        else None
+    )
+    internals_specification = (
+        (
+            f"{demister_type}；除沫器DN{demister_nominal_diameter}; "
+            f"设计液滴={profile_value('design_droplet_size_um', 150.0):g} μm"
+        )
+        if demister_active and demister_nominal_diameter is not None
+        else demister_type
+    )
+
+    corrosion_allowance = numeric(values.get("corrosion_allowance_mm"))
+    nominal_shell, shell_margin = _preliminary_nominal_plate_thickness_mm(
+        values.get("cylinder_calculated_thickness_mm"),
+        corrosion_allowance,
+    )
+    nominal_head, head_margin = _preliminary_nominal_plate_thickness_mm(
+        values.get("head_calculated_thickness_mm"),
+        corrosion_allowance,
+    )
+    dimension_text = (
+        f"Φ{diameter_screening:g}×{height_screening:g} mm"
+        if diameter_screening is not None and height_screening is not None
+        else "几何尺寸待补"
+    )
+    nozzle_text = (
+        f"入口DN{inlet_dn or 'OPEN'}、气相出口DN{gas_dn or 'N/A'}、"
+        f"液相出口DN{liquid_dn or 'OPEN'}"
+    )
+    thickness_text = (
+        f"筒体/封头名义厚度程序候选={nominal_shell or 'OPEN'}/"
+        f"{nominal_head or 'OPEN'} mm"
+    )
+    technical_specification = (
+        f"{selected_type}；{orientation}；{dimension_text}；"
+        f"2:1椭圆封头；壳体={values.get('shell_material_grade') or values.get('material')}；"
+        f"{thickness_text}；内件={internals_specification}；{nozzle_text}"
+    )
+    hydraulic_status = (
+        "FAIL_LIQUID_HOLDUP_SCREENING"
+        if liquid_holdup_required is not None
+        and liquid_holdup_available is not None
+        and liquid_holdup_available < liquid_holdup_required
+        else "FAIL_GAS_CAPACITY_DIAMETER_SCREENING"
+        if gas_capacity_diameter is not None
+        and diameter_screening is not None
+        and diameter_screening < gas_capacity_diameter
+        else "PASS_PRELIMINARY_HYDRAULIC_SCREENING"
+        if gas_capacity_diameter is not None
+        or liquid_holdup_required is not None
+        else "OPEN_HYDRAULIC_INPUTS"
+    )
+
+    profile_warning = str(
+        profile.get("warning")
+        or "分离器水力参数为程序保底，只可用于预设计。"
+    )
+    fields: dict[str, dict[str, Any]] = {
+        "equipment_name": descriptor(
+            "equipment_name",
+            values.get("equipment_name") or selected_type,
+            origin=(
+                "USER_PROJECT_OR_ASPEN_INPUT"
+                if present(normalized, "equipment_name")
+                else "REGISTERED_DISPLAY_FALLBACK_FROM_SELECTED_TYPE"
+            ),
+            state=(
+                "PROVIDED"
+                if present(normalized, "equipment_name")
+                else "DEFAULTED_DISPLAY_IDENTITY"
+            ),
+            warning=(
+                None
+                if present(normalized, "equipment_name")
+                else "设备名称由程序终选型式补全，用户可改为项目正式名称。"
+            ),
+        ),
+        "equipment_type": descriptor(
+            "equipment_type",
+            selected_type,
+            origin="DETERMINISTIC_TERMINAL_TYPE_SELECTOR",
+            state=str(terminal.get("status") or "SELECTED"),
+            basis=[
+                f"terminal_rule_id:{terminal.get('rule_id') or 'unknown'}",
+                f"selection_basis:{terminal.get('selection_basis') or 'unknown'}",
+            ],
+            warning=terminal.get("assumption"),
+        ),
+        "equipment_subfamily": descriptor(
+            "equipment_subfamily",
+            "液液分离器"
+            if liquid_liquid_branch
+            else "三相分离器"
+            if three_phase_branch
+            else "气液分离器/工艺分离罐",
+            origin="DETERMINISTIC_SUBFAMILY_CLASSIFIER",
+            basis=[f"separator_branch:{separator_branch_id}"],
+        ),
+        "orientation": descriptor(
+            "orientation",
+            orientation,
+            origin=(
+                "USER_PROJECT_OR_ASPEN_INPUT"
+                if present(normalized, "orientation")
+                else "DETERMINISTIC_SUBFAMILY_CLASSIFIER"
+            ),
+            basis=[f"separator_branch:{separator_branch_id}"],
+        ),
+        "technical_specification": descriptor(
+            "technical_specification",
+            technical_specification,
+            origin="PROGRAMMATIC_VESSEL_SEPARATOR_SELECTOR",
+            warning=(
+                "技术规格为程序预选字符串；尺寸、厚度、接管和内件仍保留各自来源、"
+                "公式和正式证据闸门。"
+            ),
+        ),
+        "process_function": descriptor(
+            "process_function",
+            values.get("process_function")
+            or (
+                "液液沉降与界面分离"
+                if liquid_liquid_branch
+                else "气液闪蒸/缓冲、液滴沉降与除沫"
+            ),
+            origin=(
+                "USER_PROJECT_OR_ASPEN_INPUT"
+                if present(normalized, "process_function")
+                else "DETERMINISTIC_SUBFAMILY_DISPLAY_DEFAULT"
+            ),
+            state=(
+                "PROVIDED"
+                if present(normalized, "process_function")
+                else "DEFAULTED_DISPLAY_IDENTITY"
+            ),
+        ),
+        "diameter_mm": descriptor(
+            "diameter_mm",
+            diameter_screening,
+            origin="DETERMINISTIC_GEOMETRY_SCREEN",
+            state="PRELIMINARY_CANDIDATE_NOT_FORMAL",
+            warning="一览表直径沿用程序水力/容积初筛值，不代表GB/T 9019公称直径已正式选定。",
+        ),
+        "height_or_length_mm": descriptor(
+            "height_or_length_mm",
+            height_screening,
+            origin="DETERMINISTIC_GEOMETRY_SCREEN",
+            state="PRELIMINARY_CANDIDATE_NOT_FORMAL",
+            warning="一览表高度/长度沿用程序布置初筛值，不代表机械总图尺寸已正式选定。",
+        ),
+        "vessel_diameter_screening_mm": descriptor(
+            "vessel_diameter_screening_mm",
+            diameter_screening,
+            origin="DETERMINISTIC_GEOMETRY_SCREEN",
+            warning="该直径仅用于分离器水力与布置初筛，不是正式压力容器公称直径选定。",
+        ),
+        "vessel_height_or_length_screening_mm": descriptor(
+            "vessel_height_or_length_screening_mm",
+            height_screening,
+            origin="DETERMINISTIC_GEOMETRY_SCREEN",
+            warning="该高度/长度仅用于初步容积和布置，不是正式机械尺寸。",
+        ),
+        "volume_m3": descriptor("volume_m3", vessel_volume),
+        "gas_flow_m3_h": descriptor(
+            "gas_flow_m3_h",
+            gas_flow,
+            origin=(
+                None
+                if present(normalized, "gas_flow_m3_h")
+                else "REGISTERED_SEPARATOR_HYDRAULIC_FALLBACK"
+            ),
+            state=(
+                None
+                if present(normalized, "gas_flow_m3_h")
+                else "INACTIVE_NOT_APPLICABLE"
+                if liquid_liquid_branch
+                else "DEFAULTED"
+            ),
+            warning=profile_warning,
+            active=not liquid_liquid_branch,
+        ),
+        "liquid_flow_m3_h": descriptor(
+            "liquid_flow_m3_h",
+            liquid_flow,
+            origin=(
+                None
+                if present(normalized, "liquid_flow_m3_h")
+                else "REGISTERED_SEPARATOR_HYDRAULIC_FALLBACK"
+            ),
+            state=(
+                None
+                if present(normalized, "liquid_flow_m3_h")
+                else "DEFAULTED"
+            ),
+            warning=profile_warning,
+        ),
+        "gas_density_kg_m3": descriptor(
+            "gas_density_kg_m3",
+            gas_density,
+            origin=(
+                None
+                if present(normalized, "gas_density_kg_m3")
+                else "REGISTERED_SEPARATOR_HYDRAULIC_FALLBACK"
+            ),
+            state=(
+                None
+                if present(normalized, "gas_density_kg_m3")
+                else "INACTIVE_NOT_APPLICABLE"
+                if liquid_liquid_branch
+                else "DEFAULTED"
+            ),
+            warning=profile_warning,
+            active=not liquid_liquid_branch,
+        ),
+        "liquid_density_kg_m3": descriptor(
+            "liquid_density_kg_m3",
+            liquid_density,
+            origin=(
+                None
+                if present(normalized, "liquid_density_kg_m3")
+                else "REGISTERED_SEPARATOR_HYDRAULIC_FALLBACK"
+            ),
+            state=(
+                None
+                if present(normalized, "liquid_density_kg_m3")
+                else "DEFAULTED"
+            ),
+            warning=profile_warning,
+        ),
+        "souders_brown_k_m_s": descriptor(
+            "souders_brown_k_m_s",
+            k_value,
+            origin=(
+                None
+                if present(normalized, "souders_brown_k_m_s")
+                else "REGISTERED_SEPARATOR_HYDRAULIC_FALLBACK"
+            ),
+            state=(
+                None
+                if present(normalized, "souders_brown_k_m_s")
+                else "INACTIVE_NOT_APPLICABLE"
+                if liquid_liquid_branch
+                else "DEFAULTED"
+            ),
+            warning=profile_warning,
+            active=not liquid_liquid_branch,
+        ),
+        "separator_allowable_gas_velocity_m_s": descriptor(
+            "separator_allowable_gas_velocity_m_s",
+            gas_allowable_velocity,
+            origin="DETERMINISTIC_CALCULATION",
+            equation_chain=(
+                "u_allow=K*sqrt((rho_L-rho_G)/rho_G)"
+                if gas_allowable_velocity is not None
+                else None
+            ),
+            warning=profile_warning,
+            active=not liquid_liquid_branch,
+        ),
+        "separator_gas_capacity_diameter_mm": descriptor(
+            "separator_gas_capacity_diameter_mm",
+            gas_capacity_diameter,
+            origin="DETERMINISTIC_CALCULATION",
+            equation_chain=(
+                "Dgas=sqrt(4*(Qg/3600)/(pi*u_allow))*1000"
+                if gas_capacity_diameter is not None
+                else None
+            ),
+            warning="仅为Souders-Brown气相容量直径，不含入口动量、除沫器面积、液位和内部空间要求。",
+            active=not liquid_liquid_branch,
+        ),
+        "liquid_retention_time_min": descriptor(
+            "liquid_retention_time_min",
+            retention,
+            origin=(
+                None
+                if present(normalized, "liquid_retention_time_min")
+                else "REGISTERED_SEPARATOR_HYDRAULIC_FALLBACK"
+            ),
+            state=(
+                None
+                if present(normalized, "liquid_retention_time_min")
+                else "DEFAULTED"
+            ),
+            warning=profile_warning,
+        ),
+        "normal_liquid_level_percent": descriptor(
+            "normal_liquid_level_percent",
+            normal_level,
+            origin=(
+                None
+                if present(normalized, "normal_liquid_level_percent")
+                else "REGISTERED_SEPARATOR_HYDRAULIC_FALLBACK"
+            ),
+            state=(
+                None
+                if present(normalized, "normal_liquid_level_percent")
+                else "DEFAULTED"
+            ),
+            warning=profile_warning,
+        ),
+        "liquid_holdup_required_volume_m3": descriptor(
+            "liquid_holdup_required_volume_m3",
+            liquid_holdup_required,
+            origin="DETERMINISTIC_CALCULATION",
+            equation_chain="Vhold=Ql*t/60",
+            warning="持液容积只覆盖登记停留时间，不含高低液位、报警、联锁、泡沫和沉降余量。",
+        ),
+        "liquid_holdup_available_volume_m3": descriptor(
+            "liquid_holdup_available_volume_m3",
+            liquid_holdup_available,
+            origin="DETERMINISTIC_CALCULATION",
+            equation_chain="Vavailable=Vvessel*NLL/100",
+            warning="按总容积乘正常液位的简化初筛；封头、内件和卧式容器弓形液位几何尚未扣除。",
+        ),
+        "separator_hydraulic_screening_status": descriptor(
+            "separator_hydraulic_screening_status",
+            hydraulic_status,
+            origin="DETERMINISTIC_CONSTRAINT_CHECK",
+            state=hydraulic_status,
+            warning=profile_warning,
+        ),
+        "demister_type": descriptor(
+            "demister_type",
+            demister_type,
+            origin=(
+                None
+                if present(normalized, "demister_type")
+                else "REGISTERED_SEPARATOR_HYDRAULIC_FALLBACK"
+            ),
+            state=(
+                None
+                if present(normalized, "demister_type")
+                else "DEFAULTED"
+                if demister_active
+                else "INACTIVE_NOT_APPLICABLE"
+            ),
+            warning=profile_warning,
+            active=demister_active,
+        ),
+        "demister_nominal_diameter_mm": descriptor(
+            "demister_nominal_diameter_mm",
+            demister_nominal_diameter,
+            origin="PROGRAMMATIC_INTERNALS_SIZE_MATCH",
+            equation_chain="DN_demister = vessel screening inner diameter rounded to 100 mm",
+            warning="除沫器公称直径只按筒体内径匹配；分块、支承、气速和厂家压降/效率尚未闭合。",
+            active=demister_active,
+        ),
+        "design_droplet_size_um": descriptor(
+            "design_droplet_size_um",
+            profile_value("design_droplet_size_um", 150.0),
+            origin=(
+                None
+                if present(normalized, "design_droplet_size_um")
+                else "REGISTERED_SEPARATOR_HYDRAULIC_FALLBACK"
+            ),
+            state=(
+                None
+                if present(normalized, "design_droplet_size_um")
+                else "INACTIVE_NOT_APPLICABLE"
+                if liquid_liquid_branch
+                else "DEFAULTED"
+            ),
+            warning=profile_warning,
+            active=not liquid_liquid_branch,
+        ),
+        "demister_pressure_drop_kpa": descriptor(
+            "demister_pressure_drop_kpa",
+            profile_value("demister_pressure_drop_kpa", 0.25),
+            origin=(
+                None
+                if present(normalized, "demister_pressure_drop_kpa")
+                else "REGISTERED_SEPARATOR_HYDRAULIC_FALLBACK"
+            ),
+            state=(
+                None
+                if present(normalized, "demister_pressure_drop_kpa")
+                else "INACTIVE_NOT_APPLICABLE"
+                if liquid_liquid_branch
+                else "DEFAULTED"
+            ),
+            warning=profile_warning,
+            active=demister_active,
+        ),
+        "separator_internals_specification": descriptor(
+            "separator_internals_specification",
+            internals_specification,
+            origin="PROGRAMMATIC_VESSEL_SEPARATOR_SELECTOR",
+            warning=profile_warning,
+        ),
+        "inlet_nozzle_dn": descriptor(
+            "inlet_nozzle_dn",
+            inlet_dn,
+            origin=(
+                None
+                if present(normalized, "inlet_nozzle_dn")
+                else "DETERMINISTIC_CALCULATION"
+            ),
+            equation_chain=inlet_dn_equation,
+            warning="接管DN按保底体积流量和目标流速初选，未含两相流、冲蚀、噪声和管嘴补强。",
+        ),
+        "gas_outlet_nozzle_dn": descriptor(
+            "gas_outlet_nozzle_dn",
+            gas_dn,
+            origin=(
+                None
+                if present(normalized, "gas_outlet_nozzle_dn")
+                else "DETERMINISTIC_CALCULATION"
+            ),
+            equation_chain=gas_dn_equation,
+            warning="气相出口DN按保底气量和流速初选，未含除沫器出口不均匀性、噪声和管嘴补强。",
+            active=not liquid_liquid_branch,
+        ),
+        "liquid_outlet_nozzle_dn": descriptor(
+            "liquid_outlet_nozzle_dn",
+            liquid_dn,
+            origin=(
+                None
+                if present(normalized, "liquid_outlet_nozzle_dn")
+                else "DETERMINISTIC_CALCULATION"
+            ),
+            equation_chain=liquid_dn_equation,
+            warning="液相出口DN按保底液量和流速初选，未含自流压头、涡流、控制阀和泵吸入条件。",
+        ),
+        "shell_material_grade": descriptor("shell_material_grade"),
+        "material": descriptor(
+            "material",
+            values.get("shell_material_grade") or values.get("material"),
+            origin="PROGRAMMATIC_MATERIAL_ROUTE_PROJECTION",
+            warning=material_route.get("warning"),
+            basis=list(material_route.get("basis", [])),
+        ),
+        "internals_material_grade": descriptor(
+            "internals_material_grade"
+        ),
+        "corrosion_allowance_mm": descriptor("corrosion_allowance_mm"),
+        "allowable_stress_mpa": descriptor("allowable_stress_mpa"),
+        "weld_efficiency": descriptor("weld_efficiency"),
+        "head_type": descriptor("head_type"),
+        "design_pressure_mpa": descriptor("design_pressure_mpa"),
+        "design_pressure_basis": descriptor("design_pressure_basis"),
+        "design_temperature_c": descriptor("design_temperature_c"),
+        "formula_only_shell_thickness_mm": descriptor(
+            "formula_only_shell_thickness_mm",
+            values.get("cylinder_calculated_thickness_mm"),
+            origin="DETERMINISTIC_CALCULATION",
+            equation_chain=calculation_by_target.get(
+                "cylinder_calculated_thickness_mm",
+                {},
+            ).get("equation_chain"),
+            warning="仅为内压公式计算厚度，不是名义厚度。",
+        ),
+        "formula_only_head_thickness_mm": descriptor(
+            "formula_only_head_thickness_mm",
+            values.get("head_calculated_thickness_mm"),
+            origin="DETERMINISTIC_CALCULATION",
+            equation_chain=calculation_by_target.get(
+                "head_calculated_thickness_mm",
+                {},
+            ).get("equation_chain"),
+            warning="仅为内压公式计算厚度，不是名义厚度。",
+        ),
+        "preliminary_nominal_shell_thickness_mm": descriptor(
+            "preliminary_nominal_shell_thickness_mm",
+            nominal_shell,
+            origin="PROGRAMMATIC_PRELIMINARY_PLATE_SERIES",
+            equation_chain=shell_margin.get("equation_chain"),
+            warning=shell_margin.get("claim_boundary"),
+        ),
+        "preliminary_nominal_head_thickness_mm": descriptor(
+            "preliminary_nominal_head_thickness_mm",
+            nominal_head,
+            origin="PROGRAMMATIC_PRELIMINARY_PLATE_SERIES",
+            equation_chain=head_margin.get("equation_chain"),
+            warning=head_margin.get("claim_boundary"),
+        ),
+        "selected_wall_thickness_mm": descriptor(
+            "selected_wall_thickness_mm",
+            nominal_shell,
+            origin="PROGRAMMATIC_PRELIMINARY_PLATE_SERIES",
+            state=(
+                "PRELIMINARY_CANDIDATE_NOT_FORMAL"
+                if nominal_shell is not None
+                else "OPEN_FORMAL_EVIDENCE_GATE"
+            ),
+            equation_chain=shell_margin.get("equation_chain"),
+            warning=(
+                "该值只是筒体名义厚度程序候选，用于一览表预选；"
+                "负偏差、成形减薄、外压、开孔补强、局部载荷与正式材料表未闭合，"
+                "不得当作正式壁厚。"
+            ),
+        ),
+        "quantity_count": descriptor(
+            "quantity_count",
+            values.get("quantity_count", 1),
+            origin=(
+                "USER_PROJECT_OR_ASPEN_INPUT"
+                if present(normalized, "quantity_count")
+                else "REGISTERED_PROJECT_COUNT_FALLBACK"
+            ),
+            state=(
+                "PROVIDED"
+                if present(normalized, "quantity_count")
+                else "DEFAULTED"
+            ),
+            warning="数量1台为缺项目布置时的保底，不代表备用率和开停车并联系统已确认。",
+        ),
+        "standard_identity": descriptor(
+            "standard_identity",
+            {
+                "pressure_vessel": "GB/T 150.1~150.4-2024",
+                "head": "GB/T 25198-2023",
+                "nominal_diameter": "GB/T 9019-2015",
+                "demister": (
+                    "HG/T 21618-1998"
+                    if demister_active
+                    else "NOT_APPLICABLE_TO_SELECTED_LIQUID_LIQUID_BRANCH"
+                ),
+                "adoption_state": "REFERENCE_ROUTE_NOT_FORMALLY_ADOPTED",
+            },
+            origin="PROGRAMMATIC_STANDARD_ROUTE_BUNDLE",
+            state="REFERENCE_ROUTE_NOT_FORMALLY_ADOPTED",
+            warning="标准身份为程序预选路线；正式设计仍需项目采标、版本和适用范围确认。",
+        ),
+    }
+    for field_id, value in (
+        ("inlet_nozzle_target_velocity_m_s", inlet_velocity),
+        ("gas_outlet_nozzle_target_velocity_m_s", gas_outlet_velocity),
+        ("liquid_outlet_nozzle_target_velocity_m_s", liquid_outlet_velocity),
+        ("allowable_entrainment", profile_value("allowable_entrainment")),
+    ):
+        fields[field_id] = descriptor(
+            field_id,
+            value,
+            origin=(
+                None
+                if present(normalized, field_id)
+                else "REGISTERED_SEPARATOR_HYDRAULIC_FALLBACK"
+            ),
+            state=(
+                None
+                if present(normalized, field_id)
+                else "INACTIVE_NOT_APPLICABLE"
+                if liquid_liquid_branch and field_id
+                in {
+                    "gas_outlet_nozzle_target_velocity_m_s",
+                    "allowable_entrainment",
+                }
+                else "DEFAULTED"
+            ),
+            warning=profile_warning,
+            active=not (
+                liquid_liquid_branch
+                and field_id
+                in {
+                    "gas_outlet_nozzle_target_velocity_m_s",
+                    "allowable_entrainment",
+                }
+            ),
+        )
+
+    package = {
+        "schema": "programmatic-vessel-separator-specification-v1",
+        "policy_id": VESSEL_SEPARATOR_DEFAULT_PARAMETER_POLICY_ID,
+        "family_id": family_id,
+        "subfamily": "vessel_separator",
+        "status": "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "formal_geometry_selected": False,
+        "formal_design_ready": False,
+        "fields": fields,
+        "selection_branch": {
+            "terminal_rule_id": terminal.get("rule_id"),
+            "terminal_status": terminal.get("status"),
+            "selection_basis": terminal.get("selection_basis"),
+            "recommended_type": selected_type,
+            "aspen_block_type": block_type or None,
+            "separator_branch_id": separator_branch_id,
+            "orientation": orientation,
+            "liquid_liquid_branch": liquid_liquid_branch,
+            "three_phase_branch": three_phase_branch,
+            "demister_branch_active": demister_active,
+            "material_route_id": material_route.get("route_id"),
+        },
+        "material_selection_chain": {
+            **material_route,
+            "allowable_stress_screening_value_mpa": values.get(
+                "allowable_stress_mpa"
+            ),
+            "corrosion_allowance_screening_value_mm": values.get(
+                "corrosion_allowance_mm"
+            ),
+            "exact_standard_table_cell_reused": False,
+        },
+        "hydraulic_fallback_chain": {
+            "profile_id": profile.get("profile_id"),
+            "profile_used": any(
+                not present(normalized, field_id)
+                for field_id in (
+                    "gas_flow_m3_h",
+                    "liquid_flow_m3_h",
+                    "gas_density_kg_m3",
+                    "liquid_density_kg_m3",
+                    "souders_brown_k_m_s",
+                    "liquid_retention_time_min",
+                )
+            ),
+            "gas_capacity_formula": (
+                "u_allow=K*sqrt((rho_L-rho_G)/rho_G); "
+                "Dgas=sqrt(4*(Qg/3600)/(pi*u_allow))*1000"
+            ),
+            "liquid_holdup_formula": "Vhold=Ql*t/60",
+            "nozzle_formula": "Dreq=sqrt(4*Q/(pi*v*3600)); DN=next_series(Dreq)",
+            "screening_status": hydraulic_status,
+            "warning": profile_warning,
+        },
+        "selection_margin_structure": {
+            "shell": shell_margin,
+            "head": head_margin,
+            "formal_nominal_thickness_selected": False,
+        },
+        "standard_bundle": [
+            {
+                "standard": "GB/T 150.1~150.4-2024",
+                "role": "pressure_vessel_general_material_design_and_manufacturing_route",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+            {
+                "standard": "GB/T 25198-2023",
+                "role": "pressure_vessel_head_product_route",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+            {
+                "standard": "GB/T 9019-2015",
+                "role": "pressure_vessel_nominal_diameter_route",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+            {
+                "standard": "HG/T 21618-1998",
+                "role": "wire_mesh_demister_type_and_size_route",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+        ],
+        "formal_open_gates": [
+            "same_case_gas_and_liquid_flow_split",
+            "same_case_gas_and_liquid_density_viscosity_surface_tension",
+            "allowable_entrainment_and_controlling_droplet_size",
+            "inlet_device_demister_coalescer_and_level_control_rating",
+            "two_phase_inlet_momentum_and_nozzle_hydraulics",
+            "exact_material_thickness_temperature_allowable_stress_table_cell",
+            "external_pressure_vacuum_opening_reinforcement_and_local_loads",
+            "forming_thinning_negative_tolerance_and_nominal_thickness",
+            "support_wind_seismic_nozzle_platform_and_piping_loads",
+            "drawing_mass_and_procurement_specification",
+        ],
+        "user_control": {
+            "every_displayed_parameter_editable": True,
+            "supplied_value_overwrites_default": True,
+            "single_equipment_recalculation_supported": True,
+            "restore_registered_default_supported": True,
+            "branch_override_field": "terminal_type_rule_override_id",
+        },
+        "warning": (
+            "这是程序生成的具体容器/分离器预选规格。程序已选择立卧式、内件、"
+            "材料、接管DN和厚度候选，并逐项公开保底值与公式；它仍不是正式压力容器"
+            "机械设计或厂家分离性能保证。用户修改负荷、物性、液位、材料或结构后必须"
+            "只重算该设备。"
+        ),
+    }
+    hash_payload = json.loads(json.dumps(package, ensure_ascii=False))
+    for row in hash_payload["fields"].values():
+        row.pop("program_specification_sha256", None)
+    specification_sha256 = _canonical_sha256(hash_payload)
+    package["program_specification_sha256"] = specification_sha256
+    for row in package["fields"].values():
+        row["program_specification_sha256"] = specification_sha256
+    return package
+
+
+def build_programmatic_reactor_specification(
+    family_id: str,
+    normalized: dict[str, Any],
+    derived: dict[str, Any],
+    fallback_ledger: list[dict[str, Any]],
+    calculations: list[dict[str, Any]],
+    model_recommendation: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build a branch-specific preliminary tubular or stirred reactor spec."""
+    if family_id != "family_reactor_vessel_separator":
+        return None
+    values = {**normalized, **derived}
+    leading = (
+        dict(model_recommendation.get("leading_candidate"))
+        if isinstance(model_recommendation.get("leading_candidate"), dict)
+        else {}
+    )
+    terminal = (
+        dict(leading.get("terminal_selection"))
+        if isinstance(leading.get("terminal_selection"), dict)
+        else {}
+    )
+    selected_type = str(
+        leading.get("recommended_type")
+        or terminal.get("recommended_type")
+        or values.get("equipment_type")
+        or ""
+    )
+    block_type = str(values.get("aspen_block_type") or "").strip().upper()
+    type_token = selected_type.casefold()
+    tubular_branch = (
+        block_type == "RPLUG"
+        or "管式" in selected_type
+        or "平推流" in selected_type
+        or "plug flow" in type_token
+        or "tubular" in type_token
+    )
+    stirred_branch = (
+        block_type
+        in {
+            "RCSTR",
+            "RBATCH",
+            "RSTOIC",
+            "RYIELD",
+            "REQUIL",
+            "RGIBBS",
+        }
+        or "搅拌" in selected_type
+        or "釜式" in selected_type
+        or "stirred" in type_token
+        or "cstr" in type_token
+        or "batch reactor" in type_token
+    )
+    if not (tubular_branch or stirred_branch):
+        return None
+
+    profile_document = (
+        load_model_rules()
+        .get("design_fallback_policy", {})
+        .get("reactor_preliminary_fallback_profiles", {})
+    )
+    if not isinstance(profile_document, dict):
+        profile_document = {}
+    profile = profile_document.get(
+        "tubular_pfr" if tubular_branch else "stirred_tank",
+        {},
+    )
+    if not isinstance(profile, dict):
+        profile = {}
+    fallback_by_field = {
+        str(item.get("field_id")): dict(item)
+        for item in fallback_ledger
+        if item.get("field_id")
+    }
+    calculation_by_target = {
+        str(item.get("target_field")): dict(item)
+        for item in calculations
+        if item.get("target_field") and item.get("adopted_as_canonical", True)
+    }
+    material_route = _vessel_material_route(values)
+
+    def registered_value(field_id: str, default: Any = None) -> Any:
+        if present(values, field_id):
+            return values[field_id]
+        return profile.get(field_id, default)
+
+    def descriptor(
+        field_id: str,
+        value: Any = None,
+        *,
+        origin: str | None = None,
+        state: str | None = None,
+        equation_chain: str | None = None,
+        warning: str | None = None,
+        basis: list[str] | None = None,
+        active: bool = True,
+    ) -> dict[str, Any]:
+        fallback = fallback_by_field.get(field_id)
+        calculation = calculation_by_target.get(field_id)
+        resolved = values.get(field_id) if value is None else value
+        if origin is None:
+            if field_id in derived:
+                origin = "DETERMINISTIC_CALCULATION"
+                state = state or "CALCULATED"
+            elif present(normalized, field_id):
+                if fallback:
+                    origin = str(
+                        fallback.get(
+                            "source_kind",
+                            "registered_final_fallback_default",
+                        )
+                    ).upper()
+                    state = state or str(fallback.get("state") or "DEFAULTED")
+                else:
+                    origin = "USER_PROJECT_OR_ASPEN_INPUT"
+                    state = state or "PROVIDED"
+            else:
+                origin = "PROGRAMMATIC_REACTOR_SELECTOR"
+                state = state or (
+                    "CALCULATED" if resolved is not None else "OPEN"
+                )
+        return {
+            "field_id": field_id,
+            "value": resolved,
+            "unit": FIELD_UNITS.get(field_id),
+            "state": state
+            or ("CALCULATED" if resolved is not None else "OPEN"),
+            "origin": origin,
+            "active_in_selected_branch": active,
+            "evidence_class": "J",
+            "result_status": "PROVISIONAL",
+            "promotion_cap": "TYPE_SCREENING",
+            "formal_design_evidence": False,
+            "fallback_policy_id": (
+                str(profile.get("profile_id"))
+                if origin == "REGISTERED_REACTOR_FALLBACK_PROFILE"
+                else fallback.get("tier")
+                if fallback
+                else None
+            ),
+            "basis": list(
+                basis
+                if basis is not None
+                else fallback.get("basis", [])
+                if fallback
+                else []
+            ),
+            "warning": (
+                warning
+                if warning is not None
+                else fallback.get("warning")
+                if fallback
+                else None
+            ),
+            "equation_chain": (
+                equation_chain
+                or (
+                    calculation.get("equation_chain")
+                    if calculation
+                    else fallback.get("equation_chain")
+                    if fallback
+                    else None
+                )
+            ),
+            "user_override_allowed": True,
+            "single_equipment_recalculation_required_after_override": True,
+        }
+
+    profile_warning = str(
+        profile.get("warning")
+        or "反应器保底参数仅用于预设计，必须用同工况动力学和机械证据替换。"
+    )
+    shell_material = (
+        values.get("shell_material_grade")
+        or values.get("material")
+        or material_route.get("shell_material_grade")
+    )
+    internals_material = (
+        values.get("internals_material_grade")
+        or material_route.get("internals_material_grade")
+    )
+    corrosion_allowance = numeric(values.get("corrosion_allowance_mm"))
+    nominal_shell_from_common, shell_margin_common = (
+        _preliminary_nominal_plate_thickness_mm(
+            values.get("cylinder_calculated_thickness_mm"),
+            corrosion_allowance,
+        )
+    )
+    nominal_head, head_margin = _preliminary_nominal_plate_thickness_mm(
+        values.get("head_calculated_thickness_mm"),
+        corrosion_allowance,
+    )
+    fields: dict[str, dict[str, Any]] = {}
+
+    if tubular_branch:
+        active_id = numeric(
+            registered_value("active_tube_inner_diameter_mm", 50.0)
+        )
+        active_length = numeric(
+            registered_value(
+                "active_tube_length_screening_mm",
+                3000.0,
+            )
+        )
+        tube_wall = numeric(
+            registered_value(
+                "nominal_process_tube_wall_thickness_mm",
+                3.0,
+            )
+        )
+        one_tube_volume = (
+            math.pi
+            * (active_id / 1000.0) ** 2
+            / 4.0
+            * (active_length / 1000.0)
+            if active_id is not None and active_length is not None
+            else None
+        )
+        required_volume = numeric(
+            values.get("required_total_reactor_volume_m3")
+            if present(values, "required_total_reactor_volume_m3")
+            else values.get("working_volume_m3")
+            if present(values, "working_volume_m3")
+            else values.get("volume_m3")
+        )
+        volume_defaulted_to_one_tube = required_volume is None
+        if required_volume is None:
+            required_volume = one_tube_volume
+        tube_count = (
+            int(float(values["selected_tube_count"]))
+            if present(values, "selected_tube_count")
+            else int(float(values["reaction_tube_count"]))
+            if present(values, "reaction_tube_count")
+            else max(
+                int(profile.get("minimum_selected_tube_count", 1)),
+                int(math.ceil(required_volume / one_tube_volume))
+                if required_volume is not None
+                and one_tube_volume is not None
+                and one_tube_volume > 0
+                else 1,
+            )
+        )
+        tube_od = (
+            active_id + 2.0 * tube_wall
+            if active_id is not None and tube_wall is not None
+            else None
+        )
+        pitch_ratio = numeric(
+            values.get("tube_pitch_ratio")
+            if present(values, "tube_pitch_ratio")
+            else profile.get("tube_pitch_ratio", 1.25)
+        )
+        pitch = (
+            tube_od * pitch_ratio
+            if tube_od is not None and pitch_ratio is not None
+            else None
+        )
+        shell_id = numeric(values.get("reactor_shell_inner_diameter_mm"))
+        if shell_id is None:
+            raw_shell_id = (
+                math.sqrt(tube_count) * pitch + 100.0
+                if pitch is not None
+                else float(
+                    profile.get(
+                        "minimum_reactor_shell_inner_diameter_mm",
+                        300.0,
+                    )
+                )
+            )
+            shell_id = max(
+                float(
+                    profile.get(
+                        "minimum_reactor_shell_inner_diameter_mm",
+                        300.0,
+                    )
+                ),
+                math.ceil(raw_shell_id / 50.0) * 50.0,
+            )
+        design_pressure = numeric(values.get("design_pressure_mpa"))
+        if (
+            design_pressure is not None
+            and values.get("design_pressure_basis") == "absolute"
+        ):
+            atmosphere = numeric(values.get("atmospheric_pressure_mpa"))
+            if atmosphere is not None:
+                design_pressure -= atmosphere
+        stress = numeric(values.get("allowable_stress_mpa"))
+        weld = numeric(values.get("weld_efficiency"))
+        shell_formula = None
+        if (
+            design_pressure is not None
+            and design_pressure > 0
+            and stress is not None
+            and stress > 0
+            and weld is not None
+            and weld > 0
+            and 2.0 * stress * weld > design_pressure
+        ):
+            shell_formula = (
+                design_pressure
+                * shell_id
+                / (2.0 * stress * weld - design_pressure)
+            )
+        nominal_shell, shell_margin = (
+            _preliminary_nominal_plate_thickness_mm(
+                shell_formula,
+                corrosion_allowance,
+            )
+        )
+        reaction_tube_material = str(
+            values.get("reaction_tube_material_grade")
+            or profile.get("reaction_tube_material_grade")
+            or "S30408"
+        )
+        construction_designation = (
+            f"RPLUG-PFR-{tube_count}×Φ{tube_od:g}×{tube_wall:g}-"
+            f"{active_length:g}-{reaction_tube_material}-"
+            f"{shell_material}-DN{shell_id:g}"
+        )
+        technical_specification = (
+            f"{selected_type}；{construction_designation}；"
+            f"单管有效内径={active_id:g} mm；单管有效长={active_length:g} mm；"
+            f"反应总体积候选={required_volume:g} m³；"
+            f"壳体名义厚度程序候选={nominal_shell or 'OPEN'} mm"
+        )
+        tubular_values = {
+            "active_tube_inner_diameter_mm": active_id,
+            "active_tube_length_screening_mm": active_length,
+            "one_tube_geometric_screening_volume_m3": one_tube_volume,
+            "required_total_reactor_volume_m3": required_volume,
+            "selected_tube_count": tube_count,
+            "reaction_tube_count": tube_count,
+            "reactor_shell_inner_diameter_mm": shell_id,
+            "nominal_process_tube_wall_thickness_mm": tube_wall,
+            "nominal_shell_wall_thickness_mm": nominal_shell,
+            "reaction_tube_material_grade": reaction_tube_material,
+        }
+        for field_id, value in tubular_values.items():
+            user_supplied = present(normalized, field_id)
+            equation = {
+                "one_tube_geometric_screening_volume_m3": (
+                    "V1=pi*Di^2*L/4"
+                ),
+                "required_total_reactor_volume_m3": (
+                    "Vtotal=user/kinetics volume; absent -> one-tube minimum "
+                    "screening volume"
+                ),
+                "selected_tube_count": "Ntube=ceil(Vtotal/V1)",
+                "reaction_tube_count": "Ntube=ceil(Vtotal/V1)",
+                "reactor_shell_inner_diameter_mm": (
+                    "Dshell=max(300,round50(sqrt(Ntube)*pitch+100))"
+                ),
+                "nominal_shell_wall_thickness_mm": (
+                    shell_margin.get("equation_chain")
+                ),
+            }.get(field_id)
+            fields[field_id] = descriptor(
+                field_id,
+                value,
+                origin=(
+                    None
+                    if user_supplied
+                    else "REGISTERED_REACTOR_FALLBACK_PROFILE"
+                    if field_id
+                    in {
+                        "active_tube_inner_diameter_mm",
+                        "active_tube_length_screening_mm",
+                        "nominal_process_tube_wall_thickness_mm",
+                        "reaction_tube_material_grade",
+                    }
+                    else "DETERMINISTIC_CALCULATION"
+                ),
+                state=(
+                    None
+                    if user_supplied
+                    else "MINIMUM_CONSTRUCTION_FALLBACK"
+                    if volume_defaulted_to_one_tube
+                    and field_id
+                    in {
+                        "required_total_reactor_volume_m3",
+                        "selected_tube_count",
+                        "reaction_tube_count",
+                    }
+                    else "CALCULATED"
+                ),
+                equation_chain=equation,
+                warning=profile_warning,
+            )
+        fields.update(
+            {
+                "working_volume_m3": descriptor(
+                    "working_volume_m3",
+                    required_volume,
+                    origin="DETERMINISTIC_TUBULAR_VOLUME_PROJECTION",
+                    warning=profile_warning,
+                ),
+                "catalyst_bed_volume_m3": descriptor(
+                    "catalyst_bed_volume_m3",
+                    0.0,
+                    origin="INACTIVE_BRANCH_STATE",
+                    state="NOT_APPLICABLE_UNLESS_FIXED_BED_CONFIRMED",
+                    warning="RPLUG并不自动证明存在催化剂床层；固定床任务确认前不得虚构装填量。",
+                    active=False,
+                ),
+                "agitator_type": descriptor(
+                    "agitator_type",
+                    "不适用（管式平推流反应器分支）",
+                    origin="INACTIVE_BRANCH_STATE",
+                    state="NOT_APPLICABLE",
+                    active=False,
+                ),
+                "shaft_power_kw": descriptor(
+                    "shaft_power_kw",
+                    0.0,
+                    origin="INACTIVE_BRANCH_STATE",
+                    state="NOT_APPLICABLE",
+                    active=False,
+                ),
+                "motor_power_kw": descriptor(
+                    "motor_power_kw",
+                    0.0,
+                    origin="INACTIVE_BRANCH_STATE",
+                    state="NOT_APPLICABLE",
+                    active=False,
+                ),
+                "formula_only_shell_thickness_mm": descriptor(
+                    "formula_only_shell_thickness_mm",
+                    shell_formula,
+                    origin="DETERMINISTIC_CALCULATION",
+                    equation_chain=(
+                        "t=P*Di/(2*[sigma]*phi-P)"
+                        if shell_formula is not None
+                        else None
+                    ),
+                    warning="仅为反应器外壳内压公式厚度，不是正式名义厚度。",
+                ),
+                "preliminary_nominal_shell_thickness_mm": descriptor(
+                    "preliminary_nominal_shell_thickness_mm",
+                    nominal_shell,
+                    origin="PROGRAMMATIC_PRELIMINARY_PLATE_SERIES",
+                    equation_chain=shell_margin.get("equation_chain"),
+                    warning=shell_margin.get("claim_boundary"),
+                ),
+                "selected_wall_thickness_mm": descriptor(
+                    "selected_wall_thickness_mm",
+                    nominal_shell,
+                    origin="PROGRAMMATIC_PRELIMINARY_PLATE_SERIES",
+                    state="PRELIMINARY_CANDIDATE_NOT_FORMAL",
+                    warning="仅为程序壳体壁厚候选，不是正式机械设计值。",
+                ),
+            }
+        )
+        reactor_branch_id = "TUBULAR_PFR_MINIMUM_OR_VOLUME_CLOSED"
+        specific_profile_id = profile.get("profile_id")
+    else:
+        nominal_volume = numeric(values.get("volume_m3"))
+        fill_fraction = numeric(
+            values.get("fill_fraction")
+            if present(values, "fill_fraction")
+            else profile.get("fill_fraction", 0.80)
+        )
+        working_volume = numeric(values.get("working_volume_m3"))
+        if working_volume is None and nominal_volume is not None:
+            working_volume = (
+                nominal_volume
+                if values.get("volume_basis") == "effective_working"
+                else nominal_volume * (fill_fraction or 0.80)
+            )
+        power_density = numeric(
+            registered_value("agitator_power_density_kw_m3", 0.80)
+        )
+        shaft_power = numeric(values.get("shaft_power_kw"))
+        if (
+            shaft_power is None
+            and working_volume is not None
+            and power_density is not None
+        ):
+            shaft_power = working_volume * power_density
+        motor_series = [
+            0.75,
+            1.1,
+            1.5,
+            2.2,
+            3.0,
+            4.0,
+            5.5,
+            7.5,
+            11.0,
+            15.0,
+            18.5,
+            22.0,
+            30.0,
+            37.0,
+            45.0,
+            55.0,
+            75.0,
+            90.0,
+            110.0,
+        ]
+        motor_power = numeric(values.get("motor_power_kw"))
+        if motor_power is None and shaft_power is not None:
+            required_motor = shaft_power / 0.90
+            motor_power = next(
+                (item for item in motor_series if item >= required_motor),
+                math.ceil(required_motor / 10.0) * 10.0,
+            )
+        diameter = numeric(
+            values.get("inner_diameter_mm")
+            if present(values, "inner_diameter_mm")
+            else values.get("diameter_mm")
+        )
+        height = numeric(
+            values.get("straight_shell_length_mm")
+            if present(values, "straight_shell_length_mm")
+            else values.get("height_mm")
+        )
+        layer_count = (
+            2
+            if diameter is not None
+            and height is not None
+            and height / diameter > 1.2
+            else 1
+        )
+        agitator_type = str(
+            values.get("agitator_type")
+            or profile.get("agitator_type")
+            or "六叶45°折叶开启涡轮式搅拌器（四挡板，程序保底）"
+        )
+        baffle_count = int(
+            float(registered_value("baffle_count", 4))
+        )
+        impeller_ratio = numeric(
+            registered_value("impeller_diameter_ratio", 0.33)
+        )
+        agitator_material = str(
+            values.get("agitator_material_grade")
+            or profile.get("agitator_material_grade")
+            or "S30408"
+        )
+        jacket_type = str(
+            values.get("jacket_type")
+            or profile.get("jacket_type")
+            or "整体夹套（程序保底）"
+        )
+        jacket_material = str(
+            values.get("jacket_material_grade")
+            or shell_material
+        )
+        technical_specification = (
+            f"{selected_type}；立式；Φ{diameter or 'OPEN'}×{height or 'OPEN'} mm；"
+            f"工作容积={working_volume or 'OPEN'} m³；"
+            f"{layer_count}层{agitator_type}；D/T={impeller_ratio:g}；"
+            f"{baffle_count}块挡板；轴功率={shaft_power or 'OPEN'} kW；"
+            f"电机功率候选={motor_power or 'OPEN'} kW；{jacket_type}"
+        )
+        stirred_values = {
+            "working_volume_m3": working_volume,
+            "catalyst_bed_volume_m3": 0.0,
+            "agitator_type": agitator_type,
+            "agitator_material_grade": agitator_material,
+            "baffle_count": baffle_count,
+            "impeller_diameter_ratio": impeller_ratio,
+            "agitator_power_density_kw_m3": power_density,
+            "rotational_speed_rpm": numeric(
+                registered_value("rotational_speed_rpm", 100.0)
+            ),
+            "shaft_power_kw": shaft_power,
+            "motor_power_kw": motor_power,
+            "jacket_type": jacket_type,
+            "jacket_material_grade": jacket_material,
+        }
+        fallback_profile_fields = {
+            "agitator_type",
+            "agitator_material_grade",
+            "baffle_count",
+            "impeller_diameter_ratio",
+            "agitator_power_density_kw_m3",
+            "rotational_speed_rpm",
+            "jacket_type",
+        }
+        for field_id, value in stirred_values.items():
+            user_supplied = present(normalized, field_id)
+            equation = (
+                "Vworking=Vnominal*fill_fraction"
+                if field_id == "working_volume_m3"
+                else "Pshaft=Vworking*(P/V)"
+                if field_id == "shaft_power_kw"
+                else "Pmotor=next_standard_series(Pshaft/0.90)"
+                if field_id == "motor_power_kw"
+                else None
+            )
+            fields[field_id] = descriptor(
+                field_id,
+                value,
+                origin=(
+                    None
+                    if user_supplied
+                    else "REGISTERED_REACTOR_FALLBACK_PROFILE"
+                    if field_id in fallback_profile_fields
+                    else "DETERMINISTIC_CALCULATION"
+                    if field_id
+                    in {"working_volume_m3", "shaft_power_kw", "motor_power_kw"}
+                    else "INACTIVE_BRANCH_STATE"
+                ),
+                state=(
+                    None
+                    if user_supplied
+                    else "NOT_APPLICABLE"
+                    if field_id == "catalyst_bed_volume_m3"
+                    else "DEFAULTED"
+                    if field_id in fallback_profile_fields
+                    else "CALCULATED"
+                ),
+                equation_chain=equation,
+                warning=profile_warning,
+                active=field_id != "catalyst_bed_volume_m3",
+            )
+        for field_id, value in (
+            ("reaction_tube_material_grade", "不适用（搅拌釜分支）"),
+            ("reaction_tube_count", 0),
+            ("selected_tube_count", 0),
+        ):
+            fields[field_id] = descriptor(
+                field_id,
+                value,
+                origin="INACTIVE_BRANCH_STATE",
+                state="NOT_APPLICABLE",
+                active=False,
+            )
+        fields.update(
+            {
+                "formula_only_shell_thickness_mm": descriptor(
+                    "formula_only_shell_thickness_mm",
+                    values.get("cylinder_calculated_thickness_mm"),
+                    origin="DETERMINISTIC_CALCULATION",
+                    equation_chain=calculation_by_target.get(
+                        "cylinder_calculated_thickness_mm",
+                        {},
+                    ).get("equation_chain"),
+                    warning="仅为釜体内压公式厚度，不是正式名义厚度。",
+                ),
+                "formula_only_head_thickness_mm": descriptor(
+                    "formula_only_head_thickness_mm",
+                    values.get("head_calculated_thickness_mm"),
+                    origin="DETERMINISTIC_CALCULATION",
+                    equation_chain=calculation_by_target.get(
+                        "head_calculated_thickness_mm",
+                        {},
+                    ).get("equation_chain"),
+                    warning="仅为封头内压公式厚度，不是正式名义厚度。",
+                ),
+                "preliminary_nominal_shell_thickness_mm": descriptor(
+                    "preliminary_nominal_shell_thickness_mm",
+                    nominal_shell_from_common,
+                    origin="PROGRAMMATIC_PRELIMINARY_PLATE_SERIES",
+                    equation_chain=shell_margin_common.get("equation_chain"),
+                    warning=shell_margin_common.get("claim_boundary"),
+                ),
+                "preliminary_nominal_head_thickness_mm": descriptor(
+                    "preliminary_nominal_head_thickness_mm",
+                    nominal_head,
+                    origin="PROGRAMMATIC_PRELIMINARY_PLATE_SERIES",
+                    equation_chain=head_margin.get("equation_chain"),
+                    warning=head_margin.get("claim_boundary"),
+                ),
+                "selected_wall_thickness_mm": descriptor(
+                    "selected_wall_thickness_mm",
+                    nominal_shell_from_common,
+                    origin="PROGRAMMATIC_PRELIMINARY_PLATE_SERIES",
+                    state="PRELIMINARY_CANDIDATE_NOT_FORMAL",
+                    warning="仅为程序釜体壁厚候选，不是正式机械设计值。",
+                ),
+            }
+        )
+        reactor_branch_id = "STIRRED_TANK_GENERAL_LIQUID_MIXING_FALLBACK"
+        specific_profile_id = profile.get("profile_id")
+
+    common_fields = {
+        "equipment_name": descriptor(
+            "equipment_name",
+            values.get("equipment_name") or selected_type,
+            origin=(
+                "USER_PROJECT_OR_ASPEN_INPUT"
+                if present(normalized, "equipment_name")
+                else "REGISTERED_DISPLAY_FALLBACK_FROM_SELECTED_TYPE"
+            ),
+            state=(
+                "PROVIDED"
+                if present(normalized, "equipment_name")
+                else "DEFAULTED_DISPLAY_IDENTITY"
+            ),
+        ),
+        "equipment_type": descriptor(
+            "equipment_type",
+            selected_type,
+            origin="DETERMINISTIC_TERMINAL_TYPE_SELECTOR",
+            state=str(terminal.get("status") or "SELECTED"),
+            basis=[
+                f"terminal_rule_id:{terminal.get('rule_id') or 'unknown'}",
+                f"selection_basis:{terminal.get('selection_basis') or 'unknown'}",
+            ],
+            warning=terminal.get("assumption"),
+        ),
+        "equipment_subfamily": descriptor(
+            "equipment_subfamily",
+            "管式平推流反应器" if tubular_branch else "搅拌釜式反应器",
+            origin="DETERMINISTIC_SUBFAMILY_CLASSIFIER",
+            basis=[f"reactor_branch:{reactor_branch_id}"],
+        ),
+        "orientation": descriptor(
+            "orientation",
+            values.get("orientation") or profile.get("orientation", "立式"),
+            origin=(
+                "USER_PROJECT_OR_ASPEN_INPUT"
+                if present(normalized, "orientation")
+                else "REGISTERED_REACTOR_FALLBACK_PROFILE"
+            ),
+            warning=profile_warning,
+        ),
+        "technical_specification": descriptor(
+            "technical_specification",
+            technical_specification,
+            origin="PROGRAMMATIC_REACTOR_SELECTOR",
+            warning="技术规格是程序预选字符串；各尺寸、功率、材料和正式闸门仍逐项保留。",
+        ),
+        "shell_material_grade": descriptor(
+            "shell_material_grade",
+            shell_material,
+        ),
+        "material": descriptor(
+            "material",
+            shell_material,
+            origin="PROGRAMMATIC_MATERIAL_ROUTE_PROJECTION",
+            warning=material_route.get("warning"),
+            basis=list(material_route.get("basis", [])),
+        ),
+        "internals_material_grade": descriptor(
+            "internals_material_grade",
+            internals_material,
+        ),
+        "corrosion_allowance_mm": descriptor("corrosion_allowance_mm"),
+        "allowable_stress_mpa": descriptor("allowable_stress_mpa"),
+        "weld_efficiency": descriptor("weld_efficiency"),
+        "head_type": descriptor("head_type"),
+        "design_pressure_mpa": descriptor("design_pressure_mpa"),
+        "design_pressure_basis": descriptor("design_pressure_basis"),
+        "design_temperature_c": descriptor("design_temperature_c"),
+        "quantity_count": descriptor(
+            "quantity_count",
+            values.get("quantity_count", 1),
+            origin=(
+                "USER_PROJECT_OR_ASPEN_INPUT"
+                if present(normalized, "quantity_count")
+                else "REGISTERED_PROJECT_COUNT_FALLBACK"
+            ),
+            state=(
+                "PROVIDED"
+                if present(normalized, "quantity_count")
+                else "DEFAULTED"
+            ),
+            warning="数量1台为缺项目布置时的保底，不代表备用率或批次切换方案已确认。",
+        ),
+    }
+    fields = {**common_fields, **fields}
+    package = {
+        "schema": "programmatic-reactor-specification-v1",
+        "policy_id": str(specific_profile_id),
+        "family_id": family_id,
+        "subfamily": "reactor",
+        "status": "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "formal_geometry_selected": False,
+        "formal_design_ready": False,
+        "fields": fields,
+        "selection_branch": {
+            "terminal_rule_id": terminal.get("rule_id"),
+            "terminal_status": terminal.get("status"),
+            "selection_basis": terminal.get("selection_basis"),
+            "recommended_type": selected_type,
+            "aspen_block_type": block_type or None,
+            "reactor_branch_id": reactor_branch_id,
+            "tubular_branch": tubular_branch,
+            "stirred_tank_branch": stirred_branch,
+            "fallback_profile_id": specific_profile_id,
+            "material_route_id": material_route.get("route_id"),
+        },
+        "material_selection_chain": {
+            **material_route,
+            "exact_standard_table_cell_reused": False,
+        },
+        "standard_bundle": [
+            {
+                "standard": "GB/T 150.1~150.4-2024",
+                "role": "pressure_vessel_material_design_and_manufacturing_route",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+            {
+                "standard": "GB/T 25198-2023",
+                "role": "pressure_vessel_head_product_route",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+        ],
+        "formal_open_gates": [
+            "reaction_kinetics_rate_law_and_valid_temperature_range",
+            "conversion_selectivity_side_reactions_and_heat_release",
+            "required_residence_time_space_velocity_or_batch_cycle",
+            "same_case_viscosity_density_gas_and_solid_loading",
+            "mixing_or_tubular_pressure_drop_and_heat_transfer_rating",
+            "shaft_seal_critical_speed_or_tube_bundle_mechanical_design",
+            "exact_material_allowable_stress_and_corrosion_compatibility",
+            "external_pressure_opening_reinforcement_support_and_piping_loads",
+            "formal_nominal_thickness_drawing_mass_and_procurement_specification",
+        ],
+        "user_control": {
+            "every_displayed_parameter_editable": True,
+            "supplied_value_overwrites_default": True,
+            "single_equipment_recalculation_supported": True,
+            "restore_registered_default_supported": True,
+            "branch_override_field": "terminal_type_rule_override_id",
+        },
+        "warning": (
+            "这是程序生成的具体反应器预选规格。RPLUG分支给出可追溯的最小管式构造，"
+            "搅拌釜分支给出搅拌器、挡板、功率密度、电机和夹套候选；两者均不能替代"
+            "反应动力学、传热/压降、轴系或正式机械设计。"
+        ),
+    }
+    hash_payload = json.loads(json.dumps(package, ensure_ascii=False))
+    for row in hash_payload["fields"].values():
+        row.pop("program_specification_sha256", None)
+    specification_sha256 = _canonical_sha256(hash_payload)
+    package["program_specification_sha256"] = specification_sha256
+    for row in package["fields"].values():
+        row["program_specification_sha256"] = specification_sha256
+    return package
+
+
+def build_programmatic_crystallizer_specification(
+    family_id: str,
+    normalized: dict[str, Any],
+    derived: dict[str, Any],
+    fallback_ledger: list[dict[str, Any]],
+    calculations: list[dict[str, Any]],
+    model_recommendation: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build a concrete, visibly provisional continuous crystallizer spec."""
+    if family_id != "family_reactor_vessel_separator":
+        return None
+    values = {**normalized, **derived}
+    block_type = str(values.get("aspen_block_type") or "").strip().upper()
+    explicit_type = str(values.get("equipment_type") or "")
+    if (
+        block_type != "CRYSTALLIZER"
+        and "结晶" not in explicit_type
+        and "crystallizer" not in explicit_type.casefold()
+    ):
+        return None
+
+    profile = (
+        load_model_rules()
+        .get("design_fallback_policy", {})
+        .get("crystallizer_preliminary_fallback_profile", {})
+    )
+    if not isinstance(profile, dict):
+        profile = {}
+    profile_warning = str(
+        profile.get("warning")
+        or "结晶器保底构型仅供预设计，必须用同物系结晶数据替换。"
+    )
+    fallback_by_field = {
+        str(item.get("field_id")): dict(item)
+        for item in fallback_ledger
+        if item.get("field_id")
+    }
+    calculation_by_target = {
+        str(item.get("target_field")): dict(item)
+        for item in calculations
+        if item.get("target_field") and item.get("adopted_as_canonical", True)
+    }
+
+    def supplied(field_id: str) -> bool:
+        return present(normalized, field_id) and field_id not in fallback_by_field
+
+    def chosen(field_id: str, default: Any = None) -> Any:
+        if present(values, field_id):
+            return values[field_id]
+        return profile.get(field_id, default)
+
+    fields: dict[str, dict[str, Any]] = {}
+
+    def add_field(
+        field_id: str,
+        value: Any,
+        *,
+        origin: str | None = None,
+        state: str | None = None,
+        equation_chain: str | None = None,
+        warning: str | None = None,
+        basis: list[str] | None = None,
+        active: bool = True,
+    ) -> None:
+        fallback = fallback_by_field.get(field_id)
+        calculation = calculation_by_target.get(field_id)
+        if origin is None:
+            if field_id in derived:
+                origin = "DETERMINISTIC_CALCULATION"
+                state = state or "CALCULATED"
+            elif supplied(field_id):
+                origin = "USER_PROJECT_OR_ASPEN_INPUT"
+                state = state or "PROVIDED"
+            elif fallback:
+                origin = str(
+                    fallback.get(
+                        "source_kind",
+                        "registered_final_fallback_default",
+                    )
+                ).upper()
+                state = state or str(fallback.get("state") or "DEFAULTED")
+            else:
+                origin = "PROGRAMMATIC_CRYSTALLIZER_SELECTOR"
+                state = state or (
+                    "CALCULATED" if value is not None else "OPEN"
+                )
+        fields[field_id] = {
+            "field_id": field_id,
+            "value": value,
+            "unit": FIELD_UNITS.get(field_id),
+            "state": state or (
+                "CALCULATED" if value is not None else "OPEN"
+            ),
+            "origin": origin,
+            "active_in_selected_branch": active,
+            "evidence_class": "J",
+            "result_status": "PROVISIONAL",
+            "promotion_cap": "TYPE_SCREENING",
+            "formal_design_evidence": False,
+            "fallback_policy_id": (
+                str(profile.get("profile_id"))
+                if origin == "REGISTERED_CRYSTALLIZER_FALLBACK_PROFILE"
+                else fallback.get("tier")
+                if fallback
+                else None
+            ),
+            "basis": list(
+                basis
+                if basis is not None
+                else fallback.get("basis", [])
+                if fallback
+                else []
+            ),
+            "warning": (
+                warning
+                if warning is not None
+                else fallback.get("warning")
+                if fallback
+                else None
+            ),
+            "equation_chain": (
+                equation_chain
+                or (
+                    calculation.get("equation_chain")
+                    if calculation
+                    else fallback.get("equation_chain")
+                    if fallback
+                    else None
+                )
+            ),
+            "user_override_allowed": True,
+            "single_equipment_recalculation_required_after_override": True,
+        }
+
+    slurry_flow = numeric(chosen("slurry_flow_m3_h", 10.0))
+    retention = numeric(chosen("retention_time_min", 60.0))
+    fill_fraction = numeric(chosen("fill_fraction", 0.80))
+    nominal_volume_input = numeric(values.get("volume_m3"))
+    working_volume = numeric(values.get("working_volume_m3"))
+    if working_volume is None and nominal_volume_input is not None:
+        working_volume = (
+            nominal_volume_input
+            if values.get("volume_basis") == "effective_working"
+            else nominal_volume_input * (fill_fraction or 0.80)
+        )
+    if (
+        working_volume is None
+        and slurry_flow is not None
+        and retention is not None
+    ):
+        working_volume = slurry_flow * retention / 60.0
+    nominal_volume = nominal_volume_input
+    if (
+        nominal_volume is None
+        and working_volume is not None
+        and fill_fraction is not None
+        and fill_fraction > 0
+    ):
+        nominal_volume = working_volume / fill_fraction
+
+    hd_ratio = numeric(
+        chosen(
+            "crystallizer_height_to_diameter_ratio",
+            profile.get("height_to_diameter_ratio", 1.20),
+        )
+    )
+    diameter = numeric(
+        values.get("inner_diameter_mm")
+        if present(values, "inner_diameter_mm")
+        else values.get("diameter_mm")
+    )
+    height = numeric(
+        values.get("straight_shell_length_mm")
+        if present(values, "straight_shell_length_mm")
+        else values.get("height_mm")
+    )
+    if nominal_volume is not None and hd_ratio is not None:
+        if diameter is None and height is None:
+            raw_diameter_m = (
+                4.0 * nominal_volume / (math.pi * hd_ratio)
+            ) ** (1.0 / 3.0)
+            diameter = math.ceil(raw_diameter_m * 1000.0 / 100.0) * 100.0
+            height = (
+                math.ceil(
+                    (
+                        nominal_volume
+                        / (math.pi * (diameter / 1000.0) ** 2 / 4.0)
+                    )
+                    * 1000.0
+                    / 100.0
+                )
+                * 100.0
+            )
+        elif diameter is not None and height is None:
+            height = (
+                math.ceil(
+                    (
+                        nominal_volume
+                        / (math.pi * (diameter / 1000.0) ** 2 / 4.0)
+                    )
+                    * 1000.0
+                    / 100.0
+                )
+                * 100.0
+            )
+        elif height is not None and diameter is None:
+            diameter = (
+                math.ceil(
+                    math.sqrt(
+                        4.0
+                        * nominal_volume
+                        / (math.pi * (height / 1000.0))
+                    )
+                    * 1000.0
+                    / 100.0
+                )
+                * 100.0
+            )
+
+    heat_duty = numeric(chosen("heat_duty_kw", 100.0))
+    overall_u = numeric(chosen("overall_u_w_m2k", 600.0))
+    lmtd = numeric(chosen("lmtd_k", 10.0))
+    correction = numeric(chosen("lmtd_correction_factor", 0.85))
+    heat_area = numeric(values.get("heat_transfer_area_m2"))
+    if (
+        heat_area is None
+        and heat_duty is not None
+        and overall_u is not None
+        and lmtd is not None
+        and correction is not None
+        and overall_u > 0
+        and lmtd > 0
+        and correction > 0
+    ):
+        heat_area = heat_duty * 1000.0 / (
+            overall_u * lmtd * correction
+        )
+
+    power_density = numeric(
+        chosen("agitator_power_density_kw_m3", 1.20)
+    )
+    shaft_power = numeric(values.get("shaft_power_kw"))
+    if (
+        shaft_power is None
+        and working_volume is not None
+        and power_density is not None
+    ):
+        shaft_power = working_volume * power_density
+    motor_power = numeric(values.get("motor_power_kw"))
+    if motor_power is None and shaft_power is not None:
+        required_motor = shaft_power / 0.90
+        motor_series = (
+            0.75, 1.1, 1.5, 2.2, 3.0, 4.0, 5.5, 7.5, 11.0,
+            15.0, 18.5, 22.0, 30.0, 37.0, 45.0, 55.0, 75.0,
+            90.0, 110.0, 132.0, 160.0, 200.0,
+        )
+        motor_power = next(
+            (item for item in motor_series if item >= required_motor),
+            math.ceil(required_motor / 10.0) * 10.0,
+        )
+
+    crystallization_mode = str(
+        chosen("crystallization_mode", "连续冷却结晶（程序保底）")
+    )
+    equipment_type = str(
+        values.get("equipment_type")
+        if supplied("equipment_type")
+        else profile.get(
+            "equipment_type",
+            "DTB型连续冷却结晶器（外循环换热）",
+        )
+    )
+    agitator_type = str(
+        chosen(
+            "agitator_type",
+            "三叶轴流推进式循环搅拌器（导流筒内布置，程序保底）",
+        )
+    )
+    draft_tube = str(
+        chosen(
+            "draft_tube_specification",
+            "S30408中心导流筒+四块S30408挡板（程序保底）",
+        )
+    )
+    external_exchanger = str(
+        chosen(
+            "external_circulation_exchanger_specification",
+            "外循环管壳式冷却器；面积由Q/(U·F·ΔTlm)初算（程序保底）",
+        )
+    )
+    shell_material = str(
+        chosen(
+            "shell_material_grade",
+            profile.get("shell_material_grade", "Q345R"),
+        )
+    )
+    internals_material = str(
+        chosen(
+            "internals_material_grade",
+            profile.get("internals_material_grade", "S30408"),
+        )
+    )
+    wetted_material = str(
+        chosen(
+            "wetted_surface_material_grade",
+            profile.get(
+                "wetted_surface_material_grade",
+                "S30408复合/衬里湿接触表面",
+            ),
+        )
+    )
+
+    design_pressure = numeric(values.get("design_pressure_mpa"))
+    pressure_for_formula = design_pressure
+    if (
+        pressure_for_formula is not None
+        and values.get("design_pressure_basis") == "absolute"
+    ):
+        atmosphere = numeric(values.get("atmospheric_pressure_mpa"))
+        if atmosphere is not None:
+            pressure_for_formula -= atmosphere
+    stress = numeric(values.get("allowable_stress_mpa"))
+    weld = numeric(values.get("weld_efficiency"))
+    corrosion = numeric(values.get("corrosion_allowance_mm"))
+    formula_shell = None
+    if (
+        pressure_for_formula is not None
+        and pressure_for_formula > 0
+        and diameter is not None
+        and stress is not None
+        and stress > 0
+        and weld is not None
+        and weld > 0
+        and 2.0 * stress * weld > pressure_for_formula
+    ):
+        formula_shell = (
+            pressure_for_formula
+            * diameter
+            / (2.0 * stress * weld - pressure_for_formula)
+        )
+    preliminary_shell, shell_margin = (
+        _preliminary_nominal_plate_thickness_mm(
+            formula_shell,
+            corrosion,
+        )
+    )
+    formula_head = numeric(values.get("head_calculated_thickness_mm"))
+    preliminary_head, head_margin = (
+        _preliminary_nominal_plate_thickness_mm(
+            formula_head,
+            corrosion,
+        )
+    )
+
+    designation = (
+        f"CRYST-DTB-EXTCOOL-V{nominal_volume:g}-DN{diameter:g}-"
+        f"H{height:g}-{internals_material}-{shell_material}-LINED"
+    )
+    technical_specification = (
+        f"{equipment_type}；{designation}；立式；"
+        f"工作/名义容积={working_volume:g}/{nominal_volume:g} m³；"
+        f"Φ{diameter:g}×{height:g} mm；{agitator_type}；"
+        f"轴功率={shaft_power:g} kW；电机功率候选={motor_power:g} kW；"
+        f"{draft_tube}；外循环冷却面积候选={heat_area:.2f} m²；"
+        f"壳体={shell_material}；湿接触表面={wetted_material}"
+    )
+
+    profile_fields = {
+        "crystallization_mode",
+        "slurry_flow_m3_h",
+        "retention_time_min",
+        "fill_fraction",
+        "crystallizer_height_to_diameter_ratio",
+        "heat_duty_kw",
+        "overall_u_w_m2k",
+        "lmtd_k",
+        "lmtd_correction_factor",
+        "agitator_type",
+        "agitator_power_density_kw_m3",
+        "rotational_speed_rpm",
+        "draft_tube_specification",
+        "external_circulation_exchanger_specification",
+        "wetted_surface_material_grade",
+        "internals_material_grade",
+    }
+    calculated_equations = {
+        "working_volume_m3": "Vworking=Qslurry*tretention/60",
+        "volume_m3": "Vnominal=Vworking/fill_fraction",
+        "diameter_mm": "D=(4*Vnominal/(pi*(H/D)))^(1/3), round up 100 mm",
+        "inner_diameter_mm": "D=(4*Vnominal/(pi*(H/D)))^(1/3), round up 100 mm",
+        "height_mm": "H=Vnominal/(pi*D^2/4), round up 100 mm",
+        "straight_shell_length_mm": "H=Vnominal/(pi*D^2/4), round up 100 mm",
+        "heat_transfer_area_m2": "A=Q*1000/(U*F*dTlm)",
+        "shaft_power_kw": "Pshaft=Vworking*(P/V)",
+        "motor_power_kw": "Pmotor=next_standard_series(Pshaft/0.90)",
+        "formula_only_shell_thickness_mm": (
+            "t=P*Di/(2*[sigma]*phi-P)"
+        ),
+    }
+    field_values = {
+        "equipment_name": values.get("equipment_name") or "连续冷却结晶器",
+        "equipment_type": equipment_type,
+        "equipment_subfamily": "DTB型连续冷却结晶器",
+        "orientation": values.get("orientation") or "立式",
+        "crystallization_mode": crystallization_mode,
+        "slurry_flow_m3_h": slurry_flow,
+        "retention_time_min": retention,
+        "fill_fraction": fill_fraction,
+        "working_volume_m3": working_volume,
+        "volume_m3": nominal_volume,
+        "volume_basis": "nominal_total",
+        "crystallizer_height_to_diameter_ratio": hd_ratio,
+        "diameter_mm": diameter,
+        "inner_diameter_mm": diameter,
+        "height_mm": height,
+        "straight_shell_length_mm": height,
+        "heat_duty_kw": heat_duty,
+        "overall_u_w_m2k": overall_u,
+        "lmtd_k": lmtd,
+        "lmtd_correction_factor": correction,
+        "heat_transfer_area_m2": heat_area,
+        "agitator_type": agitator_type,
+        "agitator_power_density_kw_m3": power_density,
+        "rotational_speed_rpm": numeric(chosen("rotational_speed_rpm", 100.0)),
+        "shaft_power_kw": shaft_power,
+        "motor_power_kw": motor_power,
+        "draft_tube_specification": draft_tube,
+        "external_circulation_exchanger_specification": external_exchanger,
+        "shell_material_grade": shell_material,
+        "material": (
+            f"{shell_material}+{wetted_material}"
+        ),
+        "wetted_surface_material_grade": wetted_material,
+        "internals_material_grade": internals_material,
+        "head_type": values.get("head_type"),
+        "corrosion_allowance_mm": corrosion,
+        "allowable_stress_mpa": stress,
+        "weld_efficiency": weld,
+        "design_pressure_mpa": design_pressure,
+        "design_pressure_basis": values.get("design_pressure_basis"),
+        "design_temperature_c": values.get("design_temperature_c"),
+        "formula_only_shell_thickness_mm": formula_shell,
+        "formula_only_head_thickness_mm": formula_head,
+        "preliminary_nominal_shell_thickness_mm": preliminary_shell,
+        "preliminary_nominal_head_thickness_mm": preliminary_head,
+        "selected_wall_thickness_mm": preliminary_shell,
+        "quantity_count": values.get("quantity_count", 1),
+        "technical_specification": technical_specification,
+    }
+    for field_id, value in field_values.items():
+        if supplied(field_id):
+            origin = None
+            state = None
+        elif field_id in profile_fields:
+            origin = "REGISTERED_CRYSTALLIZER_FALLBACK_PROFILE"
+            state = "DEFAULTED"
+        elif field_id == "equipment_type":
+            origin = "REGISTERED_CRYSTALLIZER_FALLBACK_PROFILE"
+            state = "PRELIMINARY_TYPE_SELECTED"
+        elif field_id == "equipment_name":
+            origin = "REGISTERED_DISPLAY_FALLBACK_FROM_SELECTED_TYPE"
+            state = "DEFAULTED_DISPLAY_IDENTITY"
+        elif field_id in {
+            "working_volume_m3",
+            "volume_m3",
+            "diameter_mm",
+            "inner_diameter_mm",
+            "height_mm",
+            "straight_shell_length_mm",
+            "heat_transfer_area_m2",
+            "shaft_power_kw",
+            "motor_power_kw",
+            "formula_only_shell_thickness_mm",
+        }:
+            origin = "DETERMINISTIC_CALCULATION"
+            state = "CALCULATED"
+        elif field_id in {
+            "preliminary_nominal_shell_thickness_mm",
+            "preliminary_nominal_head_thickness_mm",
+            "selected_wall_thickness_mm",
+        }:
+            origin = "PROGRAMMATIC_PRELIMINARY_PLATE_SERIES"
+            state = "PRELIMINARY_CANDIDATE_NOT_FORMAL"
+        elif field_id == "technical_specification":
+            origin = "PROGRAMMATIC_CRYSTALLIZER_SELECTOR"
+            state = "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        else:
+            origin = None
+            state = None
+        warning = (
+            profile_warning
+            if field_id in profile_fields
+            or field_id
+            in {
+                "working_volume_m3",
+                "volume_m3",
+                "diameter_mm",
+                "inner_diameter_mm",
+                "height_mm",
+                "straight_shell_length_mm",
+                "heat_transfer_area_m2",
+                "shaft_power_kw",
+                "motor_power_kw",
+            }
+            else shell_margin.get("claim_boundary")
+            if field_id
+            in {
+                "preliminary_nominal_shell_thickness_mm",
+                "selected_wall_thickness_mm",
+            }
+            else head_margin.get("claim_boundary")
+            if field_id == "preliminary_nominal_head_thickness_mm"
+            else None
+        )
+        add_field(
+            field_id,
+            value,
+            origin=origin,
+            state=state,
+            equation_chain=calculated_equations.get(field_id),
+            warning=warning,
+        )
+
+    package = {
+        "schema": "programmatic-crystallizer-specification-v1",
+        "policy_id": str(profile.get("profile_id")),
+        "family_id": family_id,
+        "subfamily": "crystallizer",
+        "status": "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "formal_geometry_selected": False,
+        "formal_design_ready": False,
+        "fields": fields,
+        "selection_branch": {
+            "aspen_block_type": block_type or None,
+            "crystallizer_branch_id": "CONTINUOUS_DTB_EXTERNAL_COOLING_FALLBACK",
+            "recommended_type": equipment_type,
+            "fallback_profile_id": profile.get("profile_id"),
+            "crystallization_route": crystallization_mode,
+        },
+        "standard_bundle": [
+            {
+                "standard": "GB/T 150.1~150.4-2024",
+                "role": "pressure_boundary_material_design_and_manufacturing_route",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+            {
+                "standard": "GB/T 25198-2023",
+                "role": "pressure_vessel_head_product_route",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+        ],
+        "formal_open_gates": [
+            "same_system_solubility_and_supersolubility_curve",
+            "nucleation_growth_agglomeration_and_breakage_kinetics",
+            "target_crystal_size_distribution_and_product_withdrawal_policy",
+            "same_case_slurry_solid_fraction_density_and_viscosity",
+            "heat_balance_cooling_medium_and_fouling_behavior",
+            "circulation_velocity_crystal_suspension_and_attrition_test",
+            "shaft_seal_critical_speed_and_vendor_agitator_design",
+            "formal_pressure_boundary_support_nozzle_and_mass_design",
+        ],
+        "user_control": {
+            "every_displayed_parameter_editable": True,
+            "supplied_value_overwrites_default": True,
+            "single_equipment_recalculation_supported": True,
+            "restore_registered_default_supported": True,
+        },
+        "warning": (
+            "这是程序生成的具体DTB连续冷却结晶器预选规格。所有保底值均逐项披露，"
+            "可由用户覆盖并单设备重算；它不替代结晶动力学、粒度分布、浆液水力、"
+            "换热器详细设计或正式机械设计。"
+        ),
+    }
+    hash_payload = json.loads(json.dumps(package, ensure_ascii=False))
+    for row in hash_payload["fields"].values():
+        row.pop("program_specification_sha256", None)
+    specification_sha256 = _canonical_sha256(hash_payload)
+    package["program_specification_sha256"] = specification_sha256
+    for row in package["fields"].values():
+        row["program_specification_sha256"] = specification_sha256
+    return package
+
+
+def build_programmatic_storage_vessel_specification(
+    family_id: str,
+    normalized: dict[str, Any],
+    derived: dict[str, Any],
+    fallback_ledger: list[dict[str, Any]],
+    calculations: list[dict[str, Any]],
+    model_recommendation: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build a use-specific preliminary storage/reflux/buffer vessel spec."""
+    if family_id != "family_storage_vessel":
+        return None
+    values = {**normalized, **derived}
+    explicit_type = str(values.get("equipment_type") or "")
+    type_token = explicit_type.casefold()
+    if "回流" in explicit_type or "reflux" in type_token:
+        branch_id = "HORIZONTAL_REFLUX_DRUM"
+        profile_key = "reflux_drum"
+    elif (
+        "缓冲" in explicit_type
+        or "surge" in type_token
+        or "buffer" in type_token
+    ):
+        branch_id = "VERTICAL_BUFFER_VESSEL"
+        profile_key = "buffer_vessel"
+    elif (
+        "工艺容器" in explicit_type
+        or "process vessel" in type_token
+        or "其他罐" in explicit_type
+    ):
+        branch_id = "VERTICAL_PROCESS_VESSEL"
+        profile_key = "process_vessel"
+    else:
+        branch_id = "VERTICAL_STORAGE_VESSEL"
+        profile_key = "storage_tank"
+
+    profiles = (
+        load_model_rules()
+        .get("design_fallback_policy", {})
+        .get("storage_vessel_preliminary_fallback_profiles", {})
+    )
+    profile = (
+        profiles.get(profile_key, {})
+        if isinstance(profiles, dict)
+        else {}
+    )
+    if not isinstance(profile, dict):
+        profile = {}
+    profile_warning = str(
+        profile.get("warning")
+        or "储罐/容器构造保底仅供预设计，必须用项目库存和机械证据替换。"
+    )
+    fallback_by_field = {
+        str(item.get("field_id")): dict(item)
+        for item in fallback_ledger
+        if item.get("field_id")
+    }
+    calculation_by_target = {
+        str(item.get("target_field")): dict(item)
+        for item in calculations
+        if item.get("target_field") and item.get("adopted_as_canonical", True)
+    }
+
+    def supplied(field_id: str) -> bool:
+        return present(normalized, field_id) and field_id not in fallback_by_field
+
+    def selected(field_id: str, default: Any = None) -> Any:
+        if supplied(field_id):
+            return normalized[field_id]
+        if field_id in profile:
+            return profile[field_id]
+        if present(values, field_id):
+            return values[field_id]
+        return default
+
+    generic_type_tokens = {
+        "",
+        "储罐",
+        "回流罐",
+        "缓冲罐",
+        "其他罐",
+        "储罐/缓冲罐/回流罐",
+        "tank",
+        "storage vessel",
+    }
+    equipment_type = (
+        explicit_type
+        if explicit_type.strip().casefold() not in generic_type_tokens
+        else str(profile.get("equipment_type") or "立式圆筒储罐")
+    )
+    orientation = str(
+        normalized.get("orientation")
+        if supplied("orientation")
+        else "卧式"
+        if "卧式" in equipment_type
+        else profile.get("orientation", "立式")
+    )
+    fill_fraction = numeric(selected("fill_fraction", 0.80))
+    flow = numeric(values.get("flow_m3_h"))
+    retention = numeric(selected("retention_time_min", 10.0))
+    required_volume = (
+        numeric(normalized.get("required_volume_m3"))
+        if supplied("required_volume_m3")
+        else None
+    )
+    if (
+        required_volume is None
+        and supplied("flow_m3_h")
+        and flow is not None
+        and retention is not None
+        and fill_fraction is not None
+        and fill_fraction > 0
+    ):
+        required_volume = flow * retention / (60.0 * fill_fraction)
+    if required_volume is None:
+        required_volume = numeric(values.get("required_volume_m3"))
+    nominal_volume = (
+        numeric(normalized.get("volume_m3"))
+        if supplied("volume_m3")
+        else required_volume
+        if required_volume is not None
+        else numeric(values.get("volume_m3"))
+    )
+    if nominal_volume is None:
+        nominal_volume = 10.0
+    if required_volume is None:
+        required_volume = nominal_volume
+
+    geometry_ratio = numeric(
+        selected(
+            "vessel_geometry_ratio",
+            profile.get("geometry_ratio", 1.50),
+        )
+    )
+    diameter = numeric(
+        normalized.get("inner_diameter_mm")
+        if supplied("inner_diameter_mm")
+        else normalized.get("diameter_mm")
+        if supplied("diameter_mm")
+        else None
+    )
+    height_or_length = numeric(
+        normalized.get("straight_shell_length_mm")
+        if supplied("straight_shell_length_mm")
+        else normalized.get("height_mm")
+        if supplied("height_mm")
+        else None
+    )
+    if geometry_ratio is not None and geometry_ratio > 0:
+        if diameter is None and height_or_length is None:
+            raw_diameter_m = (
+                4.0 * nominal_volume / (math.pi * geometry_ratio)
+            ) ** (1.0 / 3.0)
+            diameter = math.ceil(raw_diameter_m * 10.0) * 100.0
+            height_or_length = (
+                math.ceil(
+                    (
+                        nominal_volume
+                        / (math.pi * (diameter / 1000.0) ** 2 / 4.0)
+                    )
+                    * 10.0
+                )
+                * 100.0
+            )
+        elif diameter is not None and height_or_length is None:
+            height_or_length = (
+                math.ceil(
+                    (
+                        nominal_volume
+                        / (math.pi * (diameter / 1000.0) ** 2 / 4.0)
+                    )
+                    * 10.0
+                )
+                * 100.0
+            )
+        elif height_or_length is not None and diameter is None:
+            diameter = (
+                math.ceil(
+                    math.sqrt(
+                        4.0
+                        * nominal_volume
+                        / (math.pi * (height_or_length / 1000.0))
+                    )
+                    * 10.0
+                )
+                * 100.0
+            )
+
+    material_route = _vessel_material_route(values)
+    shell_material = str(
+        values.get("shell_material_grade")
+        or material_route.get("shell_material_grade")
+        or "Q345R"
+    )
+    internals_material = str(
+        values.get("internals_material_grade")
+        or material_route.get("internals_material_grade")
+        or "S30408"
+    )
+    internals_specification = str(
+        selected(
+            "vessel_internals_specification",
+            profile.get("internals_specification"),
+        )
+    )
+    design_pressure = numeric(values.get("design_pressure_mpa"))
+    pressure_for_formula = design_pressure
+    if (
+        pressure_for_formula is not None
+        and values.get("design_pressure_basis") == "absolute"
+    ):
+        atmosphere = numeric(values.get("atmospheric_pressure_mpa"))
+        if atmosphere is not None:
+            pressure_for_formula -= atmosphere
+    stress = numeric(values.get("allowable_stress_mpa"))
+    weld = numeric(values.get("weld_efficiency"))
+    corrosion = numeric(selected("corrosion_allowance_mm", 2.0))
+    formula_shell = None
+    if (
+        pressure_for_formula is not None
+        and pressure_for_formula > 0
+        and diameter is not None
+        and stress is not None
+        and stress > 0
+        and weld is not None
+        and weld > 0
+        and 2.0 * stress * weld > pressure_for_formula
+    ):
+        formula_shell = (
+            pressure_for_formula
+            * diameter
+            / (2.0 * stress * weld - pressure_for_formula)
+        )
+    preliminary_shell, shell_margin = (
+        _preliminary_nominal_plate_thickness_mm(
+            formula_shell,
+            corrosion,
+        )
+    )
+    formula_head = numeric(values.get("head_calculated_thickness_mm"))
+    preliminary_head, head_margin = (
+        _preliminary_nominal_plate_thickness_mm(
+            formula_head,
+            corrosion,
+        )
+    )
+
+    branch_code = {
+        "storage_tank": "STOR-V",
+        "reflux_drum": "REFLUX-H",
+        "buffer_vessel": "BUFFER-V",
+        "process_vessel": "PROCESS-V",
+    }[profile_key]
+    geometry_label = (
+        "L" if orientation == "卧式" else "H"
+    )
+    designation = (
+        f"{branch_code}-V{nominal_volume:g}-DN{diameter:g}-"
+        f"{geometry_label}{height_or_length:g}-{shell_material}"
+    )
+    technical_specification = (
+        f"{equipment_type}；{designation}；{orientation}；"
+        f"名义容积={nominal_volume:g} m³；装填系数={fill_fraction:g}；"
+        f"Φ{diameter:g}×{height_or_length:g} mm；2:1椭圆封头；"
+        f"壳体={shell_material}；内件={internals_specification}；"
+        f"筒体名义厚度程序候选={preliminary_shell or 'OPEN'} mm"
+    )
+
+    profile_fields = {
+        "equipment_type",
+        "orientation",
+        "fill_fraction",
+        "retention_time_min",
+        "vessel_geometry_ratio",
+        "vessel_internals_specification",
+        "corrosion_allowance_mm",
+    }
+    equations = {
+        "required_volume_m3": "Vrequired=Q*t/(60*fill_fraction)",
+        "diameter_mm": (
+            "D=(4*Vnominal/(pi*geometry_ratio))^(1/3), round up 100 mm"
+        ),
+        "inner_diameter_mm": (
+            "D=(4*Vnominal/(pi*geometry_ratio))^(1/3), round up 100 mm"
+        ),
+        "height_mm": (
+            "H_or_L=Vnominal/(pi*D^2/4), round up 100 mm"
+        ),
+        "height_or_length_mm": (
+            "H_or_L=Vnominal/(pi*D^2/4), round up 100 mm"
+        ),
+        "straight_shell_length_mm": (
+            "H_or_L=Vnominal/(pi*D^2/4), round up 100 mm"
+        ),
+        "formula_only_shell_thickness_mm": (
+            "t=P*Di/(2*[sigma]*phi-P)"
+        ),
+    }
+    field_values = {
+        "equipment_name": values.get("equipment_name") or equipment_type,
+        "equipment_type": equipment_type,
+        "equipment_subfamily": equipment_type,
+        "process_function": values.get("process_function") or explicit_type,
+        "orientation": orientation,
+        "flow_m3_h": flow,
+        "retention_time_min": retention,
+        "fill_fraction": fill_fraction,
+        "normal_liquid_level_percent": (
+            fill_fraction * 100.0 if fill_fraction is not None else None
+        ),
+        "required_volume_m3": required_volume,
+        "volume_m3": nominal_volume,
+        "volume_basis": "nominal_total",
+        "vessel_geometry_ratio": geometry_ratio,
+        "diameter_mm": diameter,
+        "inner_diameter_mm": diameter,
+        "height_mm": height_or_length,
+        "height_or_length_mm": height_or_length,
+        "straight_shell_length_mm": height_or_length,
+        "head_type": values.get("head_type"),
+        "vessel_internals_specification": internals_specification,
+        "shell_material_grade": shell_material,
+        "internals_material_grade": internals_material,
+        "material": shell_material,
+        "insulation_spec": values.get("insulation_spec"),
+        "protective_layer": values.get("protective_layer"),
+        "corrosion_allowance_mm": corrosion,
+        "allowable_stress_mpa": stress,
+        "weld_efficiency": weld,
+        "design_pressure_mpa": design_pressure,
+        "design_pressure_basis": values.get("design_pressure_basis"),
+        "design_temperature_c": values.get("design_temperature_c"),
+        "formula_only_shell_thickness_mm": formula_shell,
+        "formula_only_head_thickness_mm": formula_head,
+        "preliminary_nominal_shell_thickness_mm": preliminary_shell,
+        "preliminary_nominal_head_thickness_mm": preliminary_head,
+        "selected_wall_thickness_mm": preliminary_shell,
+        "quantity_count": values.get("quantity_count", 1),
+        "technical_specification": technical_specification,
+    }
+    fields: dict[str, dict[str, Any]] = {}
+    for field_id, value in field_values.items():
+        fallback = fallback_by_field.get(field_id)
+        calculation = calculation_by_target.get(field_id)
+        if supplied(field_id):
+            origin = "USER_PROJECT_OR_ASPEN_INPUT"
+            state = "PROVIDED"
+        elif field_id in profile_fields:
+            origin = "REGISTERED_STORAGE_VESSEL_FALLBACK_PROFILE"
+            state = (
+                "PRELIMINARY_TYPE_SELECTED"
+                if field_id == "equipment_type"
+                else "DEFAULTED"
+            )
+        elif fallback:
+            origin = str(
+                fallback.get(
+                    "source_kind",
+                    "registered_final_fallback_default",
+                )
+            ).upper()
+            state = str(fallback.get("state") or "DEFAULTED")
+        elif field_id in {
+            "required_volume_m3",
+            "diameter_mm",
+            "inner_diameter_mm",
+            "height_mm",
+            "height_or_length_mm",
+            "straight_shell_length_mm",
+            "normal_liquid_level_percent",
+            "formula_only_shell_thickness_mm",
+        }:
+            origin = "DETERMINISTIC_CALCULATION"
+            state = "CALCULATED"
+        elif field_id in {
+            "preliminary_nominal_shell_thickness_mm",
+            "preliminary_nominal_head_thickness_mm",
+            "selected_wall_thickness_mm",
+        }:
+            origin = "PROGRAMMATIC_PRELIMINARY_PLATE_SERIES"
+            state = "PRELIMINARY_CANDIDATE_NOT_FORMAL"
+        elif field_id == "technical_specification":
+            origin = "PROGRAMMATIC_STORAGE_VESSEL_SELECTOR"
+            state = "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        else:
+            origin = "PROGRAMMATIC_STORAGE_VESSEL_SELECTOR"
+            state = "CALCULATED" if value is not None else "OPEN"
+        warning = (
+            profile_warning
+            if field_id in profile_fields
+            or field_id
+            in {
+                "required_volume_m3",
+                "diameter_mm",
+                "inner_diameter_mm",
+                "height_mm",
+                "height_or_length_mm",
+                "straight_shell_length_mm",
+            }
+            else shell_margin.get("claim_boundary")
+            if field_id
+            in {
+                "preliminary_nominal_shell_thickness_mm",
+                "selected_wall_thickness_mm",
+            }
+            else head_margin.get("claim_boundary")
+            if field_id == "preliminary_nominal_head_thickness_mm"
+            else fallback.get("warning")
+            if fallback
+            else None
+        )
+        fields[field_id] = {
+            "field_id": field_id,
+            "value": value,
+            "unit": FIELD_UNITS.get(field_id),
+            "state": state,
+            "origin": origin,
+            "active_in_selected_branch": True,
+            "evidence_class": "J",
+            "result_status": "PROVISIONAL",
+            "promotion_cap": "TYPE_SCREENING",
+            "formal_design_evidence": False,
+            "fallback_policy_id": (
+                profile.get("profile_id")
+                if origin == "REGISTERED_STORAGE_VESSEL_FALLBACK_PROFILE"
+                else fallback.get("tier")
+                if fallback
+                else None
+            ),
+            "basis": list(fallback.get("basis", [])) if fallback else [],
+            "warning": warning,
+            "equation_chain": (
+                equations.get(field_id)
+                or calculation.get("equation_chain")
+                if calculation
+                else equations.get(field_id)
+            ),
+            "user_override_allowed": True,
+            "single_equipment_recalculation_required_after_override": True,
+        }
+
+    package = {
+        "schema": "programmatic-storage-vessel-specification-v1",
+        "policy_id": str(profile.get("profile_id")),
+        "family_id": family_id,
+        "subfamily": profile_key,
+        "status": "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "formal_geometry_selected": False,
+        "formal_design_ready": False,
+        "fields": fields,
+        "selection_branch": {
+            "storage_vessel_branch_id": branch_id,
+            "recommended_type": equipment_type,
+            "orientation": orientation,
+            "fallback_profile_id": profile.get("profile_id"),
+            "geometry_ratio_name": profile.get("geometry_ratio_name"),
+            "geometry_ratio": geometry_ratio,
+        },
+        "material_selection_chain": {
+            **material_route,
+            "exact_standard_table_cell_reused": False,
+        },
+        "standard_bundle": [
+            {
+                "standard": "GB/T 150.1~150.4-2024",
+                "role": "pressure_vessel_route_when_applicable",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+            {
+                "standard": "GB/T 25198-2023",
+                "role": "pressure_vessel_head_product_route",
+                "automatic_numeric_table_cell_reuse": False,
+            },
+        ],
+        "formal_open_gates": [
+            "inventory_residence_or_dynamic_buffer_basis",
+            "normal_high_low_liquid_levels_and_control_response",
+            "gas_liquid_load_and_entrainment_when_applicable",
+            "vent_nitrogen_blanketing_relief_and_fire_case",
+            "material_compatibility_and_corrosion_system",
+            "wind_seismic_support_foundation_and_piping_loads",
+            "formal_thickness_nozzle_support_drawing_and_mass",
+        ],
+        "user_control": {
+            "every_displayed_parameter_editable": True,
+            "supplied_value_overwrites_default": True,
+            "single_equipment_recalculation_supported": True,
+            "restore_registered_default_supported": True,
+        },
+        "warning": (
+            "这是按储罐、回流罐、缓冲罐或工艺容器用途分别生成的具体预选规格；"
+            "缺项目数据时采用的装填、几何比和内件均逐项标明，不能替代动态控制、"
+            "安全泄放、载荷或正式机械设计。"
+        ),
+    }
+    hash_payload = json.loads(json.dumps(package, ensure_ascii=False))
+    for row in hash_payload["fields"].values():
+        row.pop("program_specification_sha256", None)
+    specification_sha256 = _canonical_sha256(hash_payload)
+    package["program_specification_sha256"] = specification_sha256
+    for row in package["fields"].values():
+        row["program_specification_sha256"] = specification_sha256
+    return package
+
+
+def build_programmatic_auxiliary_specification(
+    family_id: str,
+    normalized: dict[str, Any],
+    derived: dict[str, Any],
+    fallback_ledger: list[dict[str, Any]],
+    calculations: list[dict[str, Any]],
+    model_recommendation: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build concrete specs for compressor, agitator, and static mixer."""
+    supported = {
+        "family_compressor",
+        "family_agitator",
+        "family_static_mixer",
+    }
+    if family_id not in supported:
+        return None
+    values = {**normalized, **derived}
+    profiles = (
+        load_model_rules()
+        .get("design_fallback_policy", {})
+        .get("auxiliary_equipment_preliminary_fallback_profiles", {})
+    )
+    if not isinstance(profiles, dict):
+        profiles = {}
+    fallback_by_field = {
+        str(item.get("field_id")): dict(item)
+        for item in fallback_ledger
+        if item.get("field_id")
+    }
+    calculation_by_target = {
+        str(item.get("target_field")): dict(item)
+        for item in calculations
+        if item.get("target_field") and item.get("adopted_as_canonical", True)
+    }
+    leading = (
+        dict(model_recommendation.get("leading_candidate"))
+        if isinstance(model_recommendation.get("leading_candidate"), dict)
+        else {}
+    )
+    terminal = (
+        dict(leading.get("terminal_selection"))
+        if isinstance(leading.get("terminal_selection"), dict)
+        else {}
+    )
+    selected_type = str(
+        terminal.get("recommended_type")
+        or leading.get("recommended_type")
+        or values.get("equipment_type")
+        or ""
+    )
+
+    def supplied(field_id: str) -> bool:
+        return present(normalized, field_id) and field_id not in fallback_by_field
+
+    def next_motor_power(required_kw: float | None) -> float | None:
+        if required_kw is None:
+            return None
+        series = (
+            0.75, 1.1, 1.5, 2.2, 3.0, 4.0, 5.5, 7.5, 11.0,
+            15.0, 18.5, 22.0, 30.0, 37.0, 45.0, 55.0, 75.0,
+            90.0, 110.0, 132.0, 160.0, 200.0, 250.0, 315.0,
+            400.0, 500.0, 630.0, 800.0, 1000.0,
+        )
+        return next(
+            (item for item in series if item >= required_kw),
+            math.ceil(required_kw / 100.0) * 100.0,
+        )
+
+    fields_values: dict[str, Any]
+    equations: dict[str, str] = {}
+    profile_fields: set[str] = set()
+    formal_open_gates: list[str]
+
+    if family_id == "family_compressor":
+        reciprocating = "往复" in selected_type or "reciproc" in selected_type.casefold()
+        profile_key = (
+            "reciprocating_compressor"
+            if reciprocating
+            else "centrifugal_compressor"
+        )
+        profile = profiles.get(profile_key, {})
+        if not isinstance(profile, dict):
+            profile = {}
+        flow = numeric(values.get("flow_m3_h"))
+        pin = numeric(values.get("inlet_pressure_mpa"))
+        pout = numeric(values.get("outlet_pressure_mpa"))
+        pressure_basis = str(values.get("pressure_basis") or "absolute")
+        atmosphere = numeric(values.get("atmospheric_pressure_mpa")) or 0.101325
+        pin_abs = (
+            pin + atmosphere if pin is not None and pressure_basis == "gauge" else pin
+        )
+        pout_abs = (
+            pout + atmosphere if pout is not None and pressure_basis == "gauge" else pout
+        )
+        pressure_ratio = numeric(values.get("compression_pressure_ratio"))
+        if (
+            pressure_ratio is None
+            and pin_abs is not None
+            and pout_abs is not None
+            and pin_abs > 0
+        ):
+            pressure_ratio = pout_abs / pin_abs
+        k_value = numeric(values.get("heat_capacity_ratio_k"))
+        efficiency = numeric(values.get("efficiency_percent"))
+        inlet_temperature = numeric(values.get("inlet_temperature_c"))
+        shaft_power = numeric(values.get("shaft_power_kw"))
+        if (
+            shaft_power is None
+            and flow is not None
+            and pin_abs is not None
+            and pin_abs > 0
+            and pressure_ratio is not None
+            and pressure_ratio > 1
+            and k_value is not None
+            and k_value > 1
+            and efficiency is not None
+            and efficiency > 0
+        ):
+            shaft_power = (
+                k_value
+                / (k_value - 1.0)
+                * pin_abs
+                * 1_000_000.0
+                * (flow / 3600.0)
+                * (
+                    pressure_ratio
+                    ** ((k_value - 1.0) / k_value)
+                    - 1.0
+                )
+                / (efficiency / 100.0)
+                / 1000.0
+            )
+        driver_efficiency = numeric(values.get("driver_efficiency_percent"))
+        auxiliary_fraction = numeric(values.get("auxiliary_power_fraction"))
+        total_power = numeric(values.get("total_power_kw"))
+        if (
+            total_power is None
+            and shaft_power is not None
+            and driver_efficiency is not None
+            and driver_efficiency > 0
+        ):
+            total_power = (
+                shaft_power
+                / (driver_efficiency / 100.0)
+                * (1.0 + (auxiliary_fraction or 0.0))
+            )
+        motor_power = numeric(values.get("motor_power_kw"))
+        if motor_power is None:
+            motor_power = next_motor_power(total_power)
+        maximum_stage_ratio = float(
+            profile.get("maximum_stage_pressure_ratio", 3.0)
+        )
+        minimum_stage_count = int(profile.get("minimum_stage_count", 1))
+        if str(values.get("aspen_block_type") or "").upper() == "MCOMPR":
+            minimum_stage_count = max(minimum_stage_count, 2)
+        stage_count = (
+            int(float(values["stage_count"]))
+            if supplied("stage_count")
+            else max(
+                minimum_stage_count,
+                int(math.ceil(math.log(pressure_ratio) / math.log(maximum_stage_ratio)))
+                if pressure_ratio is not None and pressure_ratio > 1
+                else minimum_stage_count,
+            )
+        )
+        per_stage_ratio = (
+            pressure_ratio ** (1.0 / stage_count)
+            if pressure_ratio is not None and pressure_ratio > 0
+            else None
+        )
+        intercooler_count = max(stage_count - 1, 0)
+        speed = numeric(
+            values.get("rotational_speed_rpm")
+            if supplied("rotational_speed_rpm")
+            else profile.get("rotational_speed_rpm")
+        )
+        outlet_temperature = numeric(values.get("outlet_temperature_c"))
+        if (
+            outlet_temperature is None
+            and inlet_temperature is not None
+            and per_stage_ratio is not None
+            and k_value is not None
+            and k_value > 1
+            and efficiency is not None
+            and efficiency > 0
+        ):
+            outlet_temperature = (
+                (inlet_temperature + 273.15)
+                * (
+                    1.0
+                    + (
+                        per_stage_ratio ** ((k_value - 1.0) / k_value)
+                        - 1.0
+                    )
+                    / (efficiency / 100.0)
+                )
+                - 273.15
+            )
+        casing = str(
+            values.get("casing_material_grade")
+            if supplied("casing_material_grade")
+            else profile.get("casing_material_grade")
+        )
+        impeller = str(
+            values.get("impeller_material_grade")
+            if supplied("impeller_material_grade")
+            else profile.get("impeller_material_grade")
+        )
+        shaft_material = str(
+            values.get("shaft_material_grade")
+            if supplied("shaft_material_grade")
+            else profile.get("shaft_material_grade")
+        )
+        seal_type = str(
+            values.get("seal_type")
+            if supplied("seal_type")
+            else profile.get("seal_type")
+        )
+        cooling = str(
+            values.get("cooling_arrangement")
+            if supplied("cooling_arrangement")
+            else profile.get("cooling_arrangement")
+        )
+        driver_type = str(
+            values.get("driver_type")
+            if supplied("driver_type")
+            else profile.get("driver_type")
+        )
+        branch_code = "RECIP" if reciprocating else "CENT"
+        model_designation = (
+            f"COMP-{branch_code}-{stage_count}STG-Q{flow:g}-"
+            f"PR{pressure_ratio:.2f}-P{shaft_power:.1f}-M{motor_power:g}"
+        )
+        technical_specification = (
+            f"{selected_type}；{model_designation}；{stage_count}级；"
+            f"单级压比={per_stage_ratio:.3f}；转速={speed:g} r/min；"
+            f"轴/总输入/电机候选={shaft_power:.2f}/{total_power:.2f}/"
+            f"{motor_power:g} kW；机壳={casing}；"
+            f"叶轮/运动件={impeller}；轴={shaft_material}；密封={seal_type}"
+        )
+        fields_values = {
+            "equipment_name": values.get("equipment_name") or selected_type,
+            "equipment_type": selected_type,
+            "equipment_subfamily": (
+                "往复式压缩机" if reciprocating else "离心式压缩机"
+            ),
+            "model_designation": model_designation,
+            "model_status": "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+            "flow_m3_h": flow,
+            "inlet_pressure_mpa": pin,
+            "outlet_pressure_mpa": pout,
+            "pressure_basis": pressure_basis,
+            "compression_pressure_ratio": pressure_ratio,
+            "stage_count": stage_count,
+            "per_stage_pressure_ratio": per_stage_ratio,
+            "intercooler_count": intercooler_count,
+            "inlet_temperature_c": inlet_temperature,
+            "outlet_temperature_c": outlet_temperature,
+            "gas_molecular_weight": values.get("gas_molecular_weight"),
+            "compressibility_factor": values.get("compressibility_factor"),
+            "heat_capacity_ratio_k": k_value,
+            "efficiency_percent": efficiency,
+            "rotational_speed_rpm": speed,
+            "shaft_power_kw": shaft_power,
+            "driver_efficiency_percent": driver_efficiency,
+            "auxiliary_power_fraction": auxiliary_fraction,
+            "total_power_kw": total_power,
+            "motor_power_kw": motor_power,
+            "cooling_arrangement": cooling,
+            "driver_type": driver_type,
+            "casing_material_grade": casing,
+            "impeller_material_grade": impeller,
+            "shaft_material_grade": shaft_material,
+            "seal_type": seal_type,
+            "material": (
+                f"机壳{casing}；叶轮/运动件{impeller}；轴{shaft_material}"
+            ),
+            "quantity_count": values.get("quantity_count", 1),
+            "technical_specification": technical_specification,
+        }
+        equations = {
+            "compression_pressure_ratio": "r=Pout,abs/Pin,abs",
+            "stage_count": "N=max(Nmin,ceil(ln(r)/ln(rstage,max)))",
+            "per_stage_pressure_ratio": "rstage=r^(1/N)",
+            "intercooler_count": "Ncooler=max(Nstage-1,0)",
+            "shaft_power_kw": (
+                "P=k/(k-1)*Pin*Q*(r^((k-1)/k)-1)/eta"
+            ),
+            "total_power_kw": "Ptotal=Pshaft/eta_driver*(1+f_aux)",
+            "motor_power_kw": "Pmotor=next_standard_series(Ptotal)",
+            "outlet_temperature_c": (
+                "T2=T1*(1+(rstage^((k-1)/k)-1)/eta_is)-273.15"
+            ),
+        }
+        profile_fields = {
+            "rotational_speed_rpm",
+            "cooling_arrangement",
+            "driver_type",
+            "casing_material_grade",
+            "impeller_material_grade",
+            "shaft_material_grade",
+            "seal_type",
+        }
+        branch_id = (
+            "RECIPROCATING_COMPRESSOR"
+            if reciprocating
+            else "CENTRIFUGAL_COMPRESSOR"
+        )
+        formal_open_gates = [
+            "same_gas_composition_and_all_operating_cases",
+            "vendor_capacity_head_efficiency_and_power_map",
+            "surge_choke_or_reciprocating_capacity_control",
+            "stage_discharge_temperature_and_intercooler_rating",
+            "driver_starting_torque_and_electrical_datasheet",
+            "seal_system_lube_system_and_auxiliary_list",
+            "rotor_dynamics_vibration_noise_and_foundation_loads",
+            "vendor_model_materials_guarantee_and_nps",
+        ]
+    elif family_id == "family_agitator":
+        profile_key = "top_entry_agitator"
+        profile = profiles.get(profile_key, {})
+        if not isinstance(profile, dict):
+            profile = {}
+        volume = numeric(values.get("volume_m3"))
+        speed = numeric(values.get("rotational_speed_rpm"))
+        shaft_power = numeric(values.get("shaft_power_kw"))
+        vessel_diameter = numeric(values.get("inner_diameter_mm"))
+        if vessel_diameter is None and volume is not None:
+            vessel_diameter = (
+                math.ceil(
+                    (
+                        4.0 * volume / (math.pi * 1.20)
+                    ) ** (1.0 / 3.0)
+                    * 10.0
+                )
+                * 100.0
+            )
+        impeller_ratio = numeric(
+            values.get("impeller_diameter_ratio")
+            if supplied("impeller_diameter_ratio")
+            else profile.get("impeller_diameter_ratio", 0.33)
+        )
+        impeller_diameter = numeric(values.get("impeller_diameter_mm"))
+        if (
+            impeller_diameter is None
+            and vessel_diameter is not None
+            and impeller_ratio is not None
+        ):
+            impeller_diameter = (
+                math.ceil(vessel_diameter * impeller_ratio / 50.0) * 50.0
+            )
+        torque_nm = (
+            9550.0 * shaft_power / speed
+            if shaft_power is not None and speed is not None and speed > 0
+            else None
+        )
+        shaft_diameter = numeric(values.get("shaft_diameter_mm"))
+        if shaft_diameter is None and torque_nm is not None:
+            raw_shaft = (
+                16.0 * torque_nm * 1000.0 / (math.pi * 30.0)
+            ) ** (1.0 / 3.0)
+            shaft_diameter = math.ceil(raw_shaft / 5.0) * 5.0
+        motor_efficiency = float(profile.get("motor_efficiency", 0.90))
+        motor_power = numeric(values.get("motor_power_kw"))
+        if motor_power is None and shaft_power is not None:
+            motor_power = next_motor_power(shaft_power / motor_efficiency)
+        nominal_motor_speed = float(
+            profile.get("motor_nominal_speed_rpm", 1500.0)
+        )
+        gearbox_ratio = numeric(values.get("gearbox_ratio"))
+        if gearbox_ratio is None and speed is not None and speed > 0:
+            gearbox_ratio = nominal_motor_speed / speed
+        agitator_type = str(
+            values.get("agitator_type")
+            if supplied("agitator_type")
+            else profile.get("agitator_type")
+            or selected_type
+        )
+        agitator_material = str(
+            values.get("agitator_material_grade")
+            if supplied("agitator_material_grade")
+            else profile.get("agitator_material_grade")
+        )
+        shaft_material = str(
+            values.get("shaft_material_grade")
+            if supplied("shaft_material_grade")
+            else profile.get("shaft_material_grade")
+        )
+        seal_type = str(
+            values.get("seal_type")
+            if supplied("seal_type")
+            else profile.get("seal_type")
+        )
+        baffles = int(
+            float(
+                values.get("baffle_count")
+                if supplied("baffle_count")
+                else profile.get("baffle_count", 4)
+            )
+        )
+        model_designation = (
+            f"AGT-TE-PBT45-D{impeller_diameter:g}-N{speed:g}-"
+            f"P{shaft_power:g}-M{motor_power:g}-SHAFT{shaft_diameter:g}-"
+            f"{agitator_material}-4B"
+        )
+        technical_specification = (
+            f"{agitator_type}；{model_designation}；适配工作容积={volume:g} m³；"
+            f"桨径={impeller_diameter:g} mm；D/T={impeller_ratio:g}；"
+            f"{baffles}块挡板；转速={speed:g} r/min；"
+            f"轴功率/电机候选={shaft_power:g}/{motor_power:g} kW；"
+            f"程序扭矩={torque_nm:.1f} N·m；轴径候选={shaft_diameter:g} mm；"
+            f"减速比候选={gearbox_ratio:.2f}；密封={seal_type}"
+        )
+        fields_values = {
+            "equipment_name": values.get("equipment_name") or "顶入式搅拌器",
+            "equipment_type": agitator_type,
+            "equipment_subfamily": "顶入式折叶涡轮搅拌器",
+            "model_designation": model_designation,
+            "model_status": "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+            "volume_m3": volume,
+            "volume_basis": values.get("volume_basis"),
+            "inner_diameter_mm": vessel_diameter,
+            "agitator_type": agitator_type,
+            "impeller_diameter_ratio": impeller_ratio,
+            "impeller_diameter_mm": impeller_diameter,
+            "baffle_count": baffles,
+            "rotational_speed_rpm": speed,
+            "shaft_power_kw": shaft_power,
+            "motor_power_kw": motor_power,
+            "torque_nm": torque_nm,
+            "shaft_diameter_mm": shaft_diameter,
+            "gearbox_ratio": gearbox_ratio,
+            "agitator_material_grade": agitator_material,
+            "shaft_material_grade": shaft_material,
+            "seal_type": seal_type,
+            "material": f"桨叶{agitator_material}；轴{shaft_material}",
+            "mixing_metric": values.get("mixing_metric"),
+            "quantity_count": values.get("quantity_count", 1),
+            "technical_specification": technical_specification,
+        }
+        equations = {
+            "inner_diameter_mm": (
+                "T=(4*V/(pi*1.2))^(1/3), round up 100 mm"
+            ),
+            "impeller_diameter_mm": "Dimp=round_up_50(T*(D/T))",
+            "torque_nm": "Torque=9550*Pshaft/n",
+            "shaft_diameter_mm": (
+                "d=(16*Torque*1000/(pi*tau_allow))^(1/3), "
+                "tau_allow=30 MPa, round up 5 mm"
+            ),
+            "motor_power_kw": "Pmotor=next_standard_series(Pshaft/0.90)",
+            "gearbox_ratio": "i=n_motor/n_agitator",
+        }
+        profile_fields = {
+            "agitator_type",
+            "impeller_diameter_ratio",
+            "baffle_count",
+            "agitator_material_grade",
+            "shaft_material_grade",
+            "seal_type",
+        }
+        branch_id = "TOP_ENTRY_PITCHED_BLADE_TURBINE_AGITATOR"
+        formal_open_gates = [
+            "same_case_viscosity_density_solid_and_gas_fraction",
+            "mixing_objective_blend_time_suspension_or_mass_transfer",
+            "impeller_vendor_hydraulic_number_and_critical_speed",
+            "shaft_bending_torsion_fatigue_and_bearing_design",
+            "seal_pressure_temperature_flush_and_leakage_plan",
+            "gearbox_motor_starting_torque_and_vfd_datasheet",
+            "vessel_nozzle_reinforcement_and_support_load",
+        ]
+    else:
+        profile_key = "helical_static_mixer"
+        profile = profiles.get(profile_key, {})
+        if not isinstance(profile, dict):
+            profile = {}
+        flow = numeric(values.get("flow_m3_h"))
+        target_velocity = numeric(values.get("target_velocity_m_s"))
+        density = numeric(
+            values.get("density_kg_m3")
+            if supplied("density_kg_m3")
+            else profile.get("density_kg_m3", 1000.0)
+        )
+        viscosity = numeric(
+            values.get("dynamic_viscosity_mpa_s")
+            if supplied("dynamic_viscosity_mpa_s")
+            else profile.get("dynamic_viscosity_mpa_s", 1.0)
+        )
+        required_id = (
+            math.sqrt(
+                4.0 * (flow / 3600.0) / (math.pi * target_velocity)
+            )
+            * 1000.0
+            if flow is not None
+            and target_velocity is not None
+            and flow > 0
+            and target_velocity > 0
+            else None
+        )
+        dn_series = [
+            (15, 21.3, 3.2), (20, 26.9, 3.2), (25, 33.7, 3.6),
+            (32, 42.4, 3.6), (40, 48.3, 3.7), (50, 60.3, 4.0),
+            (65, 76.1, 5.0), (80, 88.9, 5.5), (100, 114.3, 6.0),
+            (125, 139.7, 6.5), (150, 168.3, 7.1), (200, 219.1, 8.2),
+            (250, 273.0, 9.3), (300, 323.9, 10.3),
+        ]
+        user_dn = numeric(values.get("selected_dn"))
+        if user_dn is not None:
+            selected_dn = int(user_dn)
+            od, wall = next(
+                ((od, wall) for dn, od, wall in dn_series if dn == selected_dn),
+                (selected_dn * 1.10, max(4.0, selected_dn * 0.03)),
+            )
+        else:
+            selected_dn, od, wall = next(
+                (
+                    (dn, od, wall)
+                    for dn, od, wall in dn_series
+                    if od - 2.0 * wall >= (required_id or 0.0)
+                ),
+                dn_series[-1],
+            )
+        actual_id = od - 2.0 * wall
+        actual_velocity = (
+            (flow / 3600.0) / (math.pi * (actual_id / 1000.0) ** 2 / 4.0)
+            if flow is not None
+            else None
+        )
+        element_count = int(
+            float(
+                values.get("element_count")
+                if supplied("element_count")
+                else profile.get("element_count", 6)
+            )
+        )
+        element_ld = numeric(
+            values.get("element_length_to_diameter_ratio")
+            if supplied("element_length_to_diameter_ratio")
+            else profile.get("element_length_to_diameter_ratio", 1.5)
+        )
+        length_mm = numeric(values.get("length_mm"))
+        if length_mm is None and element_ld is not None:
+            length_mm = (
+                math.ceil(
+                    element_count * element_ld * actual_id / 100.0
+                )
+                * 100.0
+            )
+        k_per_element = numeric(
+            values.get("local_resistance_coefficient_per_element")
+            if supplied("local_resistance_coefficient_per_element")
+            else profile.get(
+                "local_resistance_coefficient_per_element",
+                1.5,
+            )
+        )
+        pressure_drop = numeric(values.get("pressure_drop_kpa"))
+        if (
+            pressure_drop is None
+            and density is not None
+            and actual_velocity is not None
+            and k_per_element is not None
+        ):
+            pressure_drop = (
+                element_count
+                * k_per_element
+                * density
+                * actual_velocity**2
+                / 2.0
+                / 1000.0
+            )
+        reynolds = (
+            density
+            * actual_velocity
+            * (actual_id / 1000.0)
+            / (viscosity / 1000.0)
+            if density is not None
+            and actual_velocity is not None
+            and viscosity is not None
+            and viscosity > 0
+            else None
+        )
+        flow_regime = (
+            "湍流" if reynolds is not None and reynolds >= 4000
+            else "过渡流" if reynolds is not None and reynolds >= 2300
+            else "层流" if reynolds is not None
+            else None
+        )
+        element_type = str(
+            values.get("element_type")
+            if supplied("element_type")
+            else profile.get("element_type")
+        )
+        material = str(
+            values.get("material")
+            if supplied("material")
+            else profile.get("material", "S30408")
+        )
+        pressure_class = str(
+            values.get("pressure_class")
+            if supplied("pressure_class")
+            else profile.get("pressure_class", "PN16")
+        )
+        connection = str(
+            values.get("connection_type")
+            if supplied("connection_type")
+            else profile.get("connection_type", "对焊连接")
+        )
+        design_pressure = numeric(
+            values.get("design_pressure_mpa")
+            if supplied("design_pressure_mpa")
+            else profile.get("design_pressure_mpa", 1.0)
+        )
+        design_pressure_basis = str(
+            values.get("design_pressure_basis")
+            if supplied("design_pressure_basis")
+            else profile.get("design_pressure_basis", "gauge")
+        )
+        blockage_boundary = (
+            "颗粒最大粒径应小于元件最小净通道的1/3；含固、结晶、聚合或卫生级任务"
+            "必须改为可拆芯/可清洗结构并做压降试验。"
+        )
+        model_designation = (
+            f"SMX-KENICS-DN{selected_dn}-{element_count}E-"
+            f"L{length_mm:g}-{material}-{pressure_class}-BW"
+        )
+        technical_specification = (
+            f"螺旋元件静态混合器；{model_designation}；"
+            f"OD{od:g}×{wall:g} mm；有效内径={actual_id:g} mm；"
+            f"{element_count}个{element_type}；总长={length_mm:g} mm；"
+            f"实际流速={actual_velocity:.3f} m/s；"
+            f"程序压降={pressure_drop:.3f} kPa；Re={reynolds:.0f}；"
+            f"{pressure_class}；{connection}"
+        )
+        fields_values = {
+            "equipment_name": values.get("equipment_name") or "静态混合器",
+            "equipment_type": "螺旋元件静态混合器",
+            "equipment_subfamily": "Kenics型左右旋螺旋元件静态混合器",
+            "model_designation": model_designation,
+            "model_status": "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+            "medium_name": values.get("main_medium") or "水样低黏液体（程序保底物性）",
+            "flow_m3_h": flow,
+            "target_velocity_m_s": target_velocity,
+            "required_inner_diameter_mm": required_id,
+            "selected_dn": selected_dn,
+            "selected_outer_diameter_mm": od,
+            "selected_wall_thickness_mm": wall,
+            "actual_velocity_m_s": actual_velocity,
+            "element_type": element_type,
+            "element_count": element_count,
+            "element_length_to_diameter_ratio": element_ld,
+            "length_mm": length_mm,
+            "local_resistance_coefficient_per_element": k_per_element,
+            "density_kg_m3": density,
+            "dynamic_viscosity_mpa_s": viscosity,
+            "reynolds_number": reynolds,
+            "flow_regime": flow_regime,
+            "pressure_drop_kpa": pressure_drop,
+            "allowable_pressure_drop_kpa": values.get(
+                "allowable_pressure_drop_kpa"
+            ),
+            "mixing_metric": values.get("mixing_metric"),
+            "blockage_cleaning_boundary": blockage_boundary,
+            "material": material,
+            "pressure_class": pressure_class,
+            "connection_type": connection,
+            "design_pressure_mpa": design_pressure,
+            "design_pressure_basis": design_pressure_basis,
+            "design_temperature_c": values.get("design_temperature_c"),
+            "quantity_count": values.get("quantity_count", 1),
+            "technical_specification": technical_specification,
+        }
+        equations = {
+            "required_inner_diameter_mm": (
+                "Dreq=sqrt(4*(Q/3600)/(pi*vtarget))*1000"
+            ),
+            "selected_dn": (
+                "select first registered DN whose OD-2t >= Dreq"
+            ),
+            "actual_velocity_m_s": "v=(Q/3600)/(pi*Di^2/4)",
+            "length_mm": "L=N_element*(L/D)_element*Di, round up 100 mm",
+            "pressure_drop_kpa": (
+                "dP=N_element*K_element*rho*v^2/(2*1000)"
+            ),
+            "reynolds_number": "Re=rho*v*Di/mu",
+        }
+        profile_fields = {
+            "element_type",
+            "element_count",
+            "element_length_to_diameter_ratio",
+            "local_resistance_coefficient_per_element",
+            "density_kg_m3",
+            "dynamic_viscosity_mpa_s",
+            "material",
+            "pressure_class",
+            "connection_type",
+            "design_pressure_mpa",
+            "design_pressure_basis",
+        }
+        branch_id = "HELICAL_KENICS_STATIC_MIXER"
+        formal_open_gates = [
+            "same_case_density_viscosity_non_newtonian_behavior_and_solid_size",
+            "required_mix_quality_and_sampling_or_test_method",
+            "vendor_pressure_drop_and_mixing_performance_curve",
+            "blockage_fouling_cleaning_and_removable_core_boundary",
+            "material_compatibility_pressure_temperature_rating_and_connections",
+            "vendor_model_drawing_mass_and_support_loads",
+        ]
+
+    profile_warning = str(
+        profile.get("warning")
+        or "该辅助设备程序规格仅供预设计，必须用厂家证据替换。"
+    )
+    fields: dict[str, dict[str, Any]] = {}
+    for field_id, value in fields_values.items():
+        fallback = fallback_by_field.get(field_id)
+        calculation = calculation_by_target.get(field_id)
+        if supplied(field_id):
+            origin = "USER_PROJECT_OR_ASPEN_INPUT"
+            state = "PROVIDED"
+        elif field_id in profile_fields:
+            origin = "REGISTERED_AUXILIARY_EQUIPMENT_FALLBACK_PROFILE"
+            state = "DEFAULTED"
+        elif field_id in equations or field_id in derived:
+            origin = "DETERMINISTIC_CALCULATION"
+            state = "CALCULATED"
+        elif fallback:
+            origin = str(
+                fallback.get(
+                    "source_kind",
+                    "registered_final_fallback_default",
+                )
+            ).upper()
+            state = str(fallback.get("state") or "DEFAULTED")
+        elif field_id == "model_designation":
+            origin = "PROGRAMMATIC_AUXILIARY_SELECTOR"
+            state = "PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL"
+        elif field_id == "technical_specification":
+            origin = "PROGRAMMATIC_AUXILIARY_SELECTOR"
+            state = "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        else:
+            origin = "PROGRAMMATIC_AUXILIARY_SELECTOR"
+            state = "CALCULATED" if value is not None else "OPEN"
+        fields[field_id] = {
+            "field_id": field_id,
+            "value": value,
+            "unit": FIELD_UNITS.get(field_id),
+            "state": state,
+            "origin": origin,
+            "active_in_selected_branch": True,
+            "evidence_class": "J",
+            "result_status": "PROVISIONAL",
+            "promotion_cap": "TYPE_SCREENING",
+            "formal_design_evidence": False,
+            "fallback_policy_id": (
+                profile.get("profile_id")
+                if origin
+                == "REGISTERED_AUXILIARY_EQUIPMENT_FALLBACK_PROFILE"
+                else fallback.get("tier")
+                if fallback
+                else None
+            ),
+            "basis": list(fallback.get("basis", [])) if fallback else [],
+            "warning": (
+                profile_warning
+                if field_id in profile_fields or field_id in equations
+                else fallback.get("warning")
+                if fallback
+                else None
+            ),
+            "equation_chain": (
+                equations.get(field_id)
+                or calculation.get("equation_chain")
+                if calculation
+                else equations.get(field_id)
+            ),
+            "user_override_allowed": True,
+            "single_equipment_recalculation_required_after_override": True,
+        }
+
+    package = {
+        "schema": "programmatic-auxiliary-equipment-specification-v1",
+        "policy_id": str(profile.get("profile_id")),
+        "family_id": family_id,
+        "subfamily": profile_key,
+        "status": "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "formal_model_selected": False,
+        "formal_design_ready": False,
+        "fields": fields,
+        "selection_branch": {
+            "auxiliary_branch_id": branch_id,
+            "recommended_type": fields_values.get("equipment_type"),
+            "fallback_profile_id": profile.get("profile_id"),
+            "terminal_rule_id": terminal.get("rule_id"),
+            "terminal_selection_status": terminal.get("status"),
+        },
+        "formal_open_gates": formal_open_gates,
+        "user_control": {
+            "every_displayed_parameter_editable": True,
+            "supplied_value_overwrites_default": True,
+            "single_equipment_recalculation_supported": True,
+            "restore_registered_default_supported": True,
+        },
+        "warning": (
+            "这是程序生成的具体辅助设备预选规格，型号字符串是可追溯工程候选而非厂家"
+            "商品型号；所有保底与公式字段均可由用户覆盖后单设备重算。"
+        ),
+    }
+    hash_payload = json.loads(json.dumps(package, ensure_ascii=False))
+    for row in hash_payload["fields"].values():
+        row.pop("program_specification_sha256", None)
+    specification_sha256 = _canonical_sha256(hash_payload)
+    package["program_specification_sha256"] = specification_sha256
+    for row in package["fields"].values():
+        row["program_specification_sha256"] = specification_sha256
+    return package
+
+
+def build_programmatic_membrane_package_specification(
+    family_id: str,
+    normalized: dict[str, Any],
+    derived: dict[str, Any],
+    fallback_ledger: list[dict[str, Any]],
+    calculations: list[dict[str, Any]],
+    model_recommendation: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build concrete membrane, filter, dryer, or TSA package candidates."""
+
+    if family_id not in {"family_membrane", "family_package_equipment"}:
+        return None
+    values = {**normalized, **derived}
+    profiles = (
+        load_model_rules()
+        .get("design_fallback_policy", {})
+        .get("membrane_package_preliminary_fallback_profiles", {})
+    )
+    if not isinstance(profiles, dict):
+        profiles = {}
+    fallback_by_field = {
+        str(item.get("field_id")): dict(item)
+        for item in fallback_ledger
+        if item.get("field_id")
+    }
+    calculation_by_target = {
+        str(item.get("target_field")): dict(item)
+        for item in calculations
+        if item.get("target_field") and item.get("adopted_as_canonical", True)
+    }
+    leading = (
+        dict(model_recommendation.get("leading_candidate"))
+        if isinstance(model_recommendation.get("leading_candidate"), dict)
+        else {}
+    )
+    terminal = (
+        dict(leading.get("terminal_selection"))
+        if isinstance(leading.get("terminal_selection"), dict)
+        else {}
+    )
+    block_type = str(values.get("aspen_block_type") or "").upper()
+
+    def supplied(field_id: str) -> bool:
+        return present(normalized, field_id) and field_id not in fallback_by_field
+
+    def number(
+        field_id: str,
+        profile: Mapping[str, Any],
+        default: float,
+        *,
+        accept_derived: bool = False,
+    ) -> float:
+        candidate = numeric(values.get(field_id))
+        if candidate is not None and (
+            supplied(field_id) or (accept_derived and field_id in derived)
+        ):
+            return candidate
+        candidate = numeric(profile.get(field_id))
+        return candidate if candidate is not None else default
+
+    def text_value(
+        field_id: str,
+        profile: Mapping[str, Any],
+        default: str,
+    ) -> str:
+        if supplied(field_id):
+            return str(values.get(field_id))
+        return str(profile.get(field_id) or default)
+
+    def next_motor(required_kw: float) -> float:
+        series = (
+            0.75, 1.1, 1.5, 2.2, 3.0, 4.0, 5.5, 7.5, 11.0,
+            15.0, 18.5, 22.0, 30.0, 37.0, 45.0, 55.0, 75.0,
+            90.0, 110.0, 132.0, 160.0, 200.0, 250.0, 315.0,
+        )
+        return next(
+            (item for item in series if item >= required_kw),
+            math.ceil(required_kw / 100.0) * 100.0,
+        )
+
+    fields_values: dict[str, Any]
+    equations: dict[str, str]
+    profile_fields: set[str]
+    formal_open_gates: list[str]
+
+    if family_id == "family_membrane":
+        profile_key = "spiral_wound_8040_membrane"
+        profile = profiles.get(profile_key, {})
+        if not isinstance(profile, dict):
+            profile = {}
+        geometry = text_value(
+            "membrane_geometry_type", profile, "spiral_wound"
+        )
+        element_name = text_value(
+            "element_standard_designation", profile, "8040卷式膜元件"
+        )
+        element_od = number(
+            "element_outer_diameter_mm", profile, 201.0
+        )
+        element_length = number("element_length_mm", profile, 1016.0)
+        area_per_element = number(
+            "membrane_area_per_element_m2", profile, 37.0
+        )
+        element_count = int(number("element_count", profile, 10.0))
+        elements_per_vessel = int(
+            number("elements_per_pressure_vessel", profile, 5.0)
+        )
+        vessel_count = (
+            int(float(values["pressure_vessel_count"]))
+            if supplied("pressure_vessel_count")
+            else int(math.ceil(element_count / elements_per_vessel))
+        )
+        area = (
+            numeric(values.get("membrane_area_m2"))
+            if supplied("membrane_area_m2")
+            else element_count * area_per_element
+        )
+        flux = number("flux", profile, 20.0)
+        recovery = number("recovery_percent", profile, 80.0)
+        selectivity = number("selectivity", profile, 25.0)
+        permeate = (
+            numeric(values.get("permeate_flow_m3_h"))
+            if supplied("permeate_flow_m3_h")
+            else area * flux / 1000.0
+        )
+        feed = (
+            numeric(values.get("feed_flow_m3_h"))
+            if supplied("feed_flow_m3_h")
+            else permeate / (recovery / 100.0)
+        )
+        concentrate = (
+            numeric(values.get("concentrate_flow_m3_h"))
+            if supplied("concentrate_flow_m3_h")
+            else feed - permeate
+        )
+        membrane_material = text_value(
+            "membrane_material_grade",
+            profile,
+            "芳香族聚酰胺薄膜复合膜（PA-TFC）",
+        )
+        vessel_material = text_value(
+            "pressure_vessel_material_grade",
+            profile,
+            "FRP玻璃纤维增强环氧树脂",
+        )
+        center_material = text_value(
+            "center_tube_material_grade", profile, "ABS"
+        )
+        service_route = text_value(
+            "service_route",
+            profile,
+            "水相压力驱动分离（程序保底；RO/NF待确认）",
+        )
+        design_pressure = number("design_pressure_mpa", profile, 1.6)
+        pressure_basis = text_value(
+            "design_pressure_basis", profile, "gauge"
+        )
+        pressure_class = text_value("pressure_class", profile, "PN16")
+        material = (
+            f"膜层={membrane_material}；膜壳={vessel_material}；"
+            f"中心管={center_material}"
+        )
+        designation = (
+            f"MEM-SW8040-{element_count}E-{vessel_count}PV"
+            f"{elements_per_vessel}-PA-TFC-A{area:g}-{pressure_class}"
+        )
+        technical = (
+            f"8040卷式膜装置；{designation}；{element_count}支{element_name}，"
+            f"{vessel_count}支膜壳×最多{elements_per_vessel}芯；"
+            f"单支/总膜面积={area_per_element:g}/{area:g} m²；"
+            f"设计通量={flux:g} L/(m²·h)，程序产水={permeate:.2f} m³/h；"
+            f"回收率={recovery:g}%，进料/浓水={feed:.2f}/{concentrate:.2f} "
+            f"m³/h；{pressure_class}；{material}"
+        )
+        fields_values = {
+            "equipment_name": values.get("equipment_name") or "卷式膜分离装置",
+            "equipment_type": "8040卷式膜分离装置",
+            "equipment_subfamily": "8040卷式PA-TFC膜组件阵列",
+            "model_designation": designation,
+            "model_status": "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+            "process_function": values.get("process_function"),
+            "service_route": service_route,
+            "main_medium": values.get("main_medium"),
+            "membrane_geometry_type": geometry,
+            "element_standard_designation": element_name,
+            "element_outer_diameter_mm": element_od,
+            "element_length_mm": element_length,
+            "membrane_area_per_element_m2": area_per_element,
+            "element_count": element_count,
+            "elements_per_pressure_vessel": elements_per_vessel,
+            "pressure_vessel_count": vessel_count,
+            "membrane_area_m2": area,
+            "flux": flux,
+            "selectivity": selectivity,
+            "recovery_percent": recovery,
+            "permeate_flow_m3_h": permeate,
+            "feed_flow_m3_h": feed,
+            "concentrate_flow_m3_h": concentrate,
+            "membrane_material_grade": membrane_material,
+            "pressure_vessel_material_grade": vessel_material,
+            "center_tube_material_grade": center_material,
+            "material": material,
+            "design_pressure_mpa": design_pressure,
+            "design_pressure_basis": pressure_basis,
+            "design_temperature_c": values.get("design_temperature_c"),
+            "pressure_class": pressure_class,
+            "quantity_count": values.get("quantity_count", 1),
+            "technical_specification": technical,
+        }
+        equations = {
+            "pressure_vessel_count": "Npv=ceil(Nelement/Nelement_per_PV)",
+            "membrane_area_m2": "A=Nelement*Aelement",
+            "permeate_flow_m3_h": "Qp=A*J/1000",
+            "feed_flow_m3_h": "Qfeed=Qp/(Recovery/100)",
+            "concentrate_flow_m3_h": "Qc=Qfeed-Qp",
+        }
+        profile_fields = {
+            "membrane_geometry_type", "element_standard_designation",
+            "element_outer_diameter_mm", "element_length_mm",
+            "membrane_area_per_element_m2", "element_count",
+            "elements_per_pressure_vessel", "flux", "selectivity",
+            "recovery_percent", "membrane_material_grade",
+            "pressure_vessel_material_grade", "center_tube_material_grade",
+            "service_route", "design_pressure_mpa",
+            "design_pressure_basis", "pressure_class",
+        }
+        branch_id = "SPIRAL_WOUND_8040_PA_TFC_ARRAY"
+        formal_open_gates = [
+            "same_feed_composition_temperature_pressure_ph_and_sdi",
+            "target_permeate_quality_rejection_and_recovery",
+            "vendor_element_projection_and_normalized_performance",
+            "pretreatment_scaling_fouling_and_cleaning_design",
+            "pressure_vessel_code_rating_and_array_hydraulics",
+            "membrane_lifetime_chemical_compatibility_and_vendor_guarantee",
+        ]
+    elif block_type == "FILTER":
+        profile_key = "recessed_chamber_filter_press"
+        profile = profiles.get(profile_key, {})
+        if not isinstance(profile, dict):
+            profile = {}
+        solids = number(
+            "solids_feed_kg_h", profile, 100.0, accept_derived=True
+        )
+        flux = number("filtration_flux_kg_m2_h", profile, 50.0)
+        calculated_area = solids / flux
+        minimum_area = float(
+            profile.get("minimum_selected_filter_area_m2", 5.0)
+        )
+        requested_area = (
+            numeric(values.get("selected_filter_area_m2"))
+            if supplied("selected_filter_area_m2")
+            else numeric(values.get("filter_area_m2"))
+            if supplied("filter_area_m2")
+            else max(calculated_area, minimum_area)
+        )
+        plate_size = number("plate_size_mm", profile, 800.0)
+        area_per_chamber = number(
+            "filter_area_per_chamber_m2", profile, 0.8
+        )
+        minimum_chambers = int(profile.get("minimum_chamber_count", 10))
+        chamber_count = (
+            int(float(values["chamber_count"]))
+            if supplied("chamber_count")
+            else max(
+                minimum_chambers,
+                int(math.ceil(requested_area / area_per_chamber)),
+            )
+        )
+        selected_area = chamber_count * area_per_chamber
+        cycle = number("cycle_time_h", profile, 4.0)
+        filter_pressure = number(
+            "filtration_pressure_mpa", profile, 0.6
+        )
+        closing_pressure = number(
+            "hydraulic_closing_pressure_mpa", profile, 16.0
+        )
+        plate_material = text_value(
+            "plate_material_grade", profile, "增强PP"
+        )
+        cloth_material = text_value(
+            "filter_cloth_material_grade", profile, "PP复丝滤布"
+        )
+        frame_material = text_value(
+            "frame_material_grade", profile, "Q235B防腐涂层"
+        )
+        washing = text_value(
+            "washing_arrangement",
+            profile,
+            "暗流出液+预留滤饼洗涤接口（程序保底）",
+        )
+        designation = (
+            f"FP-RECESSED-{plate_size:g}-{chamber_count}C-"
+            f"A{selected_area:g}-{plate_material}-"
+            f"P{int(round(filter_pressure * 10)):02d}"
+        )
+        technical = (
+            f"自动厢式压滤机；{designation}；{plate_size:g} mm滤板，"
+            f"{chamber_count}厢，实际过滤面积={selected_area:g} m²；"
+            f"固体负荷/通量={solids:g}/{flux:g} kg/(h、m²)，"
+            f"公式面积={calculated_area:.2f} m²；过滤/液压压紧压力="
+            f"{filter_pressure:g}/{closing_pressure:g} MPa；"
+            f"滤板={plate_material}，滤布={cloth_material}，"
+            f"机架={frame_material}；{washing}"
+        )
+        fields_values = {
+            "equipment_name": values.get("equipment_name") or "自动厢式压滤机",
+            "equipment_type": "自动厢式压滤机",
+            "equipment_subfamily": "增强PP滤板自动厢式压滤机",
+            "model_designation": designation,
+            "model_status": "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+            "separation_type": values.get("separation_type")
+            or "固液压滤（程序保底）",
+            "solids_feed_kg_h": solids,
+            "filtration_flux_kg_m2_h": flux,
+            "calculated_filter_area_m2": calculated_area,
+            "selected_filter_area_m2": selected_area,
+            "filter_area_m2": selected_area,
+            "plate_size_mm": plate_size,
+            "filter_area_per_chamber_m2": area_per_chamber,
+            "chamber_count": chamber_count,
+            "cycle_time_h": cycle,
+            "filtration_pressure_mpa": filter_pressure,
+            "cake_moisture_percent": values.get("cake_moisture_percent"),
+            "wash_requirement": values.get("wash_requirement"),
+            "washing_arrangement": washing,
+            "plate_material_grade": plate_material,
+            "filter_cloth_material_grade": cloth_material,
+            "frame_material_grade": frame_material,
+            "material": (
+                f"滤板{plate_material}；滤布{cloth_material}；"
+                f"机架{frame_material}"
+            ),
+            "hydraulic_closing_pressure_mpa": closing_pressure,
+            "design_pressure_mpa": values.get("design_pressure_mpa"),
+            "design_pressure_basis": values.get("design_pressure_basis"),
+            "design_temperature_c": values.get("design_temperature_c"),
+            "quantity_count": values.get("quantity_count", 1),
+            "technical_specification": technical,
+        }
+        equations = {
+            "calculated_filter_area_m2": "Acalc=msolids/Jfilter",
+            "chamber_count": "N=max(Nmin,ceil(max(Acalc,Amin)/Achamber))",
+            "selected_filter_area_m2": "Aselected=Nchamber*Achamber",
+            "filter_area_m2": "Afilter=Aselected",
+        }
+        profile_fields = {
+            "solids_feed_kg_h", "filtration_flux_kg_m2_h",
+            "plate_size_mm", "filter_area_per_chamber_m2",
+            "cycle_time_h", "filtration_pressure_mpa",
+            "hydraulic_closing_pressure_mpa", "plate_material_grade",
+            "filter_cloth_material_grade", "frame_material_grade",
+            "washing_arrangement",
+        }
+        branch_id = "AUTOMATIC_RECESSED_CHAMBER_FILTER_PRESS"
+        formal_open_gates = [
+            "same_slurry_particle_size_solids_fraction_and_temperature",
+            "filter_leaf_test_flux_cake_resistance_and_compressibility",
+            "cake_moisture_washing_and_filtrate_clarity_requirements",
+            "cycle_step_times_and_vendor_chamber_volume",
+            "hydraulic_closure_pressure_rating_material_and_vendor_guarantee",
+        ]
+    elif block_type == "DRYER":
+        profile_key = "continuous_belt_hot_air_dryer"
+        profile = profiles.get(profile_key, {})
+        if not isinstance(profile, dict):
+            profile = {}
+        evaporation = number(
+            "evaporation_rate_kg_h", profile, 100.0, accept_derived=True
+        )
+        specific_duty = number(
+            "specific_drying_duty_kj_kg", profile, 3500.0
+        )
+        heat_duty = (
+            numeric(values.get("heat_duty_kw"))
+            if supplied("heat_duty_kw")
+            else evaporation * specific_duty / 3600.0
+        )
+        loading = number(
+            "evaporation_loading_kg_m2_h", profile, 20.0
+        )
+        required_area = evaporation / loading
+        belt_width = number("belt_width_m", profile, 1.5)
+        minimum_length = float(profile.get("minimum_belt_length_m", 4.0))
+        belt_length = (
+            numeric(values.get("belt_length_m"))
+            if supplied("belt_length_m")
+            else max(
+                minimum_length,
+                math.ceil(required_area / belt_width * 2.0) / 2.0,
+            )
+        )
+        belt_area = belt_width * belt_length
+        zones = int(number("drying_zone_count", profile, 2.0))
+        residence = number("residence_time_h", profile, 0.5)
+        heat_source = text_value(
+            "heat_source", profile, "蒸汽换热热风（程序保底）"
+        )
+        offgas = text_value(
+            "offgas_route", profile, "旋风预除尘+袋式除尘"
+        )
+        wetted = text_value(
+            "wetted_surface_material_grade", profile, "S30408"
+        )
+        enclosure = text_value(
+            "enclosure_material_grade", profile, "Q235B防腐涂层"
+        )
+        fan_specific = float(
+            profile.get("specific_fan_power_kw_per_kg_h", 0.08)
+        )
+        fan_power = (
+            numeric(values.get("fan_power_kw"))
+            if supplied("fan_power_kw")
+            else next_motor(evaporation * fan_specific)
+        )
+        belt_power = number("belt_drive_power_kw", profile, 2.2)
+        installed_power = (
+            numeric(values.get("total_installed_power_kw"))
+            if supplied("total_installed_power_kw")
+            else fan_power + belt_power
+        )
+        designation = (
+            f"DRY-BELT-HA-W{belt_width:g}-L{belt_length:g}-"
+            f"A{belt_area:g}-E{evaporation:g}-Q{heat_duty:.1f}-"
+            f"{zones}Z-{wetted}"
+        )
+        technical = (
+            f"连续带式热风干燥器；{designation}；"
+            f"{belt_width:g}×{belt_length:g} m有效网带，"
+            f"面积={belt_area:g} m²，{zones}温区；蒸发量={evaporation:g} "
+            f"kg/h，蒸发强度={loading:g} kg/(m²·h)，"
+            f"热负荷={heat_duty:.2f} kW；停留={residence:g} h；"
+            f"风机/网带/总装机={fan_power:g}/{belt_power:g}/"
+            f"{installed_power:g} kW；{heat_source}；{offgas}"
+        )
+        fields_values = {
+            "equipment_name": values.get("equipment_name")
+            or "连续带式热风干燥器",
+            "equipment_type": "连续带式热风干燥器",
+            "equipment_subfamily": "多温区网带式循环热风干燥器",
+            "model_designation": designation,
+            "model_status": "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+            "dryer_model_kind": values.get("dryer_model_kind")
+            or "continuous_belt_hot_air",
+            "evaporation_rate_kg_h": evaporation,
+            "specific_drying_duty_kj_kg": specific_duty,
+            "heat_duty_kw": heat_duty,
+            "evaporation_loading_kg_m2_h": loading,
+            "belt_width_m": belt_width,
+            "belt_length_m": belt_length,
+            "belt_area_m2": belt_area,
+            "drying_zone_count": zones,
+            "residence_time_h": residence,
+            "allowed_solid_temperature_c": values.get(
+                "allowed_solid_temperature_c"
+            ),
+            "heat_source": heat_source,
+            "offgas_route": offgas,
+            "wetted_surface_material_grade": wetted,
+            "enclosure_material_grade": enclosure,
+            "material": f"接触物料表面{wetted}；外壳{enclosure}",
+            "fan_power_kw": fan_power,
+            "belt_drive_power_kw": belt_power,
+            "total_installed_power_kw": installed_power,
+            "design_pressure_mpa": values.get("design_pressure_mpa"),
+            "design_pressure_basis": values.get("design_pressure_basis"),
+            "design_temperature_c": values.get("design_temperature_c"),
+            "quantity_count": values.get("quantity_count", 1),
+            "technical_specification": technical,
+        }
+        equations = {
+            "heat_duty_kw": "Q=mevap*qspecific/3600",
+            "belt_area_m2": "Areq=mevap/Jevap; Aselected=Wbelt*Lbelt",
+            "belt_length_m": "L=max(Lmin,round_up_0.5(Areq/Wbelt))",
+            "fan_power_kw": "Pfan=next_standard_motor(mevap*kfan)",
+            "total_installed_power_kw": "Pinstalled=Pfan+Pbelt",
+        }
+        profile_fields = {
+            "evaporation_rate_kg_h", "specific_drying_duty_kj_kg",
+            "evaporation_loading_kg_m2_h", "belt_width_m",
+            "drying_zone_count", "residence_time_h", "heat_source",
+            "offgas_route", "wetted_surface_material_grade",
+            "enclosure_material_grade", "belt_drive_power_kw",
+        }
+        branch_id = "CONTINUOUS_BELT_HOT_AIR_DRYER"
+        formal_open_gates = [
+            "same_feed_rate_inlet_outlet_moisture_and_basis",
+            "equilibrium_moisture_drying_curve_and_heat_sensitive_limit",
+            "residence_time_bed_depth_airflow_and_temperature_uniformity",
+            "heat_source_air_fan_and_energy_balance",
+            "dust_solvent_fire_explosion_offgas_and_vendor_drying_test",
+        ]
+    else:
+        profile_key = "twin_tower_tsa_package"
+        profile = profiles.get(profile_key, {})
+        if not isinstance(profile, dict):
+            profile = {}
+        capacity = number("capacity", profile, 100.0)
+        cycle = number("cycle_time_h", profile, 8.0)
+        adsorption_time = number("adsorption_time_h", profile, 4.0)
+        tower_count = int(number("tower_count", profile, 2.0))
+        vessel_diameter = number("vessel_diameter_mm", profile, 500.0)
+        specific_volume = float(
+            profile.get(
+                "specific_bed_volume_m3_per_capacity_unit", 0.002
+            )
+        )
+        minimum_volume = float(
+            profile.get("minimum_bed_volume_m3_per_tower", 0.2)
+        )
+        bed_volume = (
+            numeric(values.get("bed_volume_m3_per_tower"))
+            if supplied("bed_volume_m3_per_tower")
+            else max(minimum_volume, capacity * specific_volume)
+        )
+        calculated_height = (
+            4.0 * bed_volume
+            / (math.pi * (vessel_diameter / 1000.0) ** 2)
+            * 1000.0
+        )
+        minimum_height = float(
+            profile.get("minimum_bed_height_mm", 1200.0)
+        )
+        bed_height = (
+            numeric(values.get("bed_height_mm"))
+            if supplied("bed_height_mm")
+            else max(
+                minimum_height,
+                math.ceil(calculated_height / 100.0) * 100.0,
+            )
+        )
+        adsorbent = text_value(
+            "adsorbent_type", profile, "活性氧化铝（程序保底）"
+        )
+        bulk_density = number(
+            "adsorbent_bulk_density_kg_m3", profile, 750.0
+        )
+        adsorbent_mass = (
+            numeric(values.get("adsorbent_mass_kg_per_tower"))
+            if supplied("adsorbent_mass_kg_per_tower")
+            else bed_volume * bulk_density
+        )
+        regeneration = text_value(
+            "regeneration_method",
+            profile,
+            "加热干燥气逆流再生+冷吹（程序保底）",
+        )
+        shell_material = text_value(
+            "shell_material_grade", profile, "Q345R"
+        )
+        internals_material = text_value(
+            "internals_material_grade",
+            profile,
+            "S30408支承格栅+丝网",
+        )
+        design_pressure = number("design_pressure_mpa", profile, 1.1)
+        pressure_basis = text_value(
+            "design_pressure_basis", profile, "gauge"
+        )
+        pressure_class = text_value("pressure_class", profile, "PN16")
+        capacity_basis = (
+            str(values.get("capacity_basis"))
+            if supplied("capacity_basis")
+            else "项目处理能力单位待确认；程序默认capacity=100"
+        )
+        designation = (
+            f"PKG-TSA-{tower_count}T-DN{vessel_diameter:g}-"
+            f"BED{bed_volume:g}M3-ALUMINA-C{cycle:g}H-{pressure_class}"
+        )
+        technical = (
+            f"双塔变温吸附成套装置；{designation}；"
+            f"{tower_count}×DN{vessel_diameter:g}吸附塔，单塔床层="
+            f"{bed_volume:g} m³/{bed_height:g} mm，"
+            f"{adsorbent_mass:g} kg {adsorbent}；周期/吸附="
+            f"{cycle:g}/{adsorption_time:g} h；{regeneration}；"
+            f"壳体={shell_material}，内件={internals_material}；"
+            f"{pressure_class}"
+        )
+        fields_values = {
+            "equipment_name": values.get("equipment_name")
+            or "双塔变温吸附成套装置",
+            "equipment_type": "双塔变温吸附成套装置",
+            "equipment_subfamily": "双塔加热再生TSA成套装置",
+            "model_designation": designation,
+            "model_status": "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+            "capacity": capacity,
+            "capacity_basis": capacity_basis,
+            "cycle_time_h": cycle,
+            "adsorption_time_h": adsorption_time,
+            "tower_count": tower_count,
+            "vessel_diameter_mm": vessel_diameter,
+            "bed_volume_m3_per_tower": bed_volume,
+            "bed_height_mm": bed_height,
+            "adsorbent_type": adsorbent,
+            "adsorbent_bulk_density_kg_m3": bulk_density,
+            "adsorbent_mass_kg_per_tower": adsorbent_mass,
+            "regeneration_method": regeneration,
+            "allowable_pressure_drop_kpa": values.get(
+                "allowable_pressure_drop_kpa"
+            ),
+            "shell_material_grade": shell_material,
+            "internals_material_grade": internals_material,
+            "material": f"壳体{shell_material}；内件{internals_material}",
+            "design_pressure_mpa": design_pressure,
+            "design_pressure_basis": pressure_basis,
+            "design_temperature_c": values.get("design_temperature_c"),
+            "pressure_class": pressure_class,
+            "quantity_count": values.get("quantity_count", 1),
+            "technical_specification": technical,
+        }
+        equations = {
+            "bed_volume_m3_per_tower": (
+                "Vbed=max(Vmin,capacity*specific_bed_volume)"
+            ),
+            "bed_height_mm": (
+                "Hbed=max(Hmin,round_up_100(4*Vbed/(pi*D^2)))"
+            ),
+            "adsorbent_mass_kg_per_tower": "mads=Vbed*rho_bulk",
+        }
+        profile_fields = {
+            "cycle_time_h", "adsorption_time_h", "tower_count",
+            "vessel_diameter_mm", "adsorbent_type",
+            "adsorbent_bulk_density_kg_m3", "regeneration_method",
+            "shell_material_grade", "internals_material_grade",
+            "design_pressure_mpa", "design_pressure_basis",
+            "pressure_class",
+        }
+        branch_id = "TWIN_TOWER_TEMPERATURE_SWING_ADSORPTION_PACKAGE"
+        formal_open_gates = [
+            "same_feed_composition_flow_pressure_temperature_and_contaminants",
+            "product_purity_dew_point_or_breakthrough_requirement",
+            "adsorption_isotherm_dynamic_capacity_and_breakthrough_curve",
+            "cycle_bed_velocity_pressure_drop_and_mass_transfer_zone",
+            "regeneration_heat_purge_gas_cooling_and_energy_balance",
+            "vessel_controls_interlocks_pid_and_vendor_guarantee",
+        ]
+
+    profile_warning = str(
+        profile.get("warning")
+        or "该膜/成套设备规格仅供预设计，必须用同工况试验和厂家证据替换。"
+    )
+    fields: dict[str, dict[str, Any]] = {}
+    for field_id, value in fields_values.items():
+        fallback = fallback_by_field.get(field_id)
+        calculation = calculation_by_target.get(field_id)
+        if supplied(field_id):
+            origin, state = "USER_PROJECT_OR_ASPEN_INPUT", "PROVIDED"
+        elif field_id in derived:
+            origin, state = "DETERMINISTIC_CALCULATION", "CALCULATED"
+        elif field_id in profile_fields:
+            origin = "REGISTERED_MEMBRANE_PACKAGE_FALLBACK_PROFILE"
+            state = "DEFAULTED"
+        elif field_id in equations:
+            origin, state = "DETERMINISTIC_CALCULATION", "CALCULATED"
+        elif fallback:
+            origin = str(
+                fallback.get(
+                    "source_kind", "registered_final_fallback_default"
+                )
+            ).upper()
+            state = str(fallback.get("state") or "DEFAULTED")
+        elif field_id == "model_designation":
+            origin = "PROGRAMMATIC_MEMBRANE_PACKAGE_SELECTOR"
+            state = "PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL"
+        elif field_id == "technical_specification":
+            origin = "PROGRAMMATIC_MEMBRANE_PACKAGE_SELECTOR"
+            state = "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        else:
+            origin = "PROGRAMMATIC_MEMBRANE_PACKAGE_SELECTOR"
+            state = "CALCULATED" if value is not None else "OPEN"
+        equation_chain = equations.get(field_id)
+        if equation_chain is None and calculation:
+            equation_chain = calculation.get("equation_chain")
+        fields[field_id] = {
+            "field_id": field_id,
+            "value": value,
+            "unit": FIELD_UNITS.get(field_id),
+            "state": state,
+            "origin": origin,
+            "active_in_selected_branch": True,
+            "evidence_class": "J",
+            "result_status": "PROVISIONAL",
+            "promotion_cap": "TYPE_SCREENING",
+            "formal_design_evidence": False,
+            "fallback_policy_id": (
+                profile.get("profile_id")
+                if origin
+                == "REGISTERED_MEMBRANE_PACKAGE_FALLBACK_PROFILE"
+                else fallback.get("tier")
+                if fallback
+                else None
+            ),
+            "basis": list(fallback.get("basis", [])) if fallback else [],
+            "warning": (
+                profile_warning
+                if field_id in profile_fields or field_id in equations
+                else fallback.get("warning")
+                if fallback
+                else None
+            ),
+            "equation_chain": equation_chain,
+            "user_override_allowed": True,
+            "single_equipment_recalculation_required_after_override": True,
+        }
+    package = {
+        "schema": "programmatic-membrane-package-specification-v1",
+        "policy_id": str(profile.get("profile_id")),
+        "family_id": family_id,
+        "subfamily": profile_key,
+        "status": "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "formal_model_selected": False,
+        "formal_design_ready": False,
+        "fields": fields,
+        "selection_branch": {
+            "membrane_package_branch_id": branch_id,
+            "recommended_type": fields_values.get("equipment_type"),
+            "fallback_profile_id": profile.get("profile_id"),
+            "aspen_block_type": block_type or None,
+            "terminal_rule_id": terminal.get("rule_id"),
+            "terminal_selection_status": terminal.get("status"),
+        },
+        "formal_open_gates": formal_open_gates,
+        "user_control": {
+            "every_displayed_parameter_editable": True,
+            "supplied_value_overwrites_default": True,
+            "single_equipment_recalculation_supported": True,
+            "restore_registered_default_supported": True,
+        },
+        "warning": (
+            "这是程序生成的具体膜/成套设备预选规格，型号字符串是可追溯工程"
+            "候选而非厂家商品型号；保底通量、负荷、周期、材料和结构均可由"
+            "用户覆盖后单设备重算，正式采购必须补同工况试验与厂家保证。"
+        ),
+    }
+    hash_payload = json.loads(json.dumps(package, ensure_ascii=False))
+    for row in hash_payload["fields"].values():
+        row.pop("program_specification_sha256", None)
+    specification_sha256 = _canonical_sha256(hash_payload)
+    package["program_specification_sha256"] = specification_sha256
+    for row in package["fields"].values():
+        row["program_specification_sha256"] = specification_sha256
+    return package
+
+
+def build_programmatic_turbine_specification(
+    family_id: str,
+    normalized: dict[str, Any],
+    derived: dict[str, Any],
+    fallback_ledger: list[dict[str, Any]],
+    calculations: list[dict[str, Any]],
+    model_recommendation: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build concrete liquid-recovery or gas-expander turbine candidates."""
+
+    supported = {
+        "family_liquid_power_recovery_turbine",
+        "family_gas_expander_turbine",
+    }
+    if family_id not in supported:
+        return None
+    values = {**normalized, **derived}
+    profiles = (
+        load_model_rules()
+        .get("design_fallback_policy", {})
+        .get("turbine_preliminary_fallback_profiles", {})
+    )
+    if not isinstance(profiles, dict):
+        profiles = {}
+    fallback_by_field = {
+        str(item.get("field_id")): dict(item)
+        for item in fallback_ledger
+        if item.get("field_id")
+    }
+    calculation_by_target = {
+        str(item.get("target_field")): dict(item)
+        for item in calculations
+        if item.get("target_field") and item.get("adopted_as_canonical", True)
+    }
+    leading = (
+        dict(model_recommendation.get("leading_candidate"))
+        if isinstance(model_recommendation.get("leading_candidate"), dict)
+        else {}
+    )
+    terminal = (
+        dict(leading.get("terminal_selection"))
+        if isinstance(leading.get("terminal_selection"), dict)
+        else {}
+    )
+
+    def supplied(field_id: str) -> bool:
+        return present(normalized, field_id) and field_id not in fallback_by_field
+
+    def profile_number(
+        field_id: str,
+        profile: Mapping[str, Any],
+        default: float,
+    ) -> float:
+        if supplied(field_id):
+            candidate = numeric(values.get(field_id))
+            if candidate is not None:
+                return candidate
+        candidate = numeric(profile.get(field_id))
+        return candidate if candidate is not None else default
+
+    def profile_text(
+        field_id: str,
+        profile: Mapping[str, Any],
+        default: str,
+    ) -> str:
+        if supplied(field_id):
+            return str(values.get(field_id))
+        return str(profile.get(field_id) or default)
+
+    def next_generator(required_kw: float) -> float:
+        series = (
+            5.5, 7.5, 11.0, 15.0, 18.5, 22.0, 30.0, 37.0,
+            45.0, 55.0, 75.0, 90.0, 110.0, 132.0, 160.0,
+            200.0, 250.0, 315.0, 400.0, 500.0, 630.0, 800.0,
+            1000.0, 1250.0, 1600.0, 2000.0, 2500.0, 3150.0,
+        )
+        return next(
+            (item for item in series if item >= required_kw),
+            math.ceil(required_kw / 500.0) * 500.0,
+        )
+
+    flow = numeric(values.get("flow_m3_h"))
+    pin = numeric(values.get("inlet_pressure_mpa"))
+    pout = numeric(values.get("outlet_pressure_mpa"))
+    pressure_basis = str(values.get("pressure_basis") or "absolute")
+    atmosphere = numeric(values.get("atmospheric_pressure_mpa")) or 0.101325
+    pin_abs = pin + atmosphere if pressure_basis == "gauge" else pin
+    pout_abs = pout + atmosphere if pressure_basis == "gauge" else pout
+    pressure_ratio = numeric(values.get("expansion_pressure_ratio"))
+    if (
+        pressure_ratio is None
+        and pin_abs is not None
+        and pout_abs is not None
+        and pout_abs > 0
+    ):
+        pressure_ratio = pin_abs / pout_abs
+    efficiency = numeric(values.get("efficiency_percent"))
+    equations: dict[str, str]
+    profile_fields: set[str]
+
+    if family_id == "family_liquid_power_recovery_turbine":
+        profile_key = "liquid_pat_recovery_turbine"
+        profile = profiles.get(profile_key, {})
+        if not isinstance(profile, dict):
+            profile = {}
+        density = numeric(values.get("density_kg_m3"))
+        head = numeric(values.get("pressure_drop_head_component_m"))
+        if (
+            head is None
+            and pin_abs is not None
+            and pout_abs is not None
+            and density is not None
+            and density > 0
+        ):
+            head = (pin_abs - pout_abs) * 1_000_000.0 / (
+                density * 9.80665
+            )
+        hydraulic_power = numeric(
+            values.get("pressure_drop_power_component_kw")
+        )
+        if (
+            hydraulic_power is None
+            and flow is not None
+            and pin_abs is not None
+            and pout_abs is not None
+        ):
+            hydraulic_power = (
+                (pin_abs - pout_abs) * 1_000_000.0
+                * (flow / 3600.0)
+                / 1000.0
+            )
+        shaft_power = numeric(
+            values.get("pressure_component_shaft_power_screening_kw")
+        )
+        if (
+            shaft_power is None
+            and hydraulic_power is not None
+            and efficiency is not None
+        ):
+            shaft_power = hydraulic_power * efficiency / 100.0
+        speed = profile_number("rotational_speed_rpm", profile, 2900.0)
+        generator_efficiency = profile_number(
+            "generator_efficiency_percent", profile, 95.0
+        )
+        electrical_power = (
+            numeric(values.get("electrical_power_kw"))
+            if supplied("electrical_power_kw")
+            else shaft_power * generator_efficiency / 100.0
+        )
+        generator_power = (
+            numeric(values.get("generator_power_kw"))
+            if supplied("generator_power_kw")
+            else next_generator(electrical_power)
+        )
+        runaway_speed = (
+            numeric(values.get("runaway_speed_rpm"))
+            if supplied("runaway_speed_rpm")
+            else speed * 1.25
+        )
+        equipment_type = "卧式单级径向流泵反转式液力回收透平"
+        branch_id = "SINGLE_STAGE_RADIAL_PAT_LIQUID_RECOVERY_TURBINE"
+        power_code = "HPRT-PAT"
+        equations = {
+            "expansion_pressure_ratio": "r=Pin,abs/Pout,abs",
+            "pressure_drop_head_component_m": (
+                "H=(Pin,abs-Pout,abs)*1e6/(rho*g)"
+            ),
+            "pressure_drop_power_component_kw": (
+                "Phyd=(Pin,abs-Pout,abs)*1e6*(Q/3600)/1000"
+            ),
+            "pressure_component_shaft_power_screening_kw": (
+                "Pshaft=Phyd*eta_turbine"
+            ),
+            "electrical_power_kw": "Pel=Pshaft*eta_generator",
+            "generator_power_kw": "Pgen=next_standard_series(Pel)",
+            "runaway_speed_rpm": "nrunaway=1.25*n",
+        }
+        extra_fields = {
+            "density_kg_m3": density,
+            "pressure_drop_head_component_m": head,
+            "pressure_drop_power_component_kw": hydraulic_power,
+            "pressure_component_shaft_power_screening_kw": shaft_power,
+            "shaft_power_kw": shaft_power,
+            "stage_count": 1,
+        }
+        formal_open_gates = [
+            "same_liquid_flow_pressure_density_viscosity_and_solids",
+            "vendor_q_head_power_efficiency_speed_curve",
+            "cavitation_margin_and_downstream_backpressure",
+            "runaway_speed_trip_generator_and_load_rejection",
+            "shaft_bearing_seal_coupling_and_rotordynamic_design",
+            "vendor_model_material_datasheet_and_performance_guarantee",
+        ]
+    else:
+        profile_key = "radial_inflow_gas_expander"
+        profile = profiles.get(profile_key, {})
+        if not isinstance(profile, dict):
+            profile = {}
+        molecular_weight = numeric(values.get("gas_molecular_weight"))
+        z_value = numeric(values.get("compressibility_factor"))
+        k_value = numeric(values.get("heat_capacity_ratio_k"))
+        inlet_temperature = numeric(values.get("inlet_temperature_c"))
+        inlet_kelvin = (
+            inlet_temperature + 273.15
+            if inlet_temperature is not None
+            else None
+        )
+        gas_density = (
+            pin_abs * 1_000_000.0 * molecular_weight
+            / (z_value * 8314.462618 * inlet_kelvin)
+            if None
+            not in (
+                pin_abs,
+                molecular_weight,
+                z_value,
+                inlet_kelvin,
+            )
+            else None
+        )
+        mass_flow_kg_s = (
+            gas_density * flow / 3600.0
+            if gas_density is not None and flow is not None
+            else None
+        )
+        isentropic_work = (
+            k_value
+            / (k_value - 1.0)
+            * (8314.462618 / molecular_weight)
+            * inlet_kelvin
+            * (
+                1.0
+                - (pout_abs / pin_abs)
+                ** ((k_value - 1.0) / k_value)
+            )
+            / 1000.0
+            if None
+            not in (
+                k_value,
+                molecular_weight,
+                inlet_kelvin,
+                pin_abs,
+                pout_abs,
+            )
+            and k_value > 1
+            and pin_abs > pout_abs > 0
+            else None
+        )
+        actual_work = (
+            isentropic_work * efficiency / 100.0
+            if isentropic_work is not None and efficiency is not None
+            else None
+        )
+        shaft_power = (
+            mass_flow_kg_s * actual_work
+            if mass_flow_kg_s is not None and actual_work is not None
+            else numeric(values.get("shaft_power_kw"))
+        )
+        maximum_stage_ratio = float(
+            profile.get("maximum_stage_pressure_ratio", 3.0)
+        )
+        stage_count = (
+            int(float(values["stage_count"]))
+            if supplied("stage_count")
+            else max(
+                1,
+                int(
+                    math.ceil(
+                        math.log(pressure_ratio)
+                        / math.log(maximum_stage_ratio)
+                    )
+                )
+                if pressure_ratio is not None and pressure_ratio > 1
+                else 1,
+            )
+        )
+        per_stage_ratio = (
+            pressure_ratio ** (1.0 / stage_count)
+            if pressure_ratio is not None
+            else None
+        )
+        outlet_temperature = (
+            inlet_kelvin
+            * (
+                1.0
+                - efficiency
+                / 100.0
+                * (
+                    1.0
+                    - (pout_abs / pin_abs)
+                    ** ((k_value - 1.0) / k_value)
+                )
+            )
+            - 273.15
+            if None
+            not in (
+                inlet_kelvin,
+                efficiency,
+                pout_abs,
+                pin_abs,
+                k_value,
+            )
+            else None
+        )
+        speed = profile_number("rotational_speed_rpm", profile, 30000.0)
+        generator_efficiency = profile_number(
+            "generator_efficiency_percent", profile, 95.0
+        )
+        electrical_power = (
+            numeric(values.get("electrical_power_kw"))
+            if supplied("electrical_power_kw")
+            else shaft_power * generator_efficiency / 100.0
+        )
+        generator_power = (
+            numeric(values.get("generator_power_kw"))
+            if supplied("generator_power_kw")
+            else next_generator(electrical_power)
+        )
+        runaway_speed = (
+            numeric(values.get("runaway_speed_rpm"))
+            if supplied("runaway_speed_rpm")
+            else speed * 1.20
+        )
+        equipment_type = "多级径向流气体膨胀透平发电机组"
+        branch_id = "MULTISTAGE_RADIAL_INFLOW_GAS_EXPANDER"
+        power_code = "EXP-RAD"
+        equations = {
+            "expansion_pressure_ratio": "r=Pin,abs/Pout,abs",
+            "gas_density_kg_m3": "rho=Pin,abs*MW/(Z*R*T1)",
+            "mass_flow_kg_s": "mdot=rho*Q/3600",
+            "stage_count": "N=ceil(ln(r)/ln(rstage,max))",
+            "per_stage_pressure_ratio": "rstage=r^(1/N)",
+            "expander_isentropic_specific_work_kj_kg": (
+                "wis=k/(k-1)*(R/MW)*T1*(1-(Pout/Pin)^((k-1)/k))"
+            ),
+            "expander_actual_specific_work_kj_kg": "w=wis*eta_turbine",
+            "shaft_power_kw": "Pshaft=mdot*w",
+            "outlet_temperature_c": (
+                "T2=T1*(1-eta*(1-(Pout/Pin)^((k-1)/k)))-273.15"
+            ),
+            "electrical_power_kw": "Pel=Pshaft*eta_generator",
+            "generator_power_kw": "Pgen=next_standard_series(Pel)",
+            "runaway_speed_rpm": "nrunaway=1.20*n",
+        }
+        extra_fields = {
+            "gas_molecular_weight": molecular_weight,
+            "compressibility_factor": z_value,
+            "heat_capacity_ratio_k": k_value,
+            "gas_density_kg_m3": gas_density,
+            "mass_flow_kg_s": mass_flow_kg_s,
+            "inlet_temperature_c": inlet_temperature,
+            "outlet_temperature_c": outlet_temperature,
+            "stage_count": stage_count,
+            "per_stage_pressure_ratio": per_stage_ratio,
+            "expander_isentropic_specific_work_kj_kg": isentropic_work,
+            "expander_actual_specific_work_kj_kg": actual_work,
+            "shaft_power_kw": shaft_power,
+        }
+        formal_open_gates = [
+            "same_gas_composition_flow_pressure_temperature_and_phase_margin",
+            "vendor_enthalpy_drop_pressure_ratio_efficiency_power_map",
+            "stage_loading_speed_choke_and_operating_envelope",
+            "low_temperature_material_condensation_and_erosion_check",
+            "overspeed_rotordynamics_bearings_seals_gearbox_and_generator",
+            "vendor_model_datasheet_auxiliaries_and_performance_guarantee",
+        ]
+
+    casing = profile_text(
+        "casing_material_grade", profile, "ZG230-450"
+    )
+    impeller = profile_text(
+        "impeller_material_grade", profile, "05Cr17Ni4Cu4Nb"
+    )
+    shaft_material = profile_text(
+        "shaft_material_grade", profile, "42CrMo"
+    )
+    seal_type = profile_text(
+        "seal_type", profile, "机械密封（程序保底）"
+    )
+    bearing_type = profile_text(
+        "bearing_type", profile, "滚动轴承（程序保底）"
+    )
+    coupling_type = profile_text(
+        "coupling_type", profile, "膜片联轴器（程序保底）"
+    )
+    designation = (
+        f"{power_code}-{extra_fields['stage_count']}STG-Q{flow:g}-"
+        f"PR{pressure_ratio:.2f}-P{extra_fields['shaft_power_kw']:.1f}-"
+        f"G{generator_power:g}-N{speed:g}"
+    )
+    material = f"机壳{casing}；叶轮{impeller}；轴{shaft_material}"
+    technical = (
+        f"{equipment_type}；{designation}；总压比={pressure_ratio:.3f}；"
+        f"轴功率/发电输出/发电机额定={extra_fields['shaft_power_kw']:.2f}/"
+        f"{electrical_power:.2f}/{generator_power:g} kW；"
+        f"额定/飞逸转速={speed:g}/{runaway_speed:g} r/min；"
+        f"{material}；密封={seal_type}；轴承={bearing_type}；"
+        f"联轴器={coupling_type}"
+    )
+    fields_values = {
+        "equipment_name": values.get("equipment_name") or equipment_type,
+        "equipment_type": equipment_type,
+        "equipment_subfamily": equipment_type,
+        "model_designation": designation,
+        "model_status": "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+        "flow_m3_h": flow,
+        "inlet_pressure_mpa": pin,
+        "outlet_pressure_mpa": pout,
+        "pressure_basis": pressure_basis,
+        "expansion_pressure_ratio": pressure_ratio,
+        **extra_fields,
+        "efficiency_percent": efficiency,
+        "rotational_speed_rpm": speed,
+        "generator_efficiency_percent": generator_efficiency,
+        "electrical_power_kw": electrical_power,
+        "generator_power_kw": generator_power,
+        "runaway_speed_rpm": runaway_speed,
+        "casing_material_grade": casing,
+        "impeller_material_grade": impeller,
+        "shaft_material_grade": shaft_material,
+        "seal_type": seal_type,
+        "bearing_type": bearing_type,
+        "coupling_type": coupling_type,
+        "material": material,
+        "quantity_count": values.get("quantity_count", 1),
+        "technical_specification": technical,
+    }
+    profile_fields = {
+        "rotational_speed_rpm", "generator_efficiency_percent",
+        "casing_material_grade", "impeller_material_grade",
+        "shaft_material_grade", "seal_type", "bearing_type",
+        "coupling_type",
+    }
+    profile_warning = str(
+        profile.get("warning")
+        or "透平规格仅用于预设计，必须用厂家性能图和轴系证据替换。"
+    )
+    fields: dict[str, dict[str, Any]] = {}
+    for field_id, value in fields_values.items():
+        fallback = fallback_by_field.get(field_id)
+        calculation = calculation_by_target.get(field_id)
+        if supplied(field_id):
+            origin, state = "USER_PROJECT_OR_ASPEN_INPUT", "PROVIDED"
+        elif field_id in derived:
+            origin, state = "DETERMINISTIC_CALCULATION", "CALCULATED"
+        elif field_id in profile_fields:
+            origin = "REGISTERED_TURBINE_FALLBACK_PROFILE"
+            state = "DEFAULTED"
+        elif field_id in equations:
+            origin, state = "DETERMINISTIC_CALCULATION", "CALCULATED"
+        elif fallback:
+            origin = str(
+                fallback.get(
+                    "source_kind", "registered_final_fallback_default"
+                )
+            ).upper()
+            state = str(fallback.get("state") or "DEFAULTED")
+        elif field_id == "model_designation":
+            origin = "PROGRAMMATIC_TURBINE_SELECTOR"
+            state = "PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL"
+        elif field_id == "technical_specification":
+            origin = "PROGRAMMATIC_TURBINE_SELECTOR"
+            state = "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        else:
+            origin = "PROGRAMMATIC_TURBINE_SELECTOR"
+            state = "CALCULATED" if value is not None else "OPEN"
+        equation_chain = equations.get(field_id)
+        if equation_chain is None and calculation:
+            equation_chain = calculation.get("equation_chain")
+        fields[field_id] = {
+            "field_id": field_id,
+            "value": value,
+            "unit": FIELD_UNITS.get(field_id),
+            "state": state,
+            "origin": origin,
+            "active_in_selected_branch": True,
+            "evidence_class": "J",
+            "result_status": "PROVISIONAL",
+            "promotion_cap": "TYPE_SCREENING",
+            "formal_design_evidence": False,
+            "fallback_policy_id": (
+                profile.get("profile_id")
+                if origin == "REGISTERED_TURBINE_FALLBACK_PROFILE"
+                else fallback.get("tier")
+                if fallback
+                else None
+            ),
+            "basis": list(fallback.get("basis", [])) if fallback else [],
+            "warning": (
+                profile_warning
+                if field_id in profile_fields or field_id in equations
+                else fallback.get("warning")
+                if fallback
+                else None
+            ),
+            "equation_chain": equation_chain,
+            "user_override_allowed": True,
+            "single_equipment_recalculation_required_after_override": True,
+        }
+    package = {
+        "schema": "programmatic-turbine-specification-v1",
+        "policy_id": str(profile.get("profile_id")),
+        "family_id": family_id,
+        "subfamily": profile_key,
+        "status": "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "formal_model_selected": False,
+        "formal_design_ready": False,
+        "fields": fields,
+        "selection_branch": {
+            "turbine_branch_id": branch_id,
+            "recommended_type": equipment_type,
+            "fallback_profile_id": profile.get("profile_id"),
+            "terminal_rule_id": terminal.get("rule_id"),
+            "terminal_selection_status": terminal.get("status"),
+        },
+        "formal_open_gates": formal_open_gates,
+        "user_control": {
+            "every_displayed_parameter_editable": True,
+            "supplied_value_overwrites_default": True,
+            "single_equipment_recalculation_supported": True,
+            "restore_registered_default_supported": True,
+        },
+        "warning": (
+            "这是程序生成的具体透平预选规格；型号是工程候选而非厂家商品型号。"
+            "性能、转速、材料和轴系默认值可由用户覆盖后单设备重算，正式采购"
+            "必须补同工况性能图、超速/空化或低温校核及厂家保证。"
+        ),
+    }
+    hash_payload = json.loads(json.dumps(package, ensure_ascii=False))
+    for row in hash_payload["fields"].values():
+        row.pop("program_specification_sha256", None)
+    specification_sha256 = _canonical_sha256(hash_payload)
+    package["program_specification_sha256"] = specification_sha256
+    for row in package["fields"].values():
+        row["program_specification_sha256"] = specification_sha256
+    return package
+
+
 def build_design_parameter_package(
     family_id: str,
     normalized: dict[str, Any],
@@ -5660,6 +13558,7 @@ def _pump_standard_candidates(params: dict[str, Any]) -> dict[str, Any]:
     catalog_sha256 = hashlib.sha256(PUMP_STANDARD_POINTS_PATH.read_bytes()).hexdigest().upper()
     pressure_trace = _pump_standard_pressure_predicate(params)
     npsh_trace = assess_pump_npsh_constraint(params)
+    material_screen = _pump_material_and_seal_selection(params)
     rejection_reasons: list[str] = []
     if pressure_trace["status"] == "FAIL":
         rejection_reasons.append("GB/T_5662_MAX_WORKING_PRESSURE_SCOPE_FAILED")
@@ -5724,7 +13623,19 @@ def _pump_standard_candidates(params: dict[str, Any]) -> dict[str, Any]:
                 dict(pressure_trace),
                 {"predicate_id": "family_pump:vendor_curve:Q_H_eta_BEP", "status": "UNKNOWN"},
                 {"predicate_id": "family_pump:cavitation:NPSHa_NPSHr", **dict(npsh_trace)},
-                {"predicate_id": "family_pump:materials_and_seal", "status": "UNKNOWN"},
+                {
+                    "predicate_id": "family_pump:materials_and_seal",
+                    "status": "PASS",
+                    "evaluation": "PROGRAM_PRELIMINARY_MATERIAL_AND_SEAL_ROUTE_SELECTED",
+                    "route_id": material_screen.get("route_id"),
+                    "selected_components": material_screen.get(
+                        "selected_components", {}
+                    ),
+                    "formal_compatibility_status": "UNKNOWN",
+                    "selection_sha256": material_screen.get(
+                        "selection_sha256"
+                    ),
+                },
             ],
             "source": {
                 "kind": "bundled_standard_reference_catalog",
@@ -5791,6 +13702,72 @@ PUMP_REFERENCE_FIT_LOG_DISTANCE_LIMIT = 0.45
 PUMP_MAX_PARALLEL_TRAINS = 12
 PUMP_MAX_SERIES_UNITS_PER_TRAIN = 6
 PUMP_MAX_TOTAL_OPERATING_UNITS = 24
+PUMP_REGISTERED_SHUTOFF_HEAD_FACTOR = 1.40
+PUMP_PRESSURE_CLASS_SERIES = (6, 10, 16, 25, 40, 63, 100, 160)
+PUMP_MATERIAL_SELECTION_POLICY_ID = "pump-material-seal-screening-v1"
+PUMP_PRESSURE_SELECTION_POLICY_ID = "pump-series-pressure-and-flange-screening-v1"
+PUMP_REGISTERED_MATERIAL_ROUTES: dict[str, dict[str, Any]] = {
+    "ABRASIVE_SLURRY_HARD_METAL": {
+        "selection": {
+            "pump_casing": "QT500-7球墨铸铁泵壳（可更换耐磨衬里）",
+            "impeller": "KmTBCr26高铬耐磨铸铁叶轮",
+            "shaft": "05Cr17Ni4Cu4Nb（17-4PH）泵轴",
+            "shaft_sleeve": "06Cr19Ni10表面硬化轴套",
+            "mechanical_seal": "集装式双端面机械密封，SiC/SiC摩擦副，外冲洗",
+            "secondary_seal": "FKM辅助密封圈",
+            "gasket": "316L内外环柔性石墨缠绕垫",
+        },
+        "basis": "登记的耐磨浆液材料和外冲洗双端面密封路线",
+    },
+    "CORROSIVE_316L_HARD_FACE": {
+        "selection": {
+            "pump_casing": "ZG07Cr19Ni11Mo2（CF8M）泵壳",
+            "impeller": "ZG07Cr19Ni11Mo2（CF8M）叶轮",
+            "shaft": "05Cr17Ni4Cu4Nb（17-4PH）泵轴",
+            "shaft_sleeve": "022Cr17Ni12Mo2（316L）轴套",
+            "mechanical_seal": "集装式双端面机械密封，SiC/SiC摩擦副",
+            "secondary_seal": "PTFE包覆辅助密封",
+            "gasket": "316L内外环柔性石墨缠绕垫",
+        },
+        "basis": "登记的 CF8M/316L 耐蚀材料和硬—硬双端面密封路线",
+    },
+    "HAZARDOUS_HYDROCARBON_CONTAINMENT": {
+        "selection": {
+            "pump_casing": "ZG230-450（WCB）铸钢泵壳",
+            "impeller": "ZG07Cr19Ni11Mo2（CF8M）叶轮",
+            "shaft": "05Cr17Ni4Cu4Nb（17-4PH）泵轴",
+            "shaft_sleeve": "022Cr17Ni12Mo2（316L）轴套",
+            "mechanical_seal": "集装式双端面加压机械密封，SiC/SiC摩擦副，Plan 53B隔离液系统",
+            "secondary_seal": "FKM辅助密封圈",
+            "gasket": "316L内外环柔性石墨缠绕垫",
+        },
+        "basis": "登记的危险烃类泄漏控制材料和 Plan 53B 双端面密封路线",
+    },
+    "CLEAN_WATER_STANDARD": {
+        "selection": {
+            "pump_casing": "HT250灰铸铁泵壳",
+            "impeller": "ZCuSn10P1锡青铜叶轮",
+            "shaft": "20Cr13不锈钢泵轴",
+            "shaft_sleeve": "06Cr19Ni10不锈钢轴套",
+            "mechanical_seal": "单端面机械密封，SiC/浸渍石墨摩擦副",
+            "secondary_seal": "EPDM辅助密封圈",
+            "gasket": "芳纶纤维/NBR无石棉压缩纤维垫片",
+        },
+        "basis": "登记的清水泵材料和单端面机械密封路线",
+    },
+    "GENERAL_PROCESS_CONSERVATIVE": {
+        "selection": {
+            "pump_casing": "ZG230-450（WCB）铸钢泵壳",
+            "impeller": "ZG07Cr19Ni11Mo2（CF8M）叶轮",
+            "shaft": "05Cr17Ni4Cu4Nb（17-4PH）泵轴",
+            "shaft_sleeve": "022Cr17Ni12Mo2（316L）轴套",
+            "mechanical_seal": "集装式单端面机械密封，SiC/浸渍石墨摩擦副",
+            "secondary_seal": "FKM辅助密封圈",
+            "gasket": "316L内外环柔性石墨缠绕垫",
+        },
+        "basis": "登记的通用流程泵保守材料和集装式单端面机械密封路线",
+    },
+}
 
 
 def _positive_float(value: Any) -> float | None:
@@ -5886,6 +13863,522 @@ def _pump_series_parallel_screen(
     if not candidates:
         raise ValueError("pump series/parallel screening grid is empty")
     return candidates[0]
+
+
+def _pump_text_level(value: Any) -> str:
+    return str(value or "").strip().casefold().replace("-", "_").replace(" ", "_")
+
+
+def _pump_material_and_seal_selection(params: dict[str, Any]) -> dict[str, Any]:
+    """Return an explicit preliminary pump material/seal route.
+
+    The selector deliberately chooses concrete grades and a seal arrangement so
+    the result is useful to the equipment list.  It remains a J-class
+    preliminary selection because an Aspen composition vector does not prove a
+    corrosion rate, elastomer compatibility, erosion allowance, or emissions
+    requirement.
+    """
+
+    medium = str(params.get("main_medium") or "").strip()
+    medium_key = token(medium)
+    corrosivity = _pump_text_level(params.get("corrosivity"))
+    toxicity = _pump_text_level(params.get("toxicity"))
+    flammability = _pump_text_level(params.get("flammability"))
+    solid_fraction = numeric(params.get("solid_fraction")) or 0.0
+    chloride_ppm = numeric(params.get("chloride_ppm"))
+    ph_value = numeric(params.get("ph_value"))
+    viscosity = numeric(params.get("dynamic_viscosity_mpa_s"))
+    temperature = next(
+        (
+            numeric(params.get(field))
+            for field in ("design_temperature_c", "temperature_c", "inlet_temperature_c")
+            if numeric(params.get(field)) is not None
+        ),
+        None,
+    )
+
+    slurry_tokens = ("slurry", "suspension", "浆", "泥", "固液")
+    corrosive_tokens = (
+        "acid", "caustic", "alkali", "chloride", "brine", "hcl", "h2so4",
+        "硫酸", "盐酸", "硝酸", "烧碱", "碱液", "盐水", "氯化",
+    )
+    hydrocarbon_tokens = (
+        "oil", "hydrocarbon", "benzene", "toluene", "xylene", "ethanol",
+        "methanol", "acetone", "汽油", "柴油", "苯", "甲苯", "二甲苯",
+        "甲醇", "乙醇", "烃",
+    )
+    water_tokens = ("water", "h2o", "condensate", "coolingwater", "水", "凝结水", "冷却水")
+
+    abrasive = solid_fraction > 0.001 or any(token(item) in medium_key for item in slurry_tokens)
+    severe_corrosive = (
+        corrosivity in {"high", "severe", "高度", "严重", "高", "true", "yes"}
+        or any(token(item) in medium_key for item in corrosive_tokens)
+        or (chloride_ppm is not None and chloride_ppm >= 500.0)
+        or (ph_value is not None and (ph_value < 4.0 or ph_value > 10.0))
+    )
+    hazardous = (
+        toxicity in {"moderate", "high", "extreme", "中", "高", "极高", "true", "yes"}
+        or flammability in {"flammable", "highly_flammable", "易燃", "高度易燃", "true", "yes"}
+        or any(token(item) in medium_key for item in hydrocarbon_tokens)
+    )
+    clean_water = bool(medium_key) and any(
+        token(item) in medium_key for item in water_tokens
+    ) and not abrasive and not severe_corrosive and not hazardous
+
+    warnings: list[dict[str, Any]] = []
+    if abrasive:
+        route_id = "ABRASIVE_SLURRY_HARD_METAL"
+        selection = {
+            "pump_casing": "QT500-7球墨铸铁泵壳（可更换耐磨衬里）",
+            "impeller": "KmTBCr26高铬耐磨铸铁叶轮",
+            "shaft": "05Cr17Ni4Cu4Nb（17-4PH）泵轴",
+            "shaft_sleeve": "06Cr19Ni10表面硬化轴套",
+            "mechanical_seal": "集装式双端面机械密封，SiC/SiC摩擦副，外冲洗",
+            "secondary_seal": "FKM辅助密封圈",
+            "gasket": "316L内外环柔性石墨缠绕垫",
+        }
+        basis = "检测到固相/浆液，进入耐磨硬质材料和外冲洗双端面密封分支"
+        warnings.append({
+            "code": "SLURRY_PUMP_TYPE_REVIEW",
+            "message": "材料已按浆液路线选定；普通轴向吸入清水泵型仍应改走耐磨浆液泵型规则。",
+        })
+    elif severe_corrosive:
+        route_id = "CORROSIVE_316L_HARD_FACE"
+        selection = {
+            "pump_casing": "ZG07Cr19Ni11Mo2（CF8M）泵壳",
+            "impeller": "ZG07Cr19Ni11Mo2（CF8M）叶轮",
+            "shaft": "05Cr17Ni4Cu4Nb（17-4PH）泵轴",
+            "shaft_sleeve": "022Cr17Ni12Mo2（316L）轴套",
+            "mechanical_seal": "集装式双端面机械密封，SiC/SiC摩擦副",
+            "secondary_seal": "PTFE包覆辅助密封",
+            "gasket": "316L内外环柔性石墨缠绕垫",
+        }
+        basis = "检测到腐蚀性、极端pH或较高氯离子指标，进入含钼不锈钢和硬-硬密封分支"
+        warnings.append({
+            "code": "CORROSION_DATABASE_CLOSURE_REQUIRED",
+            "message": "程序已给出CF8M/316L具体路线；若介质为强还原酸、高温浓氯或含氟体系，应以腐蚀数据库改选双相钢、镍基合金或非金属衬里。",
+        })
+    elif hazardous:
+        route_id = "HAZARDOUS_HYDROCARBON_CONTAINMENT"
+        selection = {
+            "pump_casing": "ZG230-450（WCB）铸钢泵壳",
+            "impeller": "ZG07Cr19Ni11Mo2（CF8M）叶轮",
+            "shaft": "05Cr17Ni4Cu4Nb（17-4PH）泵轴",
+            "shaft_sleeve": "022Cr17Ni12Mo2（316L）轴套",
+            "mechanical_seal": "集装式双端面加压机械密封，SiC/SiC摩擦副，Plan 53B隔离液系统",
+            "secondary_seal": "FKM辅助密封圈",
+            "gasket": "316L内外环柔性石墨缠绕垫",
+        }
+        basis = "检测到烃类、易燃或较高毒性介质，进入铸钢承压壳体和双端面密封隔离分支"
+    elif clean_water:
+        route_id = "CLEAN_WATER_STANDARD"
+        selection = {
+            "pump_casing": "HT250灰铸铁泵壳",
+            "impeller": "ZCuSn10P1锡青铜叶轮",
+            "shaft": "20Cr13不锈钢泵轴",
+            "shaft_sleeve": "06Cr19Ni10不锈钢轴套",
+            "mechanical_seal": "单端面机械密封，SiC/浸渍石墨摩擦副",
+            "secondary_seal": "EPDM辅助密封圈",
+            "gasket": "芳纶纤维/NBR无石棉压缩纤维垫片",
+        }
+        basis = "主要介质识别为无显著腐蚀和危险性的清水/凝结水，进入清水泵材料分支"
+    else:
+        route_id = "GENERAL_PROCESS_CONSERVATIVE"
+        selection = {
+            "pump_casing": "ZG230-450（WCB）铸钢泵壳",
+            "impeller": "ZG07Cr19Ni11Mo2（CF8M）叶轮",
+            "shaft": "05Cr17Ni4Cu4Nb（17-4PH）泵轴",
+            "shaft_sleeve": "022Cr17Ni12Mo2（316L）轴套",
+            "mechanical_seal": "集装式单端面机械密封，SiC/浸渍石墨摩擦副",
+            "secondary_seal": "FKM辅助密封圈",
+            "gasket": "316L内外环柔性石墨缠绕垫",
+        }
+        basis = "介质危险性/腐蚀性标签不足，程序采用铸钢壳体、CF8M叶轮和集装式机械密封的保守通用流程泵分支"
+        warnings.append({
+            "code": "SERVICE_CHEMISTRY_INCOMPLETE",
+            "message": "程序已经给出具体材料组合；补充腐蚀性、毒性、可燃性、pH和氯离子后可自动改走更精确分支。",
+        })
+
+    requested_route_id = str(
+        params.get("pump_material_route_override_id") or ""
+    ).strip()
+    route_override_status = "NOT_REQUESTED"
+    if requested_route_id:
+        registered_route = PUMP_REGISTERED_MATERIAL_ROUTES.get(
+            requested_route_id
+        )
+        if registered_route is None:
+            route_override_status = "REJECTED_UNKNOWN_REGISTERED_ROUTE"
+            warnings.append({
+                "code": "UNKNOWN_PUMP_MATERIAL_ROUTE_RETAINED_PROGRAM_SELECTION",
+                "message": (
+                    f"请求的泵材料路线 {requested_route_id} 未登记；"
+                    f"程序保留自动分支 {route_id}。"
+                ),
+            })
+        else:
+            route_id = requested_route_id
+            selection = dict(registered_route["selection"])
+            basis = (
+                f"{registered_route['basis']}；"
+                "该路线由受控登记选择触发，组件名称仍由程序展开"
+            )
+            route_override_status = "APPLIED_REGISTERED_ROUTE"
+            warnings.append({
+                "code": "AI_REGISTERED_PUMP_MATERIAL_ROUTE_APPLIED",
+                "message": (
+                    "AI 只选择了登记路线 ID；泵体、叶轮、轴、机械密封和垫片"
+                    "由程序从冻结路线展开，证据等级保持 J。"
+                ),
+            })
+
+    if viscosity is not None and viscosity >= 200.0:
+        warnings.append({
+            "code": "HIGH_VISCOSITY_PUMP_FORM_REVIEW",
+            "message": (
+                f"动力黏度 {viscosity:g} mPa·s 已进入高黏度警戒；材料选择保留，"
+                "泵型应比较螺杆泵/齿轮泵，不能只依赖GB/T 5662离心泵参考点。"
+            ),
+        })
+    if temperature is not None and temperature >= 150.0:
+        warnings.append({
+            "code": "HIGH_TEMPERATURE_SEAL_ELASTOMER_REVIEW",
+            "message": f"设计/操作温度约 {temperature:g} ℃，辅助密封材料需按温度重新分支，当前组合保持暂定。",
+        })
+
+    result = {
+        "schema": "pump-material-seal-selection-v1",
+        "policy_id": PUMP_MATERIAL_SELECTION_POLICY_ID,
+        "status": "PROVISIONAL_PROGRAM_SELECTION",
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "route_id": route_id,
+        "route_basis": basis,
+        "registered_route_override": {
+            "requested_route_id": requested_route_id or None,
+            "status": route_override_status,
+            "available_route_ids": sorted(PUMP_REGISTERED_MATERIAL_ROUTES),
+        },
+        "known_service_inputs": {
+            "main_medium": medium or None,
+            "corrosivity": params.get("corrosivity"),
+            "toxicity": params.get("toxicity"),
+            "flammability": params.get("flammability"),
+            "solid_fraction": solid_fraction,
+            "chloride_ppm": chloride_ppm,
+            "ph_value": ph_value,
+            "dynamic_viscosity_mpa_s": viscosity,
+            "temperature_c": temperature,
+        },
+        "selected_components": selection,
+        "selection_narrative": (
+            f"{basis}；程序具体选定：" +
+            "、".join(f"{key}={value}" for key, value in selection.items()) + "。"
+        ),
+        "warnings": warnings,
+        "evidence_class": "J",
+        "promotion_cap": "TYPE_AND_MATERIAL_SCREENING",
+        "formal_use_allowed": False,
+    }
+    result["selection_sha256"] = _canonical_sha256(result)
+    return result
+
+
+def _pressure_as_gauge_mpa(
+    value: Any,
+    basis: Any,
+    atmospheric_pressure_mpa: Any,
+) -> tuple[float | None, str]:
+    pressure = numeric(value)
+    pressure_basis = str(basis or "").strip().casefold()
+    if pressure is None:
+        return None, "VALUE_MISSING"
+    if pressure_basis == "gauge":
+        return float(pressure), "DIRECT_GAUGE"
+    if pressure_basis == "absolute":
+        atmospheric = numeric(atmospheric_pressure_mpa)
+        if atmospheric is None:
+            return None, "ATMOSPHERIC_PRESSURE_MISSING"
+        return float(pressure) - float(atmospheric), "ABSOLUTE_MINUS_ATMOSPHERIC"
+    return None, "PRESSURE_BASIS_MISSING"
+
+
+def _pump_pressure_and_flange_selection(
+    params: dict[str, Any],
+    engineering_adjustment_plan: dict[str, Any],
+) -> dict[str, Any]:
+    configuration = (
+        engineering_adjustment_plan.get("configuration", {})
+        if isinstance(engineering_adjustment_plan, dict)
+        else {}
+    )
+    if not isinstance(configuration, dict):
+        configuration = {}
+    series_count = int(
+        numeric(configuration.get("series_units_per_train_estimate")) or 1
+    )
+    series_count = max(series_count, 1)
+    per_unit_target = (
+        configuration.get("per_unit_target", {})
+        if isinstance(configuration.get("per_unit_target"), dict)
+        else {}
+    )
+    total_head = _positive_float(params.get("head_m"))
+    per_unit_head = _positive_float(per_unit_target.get("head_m"))
+    if per_unit_head is None and total_head is not None:
+        per_unit_head = total_head / series_count
+
+    supplied_shutoff_head = _positive_float(params.get("shutoff_head_m"))
+    supplied_factor = _positive_float(params.get("shutoff_head_factor"))
+    if supplied_shutoff_head is not None:
+        per_unit_shutoff_head = supplied_shutoff_head
+        shutoff_source = "USER_OR_SOURCE_SUPPLIED_PER_UNIT_SHUTOFF_HEAD"
+        shutoff_factor = (
+            per_unit_shutoff_head / per_unit_head
+            if per_unit_head is not None and per_unit_head > 0
+            else None
+        )
+    elif per_unit_head is not None:
+        shutoff_factor = supplied_factor or PUMP_REGISTERED_SHUTOFF_HEAD_FACTOR
+        per_unit_shutoff_head = per_unit_head * shutoff_factor
+        shutoff_source = (
+            "SUPPLIED_SHUTOFF_FACTOR"
+            if supplied_factor is not None
+            else "PROGRAM_REGISTERED_CONSERVATIVE_SCREENING_FACTOR"
+        )
+    else:
+        shutoff_factor = supplied_factor or PUMP_REGISTERED_SHUTOFF_HEAD_FACTOR
+        per_unit_shutoff_head = None
+        shutoff_source = "HEAD_MISSING"
+
+    density = _positive_float(params.get("density_kg_m3"))
+    density_source = "DIRECT_OR_ASPEN"
+    warnings: list[dict[str, Any]] = []
+    if density is None:
+        density = 1000.0
+        density_source = "PROGRAM_WATER_LIKE_SCREENING_FALLBACK"
+        warnings.append({
+            "code": "PUMP_PRESSURE_DENSITY_FALLBACK",
+            "message": "密度缺失，承压初筛暂按1000 kg/m³计算；程序已报警且不允许据此完成正式定型。",
+        })
+
+    basis = params.get("pressure_basis")
+    atmospheric = params.get("atmospheric_pressure_mpa")
+    inlet_gauge, inlet_conversion = _pressure_as_gauge_mpa(
+        params.get("inlet_pressure_mpa"), basis, atmospheric
+    )
+    outlet_gauge, outlet_conversion = _pressure_as_gauge_mpa(
+        params.get("outlet_pressure_mpa"), basis, atmospheric
+    )
+    if inlet_gauge is None and outlet_gauge is not None and total_head is not None:
+        inlet_gauge = outlet_gauge - density * 9.80665 * total_head / 1_000_000.0
+        inlet_conversion = "BACK_CALCULATED_FROM_OUTLET_MINUS_RHO_G_H"
+    stage_pressures: list[dict[str, Any]] = []
+    final_shutoff_gauge: float | None = None
+    if inlet_gauge is not None and per_unit_shutoff_head is not None:
+        for stage_index in range(1, series_count + 1):
+            pressure = (
+                inlet_gauge
+                + density * 9.80665 * per_unit_shutoff_head * stage_index / 1_000_000.0
+            )
+            stage_pressures.append({
+                "stage_index": stage_index,
+                "maximum_discharge_pressure_mpa_gauge": round(pressure, 9),
+                "formula": "P_stage,max = P_suction,g + rho*g*H_shutoff,unit*stage_index/1e6",
+            })
+        final_shutoff_gauge = stage_pressures[-1][
+            "maximum_discharge_pressure_mpa_gauge"
+        ]
+
+    design_pressure_gauge, design_pressure_conversion = _pressure_as_gauge_mpa(
+        params.get("design_pressure_mpa"),
+        params.get("design_pressure_basis") or basis,
+        atmospheric,
+    )
+    pressure_candidates = [
+        value
+        for value in (final_shutoff_gauge, outlet_gauge, design_pressure_gauge)
+        if value is not None
+    ]
+    required_pressure = max(pressure_candidates) if pressure_candidates else None
+    temperature = next(
+        (
+            numeric(params.get(field))
+            for field in ("design_temperature_c", "temperature_c", "inlet_temperature_c")
+            if numeric(params.get(field)) is not None
+        ),
+        None,
+    )
+    selected_pn: int | None = None
+    pn_status = "BLOCKED_PRESSURE_UNAVAILABLE"
+    if required_pressure is not None:
+        minimum_pn = required_pressure * 10.0
+        eligible = [pn for pn in PUMP_PRESSURE_CLASS_SERIES if pn >= minimum_pn]
+        if eligible:
+            selected_pn = eligible[0]
+            pn_status = "SELECTED_FROM_REGISTERED_PN_SERIES"
+            if temperature is not None and temperature > 120.0:
+                current_index = PUMP_PRESSURE_CLASS_SERIES.index(selected_pn)
+                if current_index + 1 < len(PUMP_PRESSURE_CLASS_SERIES):
+                    selected_pn = PUMP_PRESSURE_CLASS_SERIES[current_index + 1]
+                    pn_status = "SELECTED_ONE_CLASS_HIGHER_PENDING_TEMPERATURE_RATING"
+                    warnings.append({
+                        "code": "FLANGE_TEMPERATURE_DERATING_PENDING",
+                        "message": (
+                            f"温度 {temperature:g} ℃，程序已自动上调一档至PN{selected_pn}；"
+                            "材料对应的压力-温度额定值仍须用法兰标准表闭合。"
+                        ),
+                    })
+        else:
+            pn_status = "ABOVE_REGISTERED_PN160_SERIES"
+
+    estimated_shutoff = (
+        shutoff_source == "PROGRAM_REGISTERED_CONSERVATIVE_SCREENING_FACTOR"
+    )
+    if estimated_shutoff:
+        warnings.append({
+            "code": "SHUTOFF_HEAD_ALGORITHMIC_ESTIMATE",
+            "message": (
+                f"厂家关死扬程未提供，程序按登记保守系数 {shutoff_factor:g}×单机额定扬程"
+                "估算；这是承压筛选值，不是厂家曲线数据。"
+            ),
+        })
+    gbt5662_status = (
+        "PASS"
+        if required_pressure is not None and required_pressure <= 1.6
+        else "FAIL"
+        if required_pressure is not None
+        else "UNKNOWN"
+    )
+    if gbt5662_status == "FAIL":
+        warnings.append({
+            "code": "GBT5662_16BAR_SCOPE_EXCEEDED_AT_SHUTOFF",
+            "message": (
+                f"串联系统估算最大表压 {required_pressure:.6g} MPa 超过GB/T 5662的16 bar路线；"
+                "程序已拒绝把该参考标记当作满足承压的最终泵型。"
+            ),
+        })
+
+    status = (
+        "CALCULATED_AND_PRESSURE_CLASS_SELECTED"
+        if required_pressure is not None and selected_pn is not None
+        else "CALCULATED_ABOVE_REGISTERED_PN_RANGE"
+        if required_pressure is not None
+        else "BLOCKED_PRESSURE_BASIS_OR_HEAD"
+    )
+    result = {
+        "schema": "pump-pressure-flange-selection-v1",
+        "policy_id": PUMP_PRESSURE_SELECTION_POLICY_ID,
+        "status": status,
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "series_units_per_train": series_count,
+        "density_kg_m3": density,
+        "density_source": density_source,
+        "rated_total_head_m": total_head,
+        "rated_per_unit_head_m": per_unit_head,
+        "shutoff_head_factor": shutoff_factor,
+        "per_unit_shutoff_head_m": per_unit_shutoff_head,
+        "shutoff_head_source": shutoff_source,
+        "suction_pressure_mpa_gauge": inlet_gauge,
+        "suction_pressure_conversion": inlet_conversion,
+        "observed_outlet_pressure_mpa_gauge": outlet_gauge,
+        "outlet_pressure_conversion": outlet_conversion,
+        "design_pressure_mpa_gauge": design_pressure_gauge,
+        "design_pressure_conversion": design_pressure_conversion,
+        "stage_pressure_chain": stage_pressures,
+        "maximum_final_discharge_pressure_mpa_gauge": final_shutoff_gauge,
+        "required_pressure_rating_mpa_gauge": (
+            round(required_pressure, 9) if required_pressure is not None else None
+        ),
+        "selected_flange_pressure_class": (
+            f"PN{selected_pn}" if selected_pn is not None else None
+        ),
+        "pressure_class_selection_status": pn_status,
+        "gbt5662_16bar_scope_check": {
+            "status": gbt5662_status,
+            "limit_mpa_gauge": 1.6,
+            "observed_or_calculated_mpa_gauge": required_pressure,
+        },
+        "calculation_chain": [
+            {
+                "calculation_id": "pump_per_unit_shutoff_head_screening",
+                "status": "CALCULATED" if per_unit_shutoff_head is not None else "BLOCKED",
+                "formula": "H_shutoff,unit = H_rated,unit * f_shutoff",
+                "substitution": (
+                    f"{per_unit_head:g}*{shutoff_factor:g}"
+                    if per_unit_head is not None and shutoff_factor is not None
+                    else None
+                ),
+                "value": per_unit_shutoff_head,
+                "unit": "m",
+                "source": shutoff_source,
+            },
+            {
+                "calculation_id": "pump_series_final_shutoff_pressure",
+                "status": "CALCULATED" if final_shutoff_gauge is not None else "BLOCKED",
+                "formula": "P_final,max = P_suction,g + rho*g*H_shutoff,unit*N_series/1e6",
+                "substitution": (
+                    f"{inlet_gauge:g}+{density:g}*9.80665*{per_unit_shutoff_head:g}*{series_count}/1e6"
+                    if inlet_gauge is not None and per_unit_shutoff_head is not None
+                    else None
+                ),
+                "value": final_shutoff_gauge,
+                "unit": "MPa(g)",
+                "source": "DETERMINISTIC_SERIES_PRESSURE_SCREEN",
+            },
+            {
+                "calculation_id": "pump_flange_pressure_class_selection",
+                "status": "CALCULATED" if selected_pn is not None else "BLOCKED",
+                "formula": "select minimum registered PN with PN/10 >= P_required,g",
+                "substitution": (
+                    f"min(PN in {list(PUMP_PRESSURE_CLASS_SERIES)} where PN/10 >= {required_pressure:g})"
+                    if required_pressure is not None
+                    else None
+                ),
+                "value": f"PN{selected_pn}" if selected_pn is not None else None,
+                "unit": None,
+                "source": "PROGRAM_REGISTERED_PN_SERIES",
+            },
+        ],
+        "warnings": warnings,
+        "evidence_class": "J" if estimated_shutoff or density_source != "DIRECT_OR_ASPEN" else "D",
+        "promotion_cap": "PRESSURE_CLASS_SCREENING",
+        "formal_use_allowed": False,
+    }
+    result["selection_sha256"] = _canonical_sha256(result)
+    return result
+
+
+def build_pump_engineering_selection(
+    params: dict[str, Any],
+    engineering_adjustment_plan: dict[str, Any],
+) -> dict[str, Any]:
+    material = _pump_material_and_seal_selection(params)
+    pressure = _pump_pressure_and_flange_selection(
+        params, engineering_adjustment_plan
+    )
+    result = {
+        "schema": "pump-engineering-selection-v1",
+        "status": (
+            "PROGRAM_SELECTED_WITH_WARNINGS"
+            if material.get("warnings") or pressure.get("warnings")
+            else "PROGRAM_SELECTED"
+        ),
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "material_and_seal": material,
+        "pressure_and_flange": pressure,
+        "warnings": [
+            *material.get("warnings", []),
+            *pressure.get("warnings", []),
+        ],
+    }
+    result["selection_sha256"] = _canonical_sha256(result)
+    return result
 
 
 def _base_engineering_adjustment_plan(
@@ -6793,8 +15286,31 @@ def build_model_recommendation(
     graph: dict[str, Any],
     model_status: str,
     model_blockers: list[str],
+    current_params: dict[str, Any] | None = None,
+    choice_authoritative_params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     params = dict(parameter_package.get("selection_context", {}).get("values", {}))
+    for field, value in (current_params or {}).items():
+        if value not in (None, ""):
+            params.setdefault(field, value)
+    # Selection context is intentionally compact and may omit material/component
+    # fields that are still authoritative current inputs.  Bind every available
+    # parameter-package row before exposing registered choices so an AI package
+    # can never appear eligible merely because the compact feature vector hid a
+    # user/Aspen value.
+    for group in parameter_package.get("groups", []):
+        if not isinstance(group, dict):
+            continue
+        for row in group.get("rows", []):
+            if not isinstance(row, dict):
+                continue
+            field_id = str(row.get("field_id") or "").strip()
+            if (
+                field_id
+                and row.get("state") not in {"MISSING", "BLOCKED"}
+                and row.get("value") not in (None, "")
+            ):
+                params.setdefault(field_id, row.get("value"))
     selection_vector = parameter_package.get("selection_feature_vector", {})
     model_rules = load_model_rules()
     family_rule = next((item for item in model_rules.get("families", []) if item.get("family_id") == family_id), None)
@@ -6813,6 +15329,12 @@ def build_model_recommendation(
         "graph_required_gates": family_node.get("required_gates", []),
         "standard_routes": standard_routes(family_id, graph),
         "vendor_routes": vendor_routes(family_id, graph),
+        "ai_engineering_choice_registry_path": (
+            AI_ENGINEERING_CHOICE_REGISTRY_PATH.relative_to(PACKAGE_ROOT).as_posix()
+        ),
+        "ai_engineering_choice_registry_sha256": hashlib.sha256(
+            AI_ENGINEERING_CHOICE_REGISTRY_PATH.read_bytes()
+        ).hexdigest().upper(),
     }
     phase_gate = parameter_package.get("phase_compatibility", {})
     phase_blocked = phase_gate.get("status") == "BLOCKED_INCOMPATIBLE_PHASE"
@@ -6850,12 +15372,31 @@ def build_model_recommendation(
         else ""
     )
     terminal_default_type = str(family_rule.get("terminal_default_type") or "").strip()
-    terminal_condition_registry = [
+    family_ai_registry = ai_engineering_family_registry(family_id)
+    terminal_condition_candidates = [
         item for item in family_rule.get("api_condition_rules", [])
         if isinstance(item, dict)
         and str(item.get("rule_id") or "").strip()
         and str(item.get("recommended_type") or "").strip()
         and str(item.get("condition_text") or "").strip()
+    ]
+    terminal_condition_candidates.extend(
+        item for item in family_ai_registry.get("terminal_type_choices", [])
+        if isinstance(item, dict)
+        and str(item.get("rule_id") or "").strip()
+        and str(item.get("recommended_type") or "").strip()
+        and str(item.get("condition_text") or "").strip()
+    )
+    terminal_condition_by_id: dict[str, dict[str, Any]] = {}
+    for item in terminal_condition_candidates:
+        rule_id = str(item.get("rule_id") or "").strip()
+        terminal_condition_by_id[rule_id] = {
+            **terminal_condition_by_id.get(rule_id, {}),
+            **json.loads(json.dumps(item, ensure_ascii=False)),
+        }
+    terminal_condition_registry = [
+        terminal_condition_by_id[rule_id]
+        for rule_id in sorted(terminal_condition_by_id)
     ]
     requested_terminal_rule_id = str(params.get("terminal_type_rule_override_id") or "").strip()
     controlled_terminal_rule = next(
@@ -7272,6 +15813,11 @@ def build_model_recommendation(
         status = "PRELIMINARY_ENGINEERING_CANDIDATE_WITH_DEFAULTED_TYPE"
     else:
         status = "ENGINEERING_CANDIDATE_READY"
+    engineering_choice_registry = _build_ai_engineering_choice_context(
+        family_id,
+        choice_authoritative_params or params,
+        parameter_package.get("selection_context", {}).get("sha256"),
+    )
     return {
         "schema": "equipment-model-recommendation-v1",
         "status": status,
@@ -7291,6 +15837,7 @@ def build_model_recommendation(
                 else "NOT_REQUESTED"
             ),
         },
+        "engineering_choice_registry": engineering_choice_registry,
         "leading_candidate": leading,
         "candidate_count": len(candidates),
         "screening_candidate_count": screening_candidate_count,
@@ -7716,12 +16263,14 @@ def match_one(
     graph: dict[str, Any],
     *,
     model_estimate_lineage: dict[str, Any] | None = None,
+    engineering_choice_lineage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized, normalization_conflicts, unmapped = normalize_record(raw)
     canonical = json.dumps(
         {
             "normalized": normalized,
             "model_estimate_lineage": model_estimate_lineage or {},
+            "engineering_choice_lineage": engineering_choice_lineage or {},
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -7731,7 +16280,7 @@ def match_one(
         "schema": "equipment-deterministic-match-result-v1",
         "engine_version": ENGINE_VERSION,
         "deterministic": True,
-        "llm_used": bool(model_estimate_lineage),
+        "llm_used": bool(model_estimate_lineage or engineering_choice_lineage),
         "input_sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest().upper(),
         "normalized_input": normalized,
         "unmapped_input_fields": unmapped,
@@ -7824,6 +16373,14 @@ def match_one(
     )
     design_fallbacks.extend(model_estimate_fallbacks)
     fallback_lineage.update(model_estimate_calculation_lineage)
+    engineering_choice_fallbacks, engineering_choice_calculation_lineage = (
+        build_registered_engineering_choice_fallbacks(
+            fallback_normalized,
+            engineering_choice_lineage,
+        )
+    )
+    design_fallbacks.extend(engineering_choice_fallbacks)
+    fallback_lineage.update(engineering_choice_calculation_lineage)
     calculations, pending, derived = run_calculations(
         rule,
         fallback_normalized,
@@ -7854,6 +16411,18 @@ def match_one(
             "recomputed this target and has authority in the selection package."
         )
     effective_parameters = {**fallback_normalized, **derived}
+    exchanger_default_parameter_package = build_exchanger_default_parameter_package(
+        family_id,
+        fallback_normalized,
+        derived,
+        design_fallbacks,
+        calculations,
+    )
+    reported_effective_normalized = dict(fallback_normalized)
+    if exchanger_default_parameter_package is not None:
+        reported_effective_normalized["exchanger_default_parameter_package"] = (
+            exchanger_default_parameter_package
+        )
     sizing_missing = [field for field in rule.get("sizing_fields", []) if not present(effective_parameters, field)]
     formal_release_package_supplied = all(
         present(effective_parameters, field)
@@ -7941,7 +16510,195 @@ def match_one(
         graph,
         model_status,
         model_blockers,
+        current_params=effective_parameters,
+        choice_authoritative_params=effective_normalized,
     )
+    programmatic_tower_specification = build_programmatic_tower_specification(
+        family_id,
+        fallback_normalized,
+        derived,
+        design_fallbacks,
+        calculations,
+        model_recommendation,
+    )
+    if programmatic_tower_specification is not None:
+        reported_effective_normalized[
+            "programmatic_tower_specification"
+        ] = programmatic_tower_specification
+        for field_id, descriptor in programmatic_tower_specification.get(
+            "fields",
+            {},
+        ).items():
+            if (
+                isinstance(descriptor, dict)
+                and descriptor.get("value") is not None
+            ):
+                reported_effective_normalized[field_id] = descriptor["value"]
+    programmatic_vessel_separator_specification = (
+        build_programmatic_vessel_separator_specification(
+            family_id,
+            fallback_normalized,
+            derived,
+            design_fallbacks,
+            calculations,
+            model_recommendation,
+        )
+    )
+    if programmatic_vessel_separator_specification is not None:
+        reported_effective_normalized[
+            "programmatic_vessel_separator_specification"
+        ] = programmatic_vessel_separator_specification
+        for (
+            field_id,
+            descriptor,
+        ) in programmatic_vessel_separator_specification.get(
+            "fields",
+            {},
+        ).items():
+            if (
+                isinstance(descriptor, dict)
+                and descriptor.get("value") is not None
+            ):
+                reported_effective_normalized[field_id] = descriptor["value"]
+    programmatic_reactor_specification = build_programmatic_reactor_specification(
+        family_id,
+        fallback_normalized,
+        derived,
+        design_fallbacks,
+        calculations,
+        model_recommendation,
+    )
+    if programmatic_reactor_specification is not None:
+        reported_effective_normalized[
+            "programmatic_reactor_specification"
+        ] = programmatic_reactor_specification
+        for field_id, descriptor in programmatic_reactor_specification.get(
+            "fields",
+            {},
+        ).items():
+            if (
+                isinstance(descriptor, dict)
+                and descriptor.get("value") is not None
+            ):
+                reported_effective_normalized[field_id] = descriptor["value"]
+    programmatic_crystallizer_specification = (
+        build_programmatic_crystallizer_specification(
+            family_id,
+            fallback_normalized,
+            derived,
+            design_fallbacks,
+            calculations,
+            model_recommendation,
+        )
+    )
+    if programmatic_crystallizer_specification is not None:
+        reported_effective_normalized[
+            "programmatic_crystallizer_specification"
+        ] = programmatic_crystallizer_specification
+        for field_id, descriptor in programmatic_crystallizer_specification.get(
+            "fields",
+            {},
+        ).items():
+            if (
+                isinstance(descriptor, dict)
+                and descriptor.get("value") is not None
+            ):
+                reported_effective_normalized[field_id] = descriptor["value"]
+    programmatic_storage_vessel_specification = (
+        build_programmatic_storage_vessel_specification(
+            family_id,
+            fallback_normalized,
+            derived,
+            design_fallbacks,
+            calculations,
+            model_recommendation,
+        )
+    )
+    if programmatic_storage_vessel_specification is not None:
+        reported_effective_normalized[
+            "programmatic_storage_vessel_specification"
+        ] = programmatic_storage_vessel_specification
+        for field_id, descriptor in programmatic_storage_vessel_specification.get(
+            "fields",
+            {},
+        ).items():
+            if (
+                isinstance(descriptor, dict)
+                and descriptor.get("value") is not None
+            ):
+                reported_effective_normalized[field_id] = descriptor["value"]
+    programmatic_auxiliary_specification = (
+        build_programmatic_auxiliary_specification(
+            family_id,
+            fallback_normalized,
+            derived,
+            design_fallbacks,
+            calculations,
+            model_recommendation,
+        )
+    )
+    if programmatic_auxiliary_specification is not None:
+        reported_effective_normalized[
+            "programmatic_auxiliary_specification"
+        ] = programmatic_auxiliary_specification
+        for field_id, descriptor in programmatic_auxiliary_specification.get(
+            "fields",
+            {},
+        ).items():
+            if (
+                isinstance(descriptor, dict)
+                and descriptor.get("value") is not None
+            ):
+                reported_effective_normalized[field_id] = descriptor["value"]
+    programmatic_membrane_package_specification = (
+        build_programmatic_membrane_package_specification(
+            family_id,
+            fallback_normalized,
+            derived,
+            design_fallbacks,
+            calculations,
+            model_recommendation,
+        )
+    )
+    if programmatic_membrane_package_specification is not None:
+        reported_effective_normalized[
+            "programmatic_membrane_package_specification"
+        ] = programmatic_membrane_package_specification
+        for (
+            field_id,
+            descriptor,
+        ) in programmatic_membrane_package_specification.get(
+            "fields",
+            {},
+        ).items():
+            if (
+                isinstance(descriptor, dict)
+                and descriptor.get("value") is not None
+            ):
+                reported_effective_normalized[field_id] = descriptor["value"]
+    programmatic_turbine_specification = (
+        build_programmatic_turbine_specification(
+            family_id,
+            fallback_normalized,
+            derived,
+            design_fallbacks,
+            calculations,
+            model_recommendation,
+        )
+    )
+    if programmatic_turbine_specification is not None:
+        reported_effective_normalized[
+            "programmatic_turbine_specification"
+        ] = programmatic_turbine_specification
+        for field_id, descriptor in programmatic_turbine_specification.get(
+            "fields",
+            {},
+        ).items():
+            if (
+                isinstance(descriptor, dict)
+                and descriptor.get("value") is not None
+            ):
+                reported_effective_normalized[field_id] = descriptor["value"]
     engineering_adjustment_plan = build_engineering_adjustment_plan(
         family_id,
         effective_parameters,
@@ -7950,6 +16707,76 @@ def match_one(
         calculations,
         pending,
     )
+    pump_engineering_selection: dict[str, Any] | None = None
+    if family_id == "family_pump":
+        pump_engineering_selection = build_pump_engineering_selection(
+            effective_parameters,
+            engineering_adjustment_plan,
+        )
+        pressure_selection = pump_engineering_selection.get(
+            "pressure_and_flange", {}
+        )
+        material_selection = pump_engineering_selection.get(
+            "material_and_seal", {}
+        )
+        configuration = engineering_adjustment_plan.get("configuration")
+        if isinstance(configuration, dict):
+            configuration["program_selected_flange_pressure_class"] = (
+                pressure_selection.get("selected_flange_pressure_class")
+            )
+            configuration["calculated_maximum_final_discharge_pressure_mpa_gauge"] = (
+                pressure_selection.get(
+                    "maximum_final_discharge_pressure_mpa_gauge"
+                )
+            )
+            configuration["program_selected_material_route"] = (
+                material_selection.get("route_id")
+            )
+        engineering_adjustment_plan[
+            "pump_engineering_selection_sha256"
+        ] = pump_engineering_selection.get("selection_sha256")
+        engineering_adjustment_plan["program_completed_actions"] = [
+            {
+                "action_code": "PROGRAM_SELECTED_PUMP_MATERIAL_AND_SEAL",
+                "status": material_selection.get("status"),
+                "route_id": material_selection.get("route_id"),
+                "selected_components": material_selection.get(
+                    "selected_components", {}
+                ),
+            },
+            {
+                "action_code": "PROGRAM_CALCULATED_SERIES_PRESSURE_AND_SELECTED_FLANGE_CLASS",
+                "status": pressure_selection.get("status"),
+                "maximum_final_discharge_pressure_mpa_gauge": (
+                    pressure_selection.get(
+                        "maximum_final_discharge_pressure_mpa_gauge"
+                    )
+                ),
+                "selected_flange_pressure_class": pressure_selection.get(
+                    "selected_flange_pressure_class"
+                ),
+            },
+        ]
+        for action in engineering_adjustment_plan.get("required_actions", []):
+            if action.get("action_code") == "VENDOR_CURVE_AND_BEP_REVIEW":
+                action["action"] = (
+                    "程序已使用GB/T 5662额定参考点完成泵型与分台初筛；"
+                    "只有升级到厂家最终型号时，才补同转速/叶轮直径的完整Q-H-η、"
+                    "BEP、允许连续运行区、功率和NPSHr曲线。"
+                )
+            elif action.get("action_code") == "MATERIAL_SEAL_DRIVER_REVIEW":
+                action["action_code"] = (
+                    "VERIFY_PROGRAM_SELECTED_MATERIAL_AND_SEAL"
+                )
+                action["action"] = (
+                    "程序已经给出泵壳、叶轮、轴、轴套、机械密封、辅助密封和垫片的"
+                    "具体材料组合；仅在介质化学标签不完整或属于强腐蚀/高温体系时，"
+                    "用腐蚀数据库验证并触发自动改选，不再把整项材料选择留空。"
+                )
+        engineering_adjustment_plan.pop("plan_sha256", None)
+        engineering_adjustment_plan["plan_sha256"] = _canonical_sha256(
+            engineering_adjustment_plan
+        )
     selection_agent_control = build_selection_agent_control(
         family_id,
         rule,
@@ -7980,6 +16807,10 @@ def match_one(
     model_recommendation["selection_agent_control_sha256"] = (
         selection_agent_control.get("agent_control_sha256")
     )
+    if pump_engineering_selection is not None:
+        model_recommendation["pump_engineering_selection_sha256"] = (
+            pump_engineering_selection.get("selection_sha256")
+        )
     leading_model_candidate = model_recommendation.get("leading_candidate") or {}
     selection_executed = (
         model_recommendation.get("selection_execution", {}).get("status") == "EXECUTED"
@@ -8049,6 +16880,8 @@ def match_one(
                 "design_basis_status": (
                     "PROVISIONAL_LLM_ESTIMATE"
                     if model_estimate_fallbacks
+                    else "PROVISIONAL_AI_REGISTERED_CHOICE"
+                    if engineering_choice_fallbacks
                     else "PROVISIONAL_FALLBACK" if design_fallbacks
                     else "DIRECT_OR_DERIVED_ONLY"
                 ),
@@ -8081,6 +16914,7 @@ def match_one(
             },
             "model_recommendation": model_recommendation,
             "engineering_adjustment_plan": engineering_adjustment_plan,
+            "pump_engineering_selection": pump_engineering_selection,
             "selection_agent_control": selection_agent_control,
             "standard_routes": standard_routes(family_id, graph),
             "vendor_routes": vendor_routes(family_id, graph),
@@ -8089,9 +16923,33 @@ def match_one(
             "calculation_pending": pending,
             "derived_parameters": derived,
             "design_parameter_package": parameter_package,
+            "exchanger_default_parameter_package": exchanger_default_parameter_package,
+            "programmatic_tower_specification": programmatic_tower_specification,
+            "programmatic_vessel_separator_specification": (
+                programmatic_vessel_separator_specification
+            ),
+            "programmatic_reactor_specification": (
+                programmatic_reactor_specification
+            ),
+            "programmatic_crystallizer_specification": (
+                programmatic_crystallizer_specification
+            ),
+            "programmatic_storage_vessel_specification": (
+                programmatic_storage_vessel_specification
+            ),
+            "programmatic_auxiliary_specification": (
+                programmatic_auxiliary_specification
+            ),
+            "programmatic_membrane_package_specification": (
+                programmatic_membrane_package_specification
+            ),
+            "programmatic_turbine_specification": (
+                programmatic_turbine_specification
+            ),
             "input_recommendations": input_recommendations,
             "design_fallbacks": design_fallbacks,
             "model_estimate_inputs": model_estimate_fallbacks,
+            "ai_engineering_choice_inputs": engineering_choice_fallbacks,
             "embedded_formula_policy": {
                 "built_in_formula_notice_required": True,
                 "embedded_empirical_defaults_enabled": True,
@@ -8101,7 +16959,7 @@ def match_one(
                 "silent_default_values_allowed": False,
             },
             "pre_fallback_effective_normalized_input": effective_normalized,
-            "effective_normalized_input": fallback_normalized,
+            "effective_normalized_input": reported_effective_normalized,
             "ignored_parameter_diagnostics": ignored_parameter_diagnostics,
             "review_role": "audit_only; reviewer_may_flag_conflicts_but_must_not_replace_the_deterministic_match",
             "multiple_choice_policy": rules.get("multiple_choice_policy", {}),

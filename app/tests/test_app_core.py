@@ -836,6 +836,63 @@ class AppCoreTests(unittest.TestCase):
         self.assertEqual(staged.call_count, 2)
         self.assertEqual(staged.call_args_list[0].args[3:], ("audit", "minimum"))
 
+    def test_manual_pipe_uses_default_hydraulics_and_feeds_design_conditions_to_connections(
+        self,
+    ) -> None:
+        result = app_core.manual_match(
+            "family:family_process_piping",
+            {
+                "equipment_tag": "L-DEFAULT-HYD",
+                "main_medium": "water",
+                "phase": "liquid",
+                "flow_m3_h": 20.0,
+                "design_temperature_c": 60.0,
+                "design_pressure_mpa": 0.3,
+                "target_velocity_m_s": 1.5,
+                "material": "20",
+            },
+        )
+        specification = result["result"][
+            "programmatic_pipe_specification"
+        ]
+        self.assertEqual(
+            specification["status"],
+            "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        )
+        self.assertEqual(
+            specification["hydraulic_property_input_ledger"][
+                "default_fields"
+            ],
+            ["density_kg_m3", "dynamic_viscosity_mpa_s"],
+        )
+        self.assertIn(
+            "水力学缺失值已由默认参数包补齐",
+            specification["designation"],
+        )
+        self.assertEqual(
+            specification["material_standard_table_route"]["status"],
+            "STANDARD_TABLE_FOUND_NUMERIC_REUSE_BLOCKED",
+        )
+        connection = result["connection_component_selections"][
+            "connections"
+        ][0]
+        raw_context = connection["raw_service_context"]
+        self.assertEqual(raw_context["temperature_c"], 60.0)
+        self.assertEqual(
+            raw_context["temperature_origin"],
+            "PROGRAMMATIC_PIPE_DESIGN_TEMPERATURE",
+        )
+        self.assertEqual(raw_context["pressure_mpa"], 0.3)
+        self.assertEqual(
+            raw_context["pressure_origin"],
+            "PROGRAMMATIC_PIPE_DESIGN_PRESSURE",
+        )
+        self.assertEqual(
+            connection["component_types"]["flange_type"][
+                "normalized_service_labels"
+            ]["temperature_c"],
+            60.0,
+        )
 
 if __name__ == "__main__":
     unittest.main()

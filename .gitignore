@@ -20,6 +20,7 @@ venv/
 /knowledge_graph/*
 !/knowledge_graph/aspen_equipment_derivation_chain.md
 !/knowledge_graph/aspen_equipment_export.schema.json
+!/knowledge_graph/ai_engineering_choice_registry.json
 !/knowledge_graph/equipment_connection_selection_package.schema.json
 !/knowledge_graph/equipment_customer_output_profiles.json
 !/knowledge_graph/equipment_design_parameter_package.schema.json

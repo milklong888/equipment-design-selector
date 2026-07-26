@@ -305,6 +305,243 @@ class ResultPresentationTests(unittest.TestCase):
         self.assertIn("未给出专门型式条件，采用设备族登记默认型式。", rendered)
         self.assertIn("tower:registered_default:single_pass_sieve_tray", rendered)
 
+    def test_program_selected_main_equipment_and_small_component_branches_are_visible(self) -> None:
+        result = app_core.manual_match("block:PUMP", {
+            "equipment_tag": "P-BRANCH-OUTPUT",
+            "aspen_block_type": "PUMP",
+            "phase": "liquid",
+            "main_medium": "water",
+            "flow_m3_h": 120,
+            "head_m": 60,
+            "density_kg_m3": 998,
+            "efficiency_percent": 72,
+            "pressure_basis": "gauge",
+            "inlet_pressure_mpa": 0.25,
+            "outlet_pressure_mpa": 0.84,
+            "temperature_c": 80,
+            "design_temperature_c": 80,
+        })
+
+        presentation = result_presentation.build_presentation(result)
+        card = presentation["equipment"][0]
+        self.assertEqual(
+            card["selected_output"]["recommended_type"],
+            "轴向吸入离心泵",
+        )
+        self.assertTrue(card["branch_selection"]["natural_language"])
+        self.assertIn(
+            "HT250",
+            card["selected_output"]["pump_material_and_seal"][
+                "pump_casing"
+            ],
+        )
+        self.assertRegex(
+            card["selected_output"]["selected_flange_pressure_class"],
+            r"^PN\d+$",
+        )
+        self.assertTrue(
+            {
+                "pump_per_unit_shutoff_head_screening",
+                "pump_series_final_shutoff_pressure",
+                "pump_flange_pressure_class_selection",
+            }.issubset({
+                item.get("calculation_id")
+                for item in card["calculation_chain"]
+            })
+        )
+        self.assertTrue(
+            card["branch_selection"][
+                "leading_candidate_predicate_branches"
+            ]
+        )
+        families = {
+            item["component_family"]
+            for item in card["component_selections"]
+        }
+        self.assertTrue({
+            "flange_type", "facing", "gasket_type", "fastener_type",
+        }.issubset(families))
+        self.assertTrue(
+            all(
+                item.get("branch_narrative")
+                for item in card["component_selections"]
+            )
+        )
+        propagated_contexts = [
+            connection["raw_service_context"]
+            for connection in result["connection_component_selections"][
+                "connections"
+            ]
+        ]
+        self.assertEqual(
+            {
+                context["program_selected_pressure_class"]
+                for context in propagated_contexts
+            },
+            {card["selected_output"]["selected_flange_pressure_class"]},
+        )
+        self.assertEqual(
+            {
+                context["program_selected_nozzle_dn_mm"]
+                for context in propagated_contexts
+            },
+            {100, 125},
+        )
+        delivery_fields = {
+            field["field_id"]: field
+            for field in result["result"]["customer_delivery"][
+                "equipment_family_datasheet"
+            ]["equipment"][0]["fields"]
+        }
+        for field_id in (
+            "pump_casing_material",
+            "impeller_material",
+            "shaft_material",
+            "shaft_sleeve_material",
+            "seal_type",
+            "secondary_seal_material",
+            "gasket_material",
+            "maximum_final_discharge_pressure_mpa_gauge",
+            "pressure_class",
+            "pump_16bar_scope_check",
+        ):
+            with self.subTest(field_id=field_id):
+                self.assertEqual(
+                    delivery_fields[field_id]["state"],
+                    "PROGRAM_PRELIMINARY_SELECTED",
+                )
+                self.assertIsNotNone(delivery_fields[field_id]["value"])
+        self.assertEqual(
+            delivery_fields["vendor_curve_ref"]["state"],
+            "OPEN_FORMAL_EVIDENCE_GATE",
+        )
+        self.assertIn(
+            "完整Q-H、效率、功率和NPSHr",
+            delivery_fields["vendor_curve_ref"]["label"],
+        )
+
+        html = result_presentation.render_html(presentation)
+        self.assertIn("基本信息与程序实际选择", html)
+        self.assertIn("分支选择（自然文字）", html)
+        self.assertIn("连接口小部件选择分支", html)
+        self.assertIn("带颈对焊法兰", html)
+        self.assertIn("泵材料与密封", html)
+        self.assertIn("HT250", html)
+        self.assertIn("程序选择法兰压力等级", html)
+        self.assertIn("详细计算链条", html)
+        self.assertLess(
+            html.index("分支选择（自然文字）"),
+            html.index("详细计算链条"),
+        )
+
+        answer = result_presentation.build_organized_answer(presentation)
+        equipment = answer["equipment"][0]
+        self.assertTrue(equipment["basic_information"]["program_selected"])
+        self.assertTrue(equipment["component_selections"])
+        markdown = result_presentation.render_organized_markdown(answer)
+        self.assertIn("### 基本信息", markdown)
+        self.assertIn("### 分支选择与大模型调控", markdown)
+        self.assertIn("#### 连接部件选择", markdown)
+        self.assertIn("### 详细计算链条", markdown)
+        self.assertLess(
+            markdown.index("### 分支选择与大模型调控"),
+            markdown.index("### 详细计算链条"),
+        )
+
+    def test_hybrid_llm_judgments_validation_and_applied_values_are_visible(self) -> None:
+        deterministic = app_core.manual_match("block:PUMP", {
+            "equipment_tag": "P-LLM-OUTPUT",
+            "phase": "liquid",
+            "flow_m3_h": 20,
+            "head_m": 45,
+            "density_kg_m3": 900,
+            "efficiency_percent": 75,
+        })
+        hybrid = {
+            "schema": "equipment-design-hybrid-result-v2",
+            "machine_state": {
+                "state": "COMPLETED_HYBRID_RECALCULATED",
+                "llm_requested": True,
+            },
+            "deterministic_result": deterministic,
+            "deterministic_recalculation": deterministic,
+            "orchestration": {
+                "provider": "openai_compatible",
+                "model": "test-engineering-model",
+                "injection_point": "audit",
+                "context_scope": "full_family",
+                "context_sha256": "A" * 64,
+                "orchestration_sha256": "B" * 64,
+                "step_output": {
+                    "summary": "建议补充 NPSHr 初筛值并复核汽蚀分支。",
+                    "condition_assessments": [{
+                        "condition_id": "pump_low_npsh_margin",
+                        "status": "supported",
+                        "reason": "当前缺少厂家曲线，需保守初筛。",
+                        "citations": ["deterministic_result"],
+                    }],
+                    "calculation_assists": [{
+                        "assist_id": "npshr_screen",
+                        "target_field": "npshr_m",
+                        "proposed_value": 3.2,
+                    }],
+                    "terminal_selection_assists": [],
+                    "ambiguity_decision": None,
+                    "audit_findings": [],
+                },
+                "calculation_assist_validation": [{
+                    "assist_id": "npshr_screen",
+                    "status": "VERIFIED_PROVISIONAL_ENGINEERING_ESTIMATE",
+                }],
+                "terminal_selection_assist_validation": [],
+                "output_composition": {
+                    "title": "泵选型调控",
+                    "blocks": [{
+                        "block_id": "summary",
+                        "heading": "大模型工程复核摘要",
+                        "operation": "explain_result",
+                        "section_ref": "summary",
+                        "citations": ["deterministic_result"],
+                    }],
+                },
+            },
+            "calculation_assist_application": {
+                "status": "VERIFIED_INPUTS_APPLIED_AND_RECALCULATED",
+                "applied_inputs": {},
+                "applied_model_estimate_inputs": {"npshr_m": 3.2},
+            },
+            "terminal_selection_application": {
+                "status": "NOT_NEEDED",
+                "applied_overrides": {},
+            },
+            "fallback": {"used": False, "errors": []},
+        }
+
+        presentation = result_presentation.build_presentation(hybrid)
+        control = presentation["llm_control_result"]
+        self.assertTrue(presentation["llm_used"])
+        self.assertEqual(control["status"], "COMPLETED_AND_RECALCULATED")
+        self.assertEqual(control["model"], "test-engineering-model")
+        self.assertEqual(control["applied_model_estimates"], {"npshr_m": 3.2})
+        self.assertTrue(control["condition_assessments"])
+        self.assertEqual(
+            control["organized_output_blocks"][0]["heading"],
+            "大模型工程复核摘要",
+        )
+        card = presentation["equipment"][0]
+        self.assertEqual(card["llm_control_result"]["model"], "test-engineering-model")
+
+        html = result_presentation.render_html(presentation)
+        self.assertIn("大模型调控结果", html)
+        self.assertIn("建议补充 NPSHr 初筛值并复核汽蚀分支", html)
+        markdown = result_presentation.render_organized_markdown(
+            result_presentation.build_organized_answer(presentation)
+        )
+        self.assertIn("#### 大模型调控结果", markdown)
+        self.assertIn("test-engineering-model", markdown)
+        self.assertIn("大模型工程复核摘要", markdown)
+        self.assertIn("LLM补值建议及程序复核", markdown)
+
     def test_hybrid_envelope_renders_only_the_active_recalculation(self) -> None:
         def result(recommended_type: str) -> dict:
             return {

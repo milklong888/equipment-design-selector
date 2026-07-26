@@ -111,6 +111,24 @@ def _report_content_counts(presentation: Mapping[str, Any]) -> dict[str, int]:
             for item in rows
             if isinstance(item, Mapping) and isinstance(item.get("candidates"), list)
         ),
+        "branch_output_count": sum(
+            len(item.get("branch_selection", {}).get("natural_language", []))
+            for item in rows
+            if isinstance(item, Mapping)
+            and isinstance(item.get("branch_selection"), Mapping)
+        ),
+        "component_selection_count": sum(
+            len(item.get("component_selections", []))
+            for item in rows
+            if isinstance(item, Mapping)
+            and isinstance(item.get("component_selections"), list)
+        ),
+        "llm_control_result_count": sum(
+            1
+            for item in rows
+            if isinstance(item, Mapping)
+            and isinstance(item.get("llm_control_result"), Mapping)
+        ),
     }
 
 

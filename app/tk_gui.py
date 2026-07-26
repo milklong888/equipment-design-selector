@@ -104,6 +104,7 @@ UI_OPTION_LABELS: dict[str, str] = {
     "responses": "Responses（推理模型）",
     "ambiguity_resolution": "模糊项判断",
     "audit": "结果审核",
+    "engineering_choice": "设备型式、材料与零部件受控选择",
     "kg_retrieval_planning": "知识检索规划",
     "semantic_extraction": "语义信息提取",
     "textual_condition_judgment": "文字工况判断",
@@ -779,7 +780,7 @@ class EquipmentDesignTkApp:
             value=os.environ.get("EQUIPMENT_DESIGN_LLM_REASONING_EFFORT", "medium")
         )
         self.llm_disable_response_storage = tk.BooleanVar(value=True)
-        self.llm_injection_point = tk.StringVar(value="audit")
+        self.llm_injection_point = tk.StringVar(value="engineering_choice")
         self.llm_context_scope = tk.StringVar(value="minimum")
         provider = TranslatedCombobox(
             grid,
@@ -1292,6 +1293,8 @@ class EquipmentDesignTkApp:
             padding=1,
         )
         customer_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
+        branch_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
+        llm_result_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
         parameter_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
         candidate_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
         issue_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
@@ -1308,6 +1311,8 @@ class EquipmentDesignTkApp:
             text="推导流程（可修改）",
         )
         self.result_tabs.add(customer_panel, text="客户交付")
+        self.result_tabs.add(branch_panel, text="分支选择")
+        self.result_tabs.add(llm_result_panel, text="大模型调控")
         self.result_tabs.add(parameter_panel, text="参数卡")
         self.result_tabs.add(candidate_panel, text="候选型号")
         self.result_tabs.add(issue_panel, text="校核与缺口")
@@ -1572,6 +1577,80 @@ class EquipmentDesignTkApp:
         customer_x.pack(side="bottom", fill="x")
         self.customer_tree.pack(side="left", fill="both", expand=True)
 
+        branch_notice = ttk.Label(
+            branch_panel,
+            text=(
+                "这里显示程序实际选了什么、读取了哪些条件、走了哪个分支、"
+                "哪些分支被排除或因条件不足保持待核；连接口小部件也逐项列出。"
+            ),
+            style="Muted.TLabel",
+            wraplength=820,
+        )
+        branch_notice.pack(anchor="w", padx=10, pady=(9, 6))
+        self.branch_output_text = tk.Text(
+            branch_panel,
+            height=18,
+            wrap="word",
+            bg="#F8FAFB",
+            fg=COLORS["ink"],
+            relief="solid",
+            borderwidth=1,
+            font=("Microsoft YaHei UI", 9),
+            padx=12,
+            pady=10,
+        )
+        branch_y = ttk.Scrollbar(
+            branch_panel,
+            orient="vertical",
+            command=self.branch_output_text.yview,
+        )
+        self.branch_output_text.configure(yscrollcommand=branch_y.set)
+        branch_y.pack(side="right", fill="y")
+        self.branch_output_text.pack(
+            side="left", fill="both", expand=True, padx=(8, 0), pady=(0, 8)
+        )
+        self.branch_output_text.insert(
+            "1.0", "运行后显示自然语言分支选择和部件选择账本。"
+        )
+        self.branch_output_text.configure(state="disabled")
+
+        llm_notice = ttk.Label(
+            llm_result_panel,
+            text=(
+                "这里单独披露大模型的条件判断、补值/分支建议、程序校验结果、"
+                "实际带入重算的内容和失败回退；没有调用时会明确写“未调用”。"
+            ),
+            style="Muted.TLabel",
+            wraplength=820,
+        )
+        llm_notice.pack(anchor="w", padx=10, pady=(9, 6))
+        self.llm_result_text = tk.Text(
+            llm_result_panel,
+            height=18,
+            wrap="word",
+            bg="#EEF8FB",
+            fg=COLORS["ink"],
+            relief="solid",
+            borderwidth=1,
+            font=("Microsoft YaHei UI", 9),
+            padx=12,
+            pady=10,
+        )
+        llm_y = ttk.Scrollbar(
+            llm_result_panel,
+            orient="vertical",
+            command=self.llm_result_text.yview,
+        )
+        self.llm_result_text.configure(yscrollcommand=llm_y.set)
+        llm_y.pack(side="right", fill="y")
+        self.llm_result_text.pack(
+            side="left", fill="both", expand=True, padx=(8, 0), pady=(0, 8)
+        )
+        self.llm_result_text.insert(
+            "1.0", "本次大模型调控结果会显示在这里。"
+        )
+        self.llm_result_text.configure(state="disabled")
+
         parameter_columns = ("group", "parameter", "symbol", "value", "unit", "source", "state")
         parameter_toolbar = ttk.Frame(parameter_panel, style="Panel.TFrame", padding=(8, 7))
         parameter_toolbar.pack(fill="x")
@@ -1660,8 +1739,8 @@ class EquipmentDesignTkApp:
         organized_notice = ttk.Label(
             organized_panel,
             text=(
-                "固定顺序：结论 → 计算 → 候选/修改方案 → 强制警告 → "
-                "待补证据 → 下一步。接入大模型后只能整理表达，不能改程序事实。"
+                "固定顺序：基本信息 → 分支选择与大模型调控 → 详细计算链条 → "
+                "候选/修改方案 → 强制警告 → 待补证据 → 下一步。"
             ),
             style="Muted.TLabel",
             wraplength=780,
@@ -3682,6 +3761,159 @@ class EquipmentDesignTkApp:
                 _display_cell(field.get("evidence_gate")), _display_cell(field.get("profile_ids")),
             ))
 
+        selected_output = (
+            card.get("selected_output")
+            if isinstance(card.get("selected_output"), Mapping)
+            else {}
+        )
+        branch = (
+            card.get("branch_selection")
+            if isinstance(card.get("branch_selection"), Mapping)
+            else {}
+        )
+        branch_lines = [
+            "程序实际选择",
+            f"设备族：{selected_output.get('family_name') or selected_output.get('family_id') or 'OPEN'}",
+            f"型式：{selected_output.get('recommended_type') or 'OPEN'}",
+            f"型号/工程规格：{selected_output.get('model_or_specification') or 'OPEN'}",
+            f"型号状态：{result_presentation.code_label(selected_output.get('model_status'))}",
+            f"型式规则：{selected_output.get('terminal_rule_id') or 'OPEN'}",
+            "",
+            "自然语言分支选择",
+        ]
+        natural_branches = branch.get("natural_language", [])
+        branch_lines.extend(
+            f"{index}. {text}"
+            for index, text in enumerate(natural_branches, start=1)
+        )
+        predicate_rows = branch.get(
+            "leading_candidate_predicate_branches", []
+        )
+        if predicate_rows:
+            branch_lines.extend(["", "首位候选判断节点"])
+            branch_lines.extend(
+                f"- {item.get('branch_narrative') or item.get('predicate_id')}"
+                for item in predicate_rows
+                if isinstance(item, Mapping)
+            )
+        components = card.get("component_selections", [])
+        if components:
+            branch_lines.extend(["", "连接口小部件选择"])
+            branch_lines.extend(
+                f"- {item.get('branch_narrative')}"
+                for item in components
+                if isinstance(item, Mapping)
+            )
+        calculation_branches = branch.get("calculation_branches", [])
+        if calculation_branches:
+            branch_lines.extend(["", "计算分支执行状态"])
+            branch_lines.extend(
+                f"- {item.get('branch_narrative')}"
+                for item in calculation_branches
+                if isinstance(item, Mapping)
+            )
+        branch_lines.extend([
+            "",
+            "机器分支账本 SHA-256",
+            str(branch.get("branch_output_sha256") or "OPEN"),
+        ])
+        _set_text(self.branch_output_text, "\n".join(branch_lines))
+
+        llm_control = (
+            card.get("llm_control_result")
+            if isinstance(card.get("llm_control_result"), Mapping)
+            else {}
+        )
+        llm_lines = [
+            f"状态：{llm_control.get('status') or 'NOT_REQUESTED'}",
+            (
+                "模型："
+                f"{llm_control.get('provider') or '—'} / "
+                f"{llm_control.get('model') or '—'}"
+            ),
+            f"注入点：{llm_control.get('injection_point') or '—'}",
+            f"是否实际改变重算输入：{llm_control.get('llm_changed_active_inputs') is True}",
+            "",
+            "自然语言结果",
+        ]
+        llm_lines.extend(
+            f"- {text}"
+            for text in llm_control.get("natural_language", [])
+        )
+        llm_lines.extend([
+            "",
+            "大模型组织后的输出块（按模型给出的顺序）",
+            json.dumps(
+                llm_control.get("organized_output_blocks", []),
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ),
+            "",
+            "LLM 条件判断",
+            json.dumps(
+                llm_control.get("condition_assessments", []),
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ),
+            "",
+            "LLM 补值建议及程序复核",
+            json.dumps(
+                {
+                    "suggestions": llm_control.get(
+                        "calculation_assists", []
+                    ),
+                    "validation": llm_control.get(
+                        "calculation_assist_validation", []
+                    ),
+                    "applied_calculation_inputs": llm_control.get(
+                        "applied_calculation_inputs", {}
+                    ),
+                    "applied_model_estimates": llm_control.get(
+                        "applied_model_estimates", {}
+                    ),
+                },
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ),
+            "",
+            "LLM 终选分支建议及程序复核",
+            json.dumps(
+                {
+                    "suggestions": llm_control.get(
+                        "terminal_selection_assists", []
+                    ),
+                    "validation": llm_control.get(
+                        "terminal_selection_assist_validation", []
+                    ),
+                    "applied_overrides": llm_control.get(
+                        "applied_terminal_overrides", {}
+                    ),
+                },
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ),
+            "",
+            "LLM 审核发现与回退",
+            json.dumps(
+                {
+                    "audit_findings": llm_control.get(
+                        "audit_findings", []
+                    ),
+                    "fallback_errors": llm_control.get(
+                        "fallback_errors", []
+                    ),
+                },
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ),
+        ])
+        _set_text(self.llm_result_text, "\n".join(llm_lines))
+
         for item in self.parameter_tree.get_children():
             self.parameter_tree.delete(item)
         for group in card.get("parameter_groups", []):
@@ -3874,6 +4106,14 @@ class EquipmentDesignTkApp:
             _set_text(self.equation_text, "当前结果不含确定性设备参数包。")
             _set_text(self.issue_text, "当前结果不含可展示的设备参数、候选或证据门。")
             _set_text(
+                self.branch_output_text,
+                "当前结果不含可展示的程序分支选择。",
+            )
+            _set_text(
+                self.llm_result_text,
+                "当前结果不含可展示的大模型调控记录。",
+            )
+            _set_text(
                 self.organized_answer_text,
                 "当前结果不含可由 Agent 组织的确定性设备事实。",
             )
@@ -3967,7 +4207,7 @@ class EquipmentDesignTkApp:
                     "organized_answer_sha256"
                 ),
                 "program_generated": True,
-                "llm_used": False,
+                "llm_used": bool(self.presentation.get("llm_used")),
             }
             manifest["manifest_sha256"] = hashlib.sha256(
                 json.dumps(

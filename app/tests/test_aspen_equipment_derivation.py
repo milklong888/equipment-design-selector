@@ -1235,11 +1235,19 @@ class AspenEquipmentDerivationUnitTests(unittest.TestCase):
         )
         self.assertEqual(
             fields["piping_class"]["value"],
-            "OPEN_PROJECT_AUTHORITY_GATE",
+            "程序预选 CS20-PN16-BW-CA1.5（正式项目等级批准待完成）",
         )
         self.assertEqual(
             fields["piping_class"]["promotion_cap"],
-            "NOT_PROMOTABLE",
+            "TYPE_SCREENING",
+        )
+        self.assertEqual(
+            fields["piping_class_component_schedule"]["value"]["status"],
+            "PROGRAM_SELECTED_INTERNAL_FALLBACK_CLASS_CANDIDATE",
+        )
+        self.assertIn(
+            "flange",
+            fields["piping_class_component_schedule"]["value"]["components"],
         )
         self.assertIn(
             "project_authority_piping_class",
@@ -1265,8 +1273,85 @@ class AspenEquipmentDerivationUnitTests(unittest.TestCase):
             self.assertTrue(open_field["required_action"])
         self.assertIn("程序初选候选", specification["designation"])
         self.assertIn(
-            "正式管道等级=OPEN_PROJECT_AUTHORITY_GATE",
+            "正式项目管道等级批准=OPEN_PROJECT_AUTHORITY_GATE",
             specification["designation"],
+        )
+        wall_screen = specification["pressure_wall_screening"]
+        self.assertEqual(
+            wall_screen["status"],
+            "INTERNAL_FORMULA_FALLBACK_WARNING",
+        )
+        self.assertIn(
+            "mill_negative_tolerance_fraction",
+            wall_screen["fallback_inputs"],
+        )
+        self.assertGreater(
+            wall_screen["required_nominal_wall_mm"],
+            wall_screen["pressure_wall_mm_before_allowances"],
+        )
+        margin = specification["selection_margin_structure"]
+        self.assertEqual(
+            margin["wall_margin"]["governing_minimum_wall_mm"],
+            max(
+                margin["wall_margin"][
+                    "formula_required_nominal_wall_mm"
+                ],
+                margin["wall_margin"]["handling_minimum_wall_mm"],
+            ),
+        )
+        self.assertGreaterEqual(
+            margin["wall_margin"]["selected_standard_wall_mm"],
+            margin["wall_margin"]["governing_minimum_wall_mm"],
+        )
+        self.assertGreaterEqual(
+            margin["hydraulic_margin"]["diameter_margin_mm"],
+            0.0,
+        )
+        self.assertIn(
+            "不再额外叠加",
+            margin["double_counting_guard"],
+        )
+        self.assertEqual(
+            specification["standard_bundle"]["design_code"]["identity"],
+            "GB/T 20801.1-2025",
+        )
+        material_route = specification[
+            "material_standard_table_route"
+        ]
+        self.assertEqual(
+            material_route["status"],
+            "STANDARD_TABLE_FOUND_NUMERIC_REUSE_BLOCKED",
+        )
+        self.assertFalse(
+            material_route["standard_numeric_value_adopted"]
+        )
+        self.assertTrue(material_route["candidate_tables"])
+        material_ledger = specification["material_parameter_ledger"]
+        self.assertEqual(
+            material_ledger["selected_material"]["material_code"],
+            "CS20",
+        )
+        self.assertEqual(
+            material_ledger["strength_and_temperature_values"][
+                "yield_strength_20c_mpa"
+            ],
+            245.0,
+        )
+        self.assertEqual(
+            material_ledger["wall_and_manufacturing_values"][
+                "corrosion_allowance_origin"
+            ],
+            "MATERIAL_SERVICE_ROUTE_DEFAULT_WARNING",
+        )
+        self.assertIn(
+            "figure_id",
+            margin["thickness_structure_evidence"],
+        )
+        self.assertEqual(
+            specification["hydraulic_property_input_ledger"][
+                "default_fields"
+            ],
+            [],
         )
 
         selector_lineage = {
@@ -1284,7 +1369,7 @@ class AspenEquipmentDerivationUnitTests(unittest.TestCase):
         )
         self.assertEqual(
             selector_lineage["piping_class"]["result_status"],
-            "OPEN_PROJECT_AUTHORITY_GATE",
+            "PROGRAM_SELECTED_INTERNAL_FALLBACK_CLASS_CANDIDATE",
         )
         self.assertIn(
             "PROGRAM_ASSEMBLED_PRELIMINARY_LINE_CLASS",
@@ -1457,7 +1542,7 @@ class AspenEquipmentDerivationUnitTests(unittest.TestCase):
         self.assertNotIn("GB/T 8163", fields["product_standard"]["value"])
         self.assertNotIn("无缝", leading["designation"])
 
-    def test_open_seamless_product_standard_is_not_marked_established(
+    def test_low_temperature_seamless_product_identity_is_concrete_but_open(
         self,
     ) -> None:
         result = self._derive_test_pipe_stream(
@@ -1481,7 +1566,48 @@ class AspenEquipmentDerivationUnitTests(unittest.TestCase):
         )
         self.assertEqual(
             specification["fields"]["product_standard"]["state"],
-            "OPEN_FORMAL_EVIDENCE_GATE",
+            "PROGRAM_PRELIMINARY_STANDARD_IDENTITY_CANDIDATE",
+        )
+        self.assertEqual(
+            specification["fields"]["product_standard"]["value"],
+            "GB/T 18984-2016",
+        )
+        self.assertEqual(
+            specification["fields"]["material_grade"]["value"],
+            "16MnDG",
+        )
+        self.assertFalse(
+            specification["product_standard_evidence"][
+                "product_scope_verified"
+            ]
+        )
+
+    def test_hydraulic_defaults_are_phase_aware_and_loudly_nonformal(
+        self,
+    ) -> None:
+        liquid = derivation._pipe_hydraulic_property_inputs(
+            record={"phase": "liquid", "_pipe_input_source_kind": "MANUAL_INPUT"}
+        )
+        self.assertEqual(
+            liquid["status"],
+            "DEFAULT_HYDRAULIC_PARAMETERS_USED_WARNING",
+        )
+        self.assertEqual(liquid["density_kg_m3"], 1_000.0)
+        self.assertEqual(liquid["dynamic_viscosity_mpa_s"], 1.0)
+        self.assertEqual(
+            liquid["default_fields"],
+            ["density_kg_m3", "dynamic_viscosity_mpa_s"],
+        )
+        self.assertFalse(liquid["formal_design_evidence"])
+
+        vapor = derivation._pipe_hydraulic_property_inputs(
+            record={"phase": "vapor", "_pipe_input_source_kind": "MANUAL_INPUT"}
+        )
+        self.assertEqual(vapor["density_kg_m3"], 1.2)
+        self.assertEqual(vapor["dynamic_viscosity_mpa_s"], 0.018)
+        self.assertNotEqual(
+            vapor["default_package_basis"],
+            liquid["default_package_basis"],
         )
 
     def test_carbon_steel_product_standard_is_catalog_bound_but_open(

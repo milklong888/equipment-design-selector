@@ -68,21 +68,40 @@ class RealBkpCustomerDeliveryStage1Tests(unittest.TestCase):
             for cell in row["all_equipment_fields"]
         }
 
-    def test_mch_tower_public_surface_has_no_screening_geometry(
+    def test_mch_tower_public_surface_labels_screening_geometry_and_keeps_formal_open(
         self,
     ) -> None:
         tower = self._rows(self.deliveries["MCH"])["B1"]
         cells = self._cells(tower)
-        forbidden_fields = {
+        screening_fields = {
             "tower_diameter_screening_mm",
             "tower_height_screening_mm",
             "formula_only_shell_thickness_mm",
             "formula_only_head_thickness_mm",
+        }
+        for field_id in screening_fields:
+            self.assertIn(field_id, cells)
+            self.assertIsNotNone(cells[field_id]["value"])
+            self.assertEqual(cells[field_id]["state"], "CALCULATED")
+            self.assertEqual(
+                cells[field_id]["source"]["promotion_cap"],
+                "TYPE_SCREENING",
+            )
+            self.assertFalse(
+                cells[field_id]["source"]["formal_design_evidence"]
+            )
+        formal_gate_state_fields = {
             "nominal_shell_wall_thickness_selected",
             "nominal_head_wall_thickness_selected",
-            "inner_diameter_mm",
         }
-        self.assertTrue(forbidden_fields.isdisjoint(cells))
+        for field_id in formal_gate_state_fields:
+            self.assertIn(field_id, cells)
+            self.assertIsNone(cells[field_id]["value"])
+            self.assertEqual(
+                cells[field_id]["state"],
+                "OPEN_FORMAL_EVIDENCE_GATE",
+            )
+        self.assertNotIn("inner_diameter_mm", cells)
         for field_id in ("diameter_mm", "height_mm"):
             self.assertIn(field_id, cells)
             self.assertIsNone(cells[field_id]["value"])
@@ -122,7 +141,9 @@ class RealBkpCustomerDeliveryStage1Tests(unittest.TestCase):
             sort_keys=True,
         )
         for field_id in {
-            *forbidden_fields,
+            *screening_fields,
+            *formal_gate_state_fields,
+            "inner_diameter_mm",
             "height_mm",
         }:
             self.assertNotIn(f'"{field_id}"', key_summary_text)

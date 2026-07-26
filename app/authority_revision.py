@@ -22,6 +22,7 @@ HASH_PATTERN = re.compile(r"^[A-F0-9]{64}$")
 CORE_ASSET_KEYS = (
     "rules",
     "model_rules",
+    "ai_engineering_choice_registry",
     "parameter_templates",
     "customer_output_profiles",
     "pump_standard_points",
@@ -89,6 +90,9 @@ def _current_core_asset_hashes() -> dict[str, str]:
     paths = {
         "rules": app_core.matcher.RULES_PATH,
         "model_rules": app_core.matcher.MODEL_RULES_PATH,
+        "ai_engineering_choice_registry": (
+            app_core.matcher.AI_ENGINEERING_CHOICE_REGISTRY_PATH
+        ),
         "parameter_templates": app_core.matcher.PARAMETER_TEMPLATES_PATH,
         "customer_output_profiles": app_core.matcher.CUSTOMER_OUTPUT_PROFILES_PATH,
         "pump_standard_points": app_core.matcher.PUMP_STANDARD_POINTS_PATH,

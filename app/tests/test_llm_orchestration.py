@@ -62,6 +62,7 @@ def empty_output(prepared: dict, injection_point: str = "audit") -> dict:
         "proposed_changes": [],
         "condition_assessments": [],
         "terminal_selection_assists": [],
+        "engineering_choice_assists": [],
         "calculation_assists": [],
         "retrieval_plan": [],
         "ambiguity_decision": None,
@@ -89,6 +90,192 @@ def organize_output(output: dict) -> dict:
 
 
 class LlmOrchestrationTests(unittest.TestCase):
+    def test_registered_ai_choice_library_covers_all_17_families(self) -> None:
+        registry = app_core.matcher.load_ai_engineering_choice_registry()
+        model_rules = app_core.matcher.load_model_rules()
+        expected_families = {
+            item["family_id"] for item in model_rules["families"]
+        }
+        actual_families = {
+            item["family_id"] for item in registry["families"]
+        }
+        self.assertEqual(actual_families, expected_families)
+        self.assertEqual(len(actual_families), 17)
+        for family in registry["families"]:
+            with self.subTest(family_id=family["family_id"]):
+                self.assertGreaterEqual(len(family["terminal_type_choices"]), 2)
+                self.assertTrue(family["material_component_axes"])
+                self.assertTrue(family["background"])
+                self.assertTrue(family["source_refs"])
+                for choice in family["terminal_type_choices"]:
+                    quality = app_core.matcher.terminal_type_name_quality(
+                        choice["recommended_type"]
+                    )
+                    self.assertTrue(quality["is_concrete"], choice)
+                    self.assertTrue(choice["selection_basis"])
+                    self.assertTrue(choice["source_refs"])
+                for axis in family["material_component_axes"]:
+                    self.assertGreaterEqual(len(axis["choices"]), 2)
+                    for choice in axis["choices"]:
+                        self.assertTrue(choice["field_values"])
+                        self.assertTrue(choice["selection_basis"])
+                        self.assertTrue(choice["source_refs"])
+
+    def test_registered_type_choices_are_exposed_for_every_family(self) -> None:
+        rules = app_core.matcher.load_rules()
+        graph = app_core.matcher.load_graph()
+        for family in rules["families"]:
+            family_id = family["id"]
+            with self.subTest(family_id=family_id):
+                result = app_core.matcher.match_one(
+                    {"equipment_family": family_id},
+                    rules,
+                    graph,
+                )
+                self.assertEqual(result["status"], "MATCHED")
+                registered = result["model_recommendation"][
+                    "terminal_type_rule_registry"
+                ]
+                self.assertGreaterEqual(len(registered), 2)
+
+    def test_engineering_choice_is_verified_auto_replayed_and_disclosed(self) -> None:
+        values = {
+            "equipment_tag": "P-AI-CHOICE",
+            "phase": "liquid",
+            "flow_m3_h": 20,
+            "head_m": 30,
+            "density_kg_m3": 1000,
+            "main_medium": "water",
+        }
+        source_input = {
+            "operation": "manual_match",
+            "payload": {"selection_id": "block:PUMP", "values": values},
+        }
+        prepare_response, code = agent.execute_request({
+            "schema": "equipment-design-agent-request-v1",
+            "operation": "hybrid_prepare",
+            "payload": {
+                "input": source_input,
+                "knowledge": {"enabled": False},
+                "injection_point": "engineering_choice",
+                "context_scope": "minimum",
+            },
+        })
+        self.assertEqual(code, 0, prepare_response)
+        prepared = prepare_response["result"]
+        choice = next(
+            item
+            for item in prepared["context_pack"]["engineering_choice_registry"]
+            if item["choice_id"] == "pump:route:clean_water_standard"
+        )
+        output = empty_output(prepared, "engineering_choice")
+        output["engineering_choice_assists"] = [{
+            "assist_id": "choose_clean_water_route",
+            "axis_id": choice["axis_id"],
+            "choice_id": choice["choice_id"],
+            "selection_context_sha256": choice["selection_context_sha256"],
+            "reason": "The immutable case identifies clean water without hazard or corrosion labels.",
+            "citations": ["deterministic_result"],
+        }]
+        organize_output(output)
+
+        response, code = agent.execute_request({
+            "schema": "equipment-design-agent-request-v1",
+            "operation": "hybrid_run",
+            "payload": {
+                "input": source_input,
+                "knowledge": {"enabled": False},
+                "injection_point": "engineering_choice",
+                "context_scope": "minimum",
+                "llm": {
+                    "enabled": True,
+                    "config": {"provider": "mock", "mock_response": output},
+                },
+            },
+        })
+
+        self.assertEqual(code, 0, response)
+        hybrid = response["result"]
+        self.assertEqual(
+            hybrid["engineering_choice_application"]["status"],
+            "REGISTERED_ENGINEERING_CHOICES_APPLIED_AND_RECALCULATED",
+        )
+        self.assertEqual(
+            hybrid["engineering_choice_application"]["overwritten_fields"],
+            [],
+        )
+        recalculated = hybrid["deterministic_recalculation"]["result"]
+        self.assertEqual(
+            recalculated["pump_engineering_selection"]["material_and_seal"][
+                "route_id"
+            ],
+            "CLEAN_WATER_STANDARD",
+        )
+        selected = recalculated["ai_engineering_choice_inputs"][0]
+        self.assertEqual(
+            selected["choice_id"],
+            "pump:route:clean_water_standard",
+        )
+        self.assertEqual(selected["evidence_class"], "J")
+        self.assertEqual(selected["promotion_cap"], "TYPE_SCREENING")
+        self.assertFalse(selected["overwrite_allowed"])
+
+    def test_invented_or_existing_value_conflicting_choice_is_not_applied(self) -> None:
+        exchanger = app_core.manual_match(
+            "family:family_fixed_tubesheet_exchanger",
+            {
+                "equipment_tag": "E-AI-CONFLICT",
+                "heat_duty_kw": 500,
+                "overall_u_w_m2k": 600,
+                "lmtd_k": 30,
+                "shell_material_grade": "Q345R",
+            },
+        )
+        prepared = llm_bridge.hybrid_prepare(
+            exchanger,
+            {"status": "NOT_REQUESTED", "hits": []},
+            "engineering_choice",
+        )
+        registry = prepared["context_pack"]["engineering_choice_registry"]
+        conflicting = next(
+            item for item in registry
+            if item["choice_id"] == "fixed_exchanger:material:316l_wetted"
+        )
+        self.assertFalse(conflicting["eligible_for_ai_selection"])
+        output = empty_output(prepared, "engineering_choice")
+        output["engineering_choice_assists"] = [{
+            "assist_id": "conflicting_choice",
+            "axis_id": conflicting["axis_id"],
+            "choice_id": conflicting["choice_id"],
+            "selection_context_sha256": conflicting[
+                "selection_context_sha256"
+            ],
+            "reason": "attempt to overwrite an existing user material",
+            "citations": ["deterministic_result"],
+        }, {
+            "assist_id": "invented_choice",
+            "axis_id": conflicting["axis_id"],
+            "choice_id": "invented:material:package",
+            "selection_context_sha256": conflicting[
+                "selection_context_sha256"
+            ],
+            "reason": "invented package regression",
+            "citations": ["deterministic_result"],
+        }]
+        organize_output(output)
+
+        result = llm_bridge.hybrid_continue(prepared, output)
+        self.assertEqual(result["verified_engineering_choice_inputs"], {})
+        self.assertEqual(
+            [item["status"] for item in result[
+                "engineering_choice_assist_validation"
+            ]],
+            [
+                "REJECTED_NONBLOCKING_CHOICE_NOT_APPLICABLE",
+                "REJECTED_NONBLOCKING_UNKNOWN_REGISTERED_CHOICE",
+            ],
+        )
+
     def test_verified_recipe_is_program_computed_and_interleaved_in_ai_order(self) -> None:
         prepared = llm_bridge.hybrid_prepare(
             pump_result(), {"status": "NOT_REQUESTED", "hits": []}, "audit"

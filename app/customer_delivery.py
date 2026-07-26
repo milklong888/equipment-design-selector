@@ -244,11 +244,45 @@ FALLBACK_FAMILY_FIELDS: dict[str, tuple[str, ...]] = {
 
 # These fields are produced by deterministic Stage-1 safety boundaries after
 # the authority profiles were generated.  They supplement (never replace)
-# the formal T/X profile fields.  Tower screening geometry is deliberately
-# excluded because it belongs only in the internal preliminary-design audit.
+# the formal T/X profile fields.  Explicitly named tower screening values are
+# customer-visible, while the formal diameter/height/thickness fields remain
+# protected by the separate authority gate below.
 PROGRAMMATIC_FAMILY_SUPPLEMENTAL_FIELDS: dict[str, tuple[str, ...]] = {
     "family_tower": (
+        "programmatic_tower_specification",
+        "model_designation",
+        "model_status",
+        "technical_specification",
+        "quantity_count",
+        "tower_internals_type",
+        "packing_or_tray_specification",
         "stage_count",
+        "tower_diameter_screening_mm",
+        "tower_height_screening_mm",
+        "tower_internal_height_m",
+        "formula_only_shell_thickness_mm",
+        "formula_only_head_thickness_mm",
+        "preliminary_nominal_shell_thickness_mm",
+        "preliminary_nominal_head_thickness_mm",
+        "nominal_shell_wall_thickness_selected",
+        "nominal_head_wall_thickness_selected",
+        "shell_material_grade",
+        "internals_material_grade",
+        "skirt_material_grade",
+        "corrosion_allowance_mm",
+        "packing_type",
+        "packing_material_grade",
+        "packing_specific_area_m2_m3",
+        "packing_void_fraction",
+        "packing_corrugation_angle_deg",
+        "packing_design_flood_fraction",
+        "packing_hetp_m",
+        "packing_pressure_drop_kpa_m",
+        "packing_bed_section_max_height_m",
+        "packing_bed_height_m",
+        "packing_section_count",
+        "liquid_redistributor_count",
+        "packing_total_pressure_drop_kpa",
         "engineering_adjustment_plan",
         "algorithmic_selection_warning",
         "selection_agent_control_status",
@@ -274,24 +308,16 @@ PROGRAMMATIC_FAMILY_SUPPLEMENTAL_FIELDS: dict[str, tuple[str, ...]] = {
         "selection_agent_control_status",
     ),
     "family_fixed_tubesheet_exchanger": (
+        "exchanger_default_parameter_package",
         "engineering_adjustment_plan",
         "algorithmic_selection_warning",
         "selection_agent_control_status",
     ),
     "family_other_heat_exchanger": (
+        "exchanger_default_parameter_package",
         "engineering_adjustment_plan",
         "algorithmic_selection_warning",
         "selection_agent_control_status",
-    ),
-    "family_reactor_vessel_separator": (
-        "active_tube_inner_diameter_mm",
-        "active_tube_length_screening_mm",
-        "one_tube_geometric_screening_volume_m3",
-        "required_total_reactor_volume_m3",
-        "selected_tube_count",
-        "reactor_shell_inner_diameter_mm",
-        "nominal_process_tube_wall_thickness_mm",
-        "nominal_shell_wall_thickness_mm",
     ),
     "family_process_piping": (
         "technical_specification",
@@ -308,10 +334,462 @@ PROGRAMMATIC_FAMILY_SUPPLEMENTAL_FIELDS: dict[str, tuple[str, ...]] = {
         "endpoint_pressure_drop_status",
         "endpoint_pressure_drop_formal_acceptance",
         "piping_class_candidate_code",
+        "piping_class_component_schedule",
+        "standard_bundle",
+        "wall_calculation_branch",
+        "required_nominal_wall_thickness_mm",
+        "allowable_stress_mpa",
+        "mill_negative_tolerance_fraction",
+        "selection_margin_structure",
+        "wall_selection_margin_mm",
+        "hydraulic_diameter_margin_mm",
+        "pressure_series_margin_mpa",
+        "pressure_temperature_screening",
+        "material_compatibility_status",
+        "material_parameter_ledger",
+        "material_selection_chain",
+        "standard_material_table_route",
+        "general_material_selection_rules",
+        "absolute_roughness_mm",
+        "hydraulic_property_input_ledger",
+        "hydraulic_default_parameter_package",
+        "total_line_pressure_drop_kpa",
+        "total_line_hydraulic_branch",
+        "line_length_m",
+        "hydraulic_missing_physical_inputs",
         "external_pressure_design_status",
         "vacuum_margin_kpa",
         "significant_vacuum_threshold_kpa",
     ),
+    "family_compressor": (
+        "programmatic_auxiliary_specification",
+        "equipment_subfamily",
+        "model_designation",
+        "flow_m3_h",
+        "inlet_pressure_mpa",
+        "outlet_pressure_mpa",
+        "pressure_basis",
+        "compression_pressure_ratio",
+        "stage_count",
+        "per_stage_pressure_ratio",
+        "intercooler_count",
+        "inlet_temperature_c",
+        "outlet_temperature_c",
+        "gas_molecular_weight",
+        "compressibility_factor",
+        "heat_capacity_ratio_k",
+        "efficiency_percent",
+        "rotational_speed_rpm",
+        "shaft_power_kw",
+        "driver_efficiency_percent",
+        "auxiliary_power_fraction",
+        "total_power_kw",
+        "motor_power_kw",
+        "cooling_arrangement",
+        "driver_type",
+        "casing_material_grade",
+        "impeller_material_grade",
+        "shaft_material_grade",
+        "seal_type",
+        "material",
+        "quantity_count",
+        "technical_specification",
+    ),
+    "family_agitator": (
+        "programmatic_auxiliary_specification",
+        "equipment_subfamily",
+        "model_designation",
+        "volume_m3",
+        "volume_basis",
+        "inner_diameter_mm",
+        "agitator_type",
+        "impeller_diameter_ratio",
+        "impeller_diameter_mm",
+        "baffle_count",
+        "rotational_speed_rpm",
+        "shaft_power_kw",
+        "motor_power_kw",
+        "torque_nm",
+        "shaft_diameter_mm",
+        "gearbox_ratio",
+        "agitator_material_grade",
+        "shaft_material_grade",
+        "seal_type",
+        "material",
+        "mixing_metric",
+        "quantity_count",
+        "technical_specification",
+    ),
+    "family_static_mixer": (
+        "programmatic_auxiliary_specification",
+        "equipment_subfamily",
+        "model_designation",
+        "medium_name",
+        "flow_m3_h",
+        "target_velocity_m_s",
+        "required_inner_diameter_mm",
+        "selected_dn",
+        "selected_outer_diameter_mm",
+        "selected_wall_thickness_mm",
+        "actual_velocity_m_s",
+        "element_type",
+        "element_count",
+        "element_length_to_diameter_ratio",
+        "length_mm",
+        "local_resistance_coefficient_per_element",
+        "density_kg_m3",
+        "dynamic_viscosity_mpa_s",
+        "reynolds_number",
+        "flow_regime",
+        "pressure_drop_kpa",
+        "allowable_pressure_drop_kpa",
+        "mixing_metric",
+        "blockage_cleaning_boundary",
+        "material",
+        "pressure_class",
+        "connection_type",
+        "design_pressure_mpa",
+        "design_pressure_basis",
+        "design_temperature_c",
+        "quantity_count",
+        "technical_specification",
+    ),
+}
+
+STORAGE_VESSEL_PROGRAMMATIC_FIELDS = (
+    "programmatic_storage_vessel_specification",
+    "equipment_subfamily",
+    "orientation",
+    "flow_m3_h",
+    "retention_time_min",
+    "fill_fraction",
+    "normal_liquid_level_percent",
+    "required_volume_m3",
+    "volume_m3",
+    "vessel_geometry_ratio",
+    "diameter_mm",
+    "height_or_length_mm",
+    "head_type",
+    "vessel_internals_specification",
+    "shell_material_grade",
+    "internals_material_grade",
+    "corrosion_allowance_mm",
+    "formula_only_shell_thickness_mm",
+    "preliminary_nominal_shell_thickness_mm",
+    "selected_wall_thickness_mm",
+    "quantity_count",
+)
+
+
+PROGRAMMATIC_PROFILE_SUPPLEMENTAL_FIELDS: dict[str, tuple[str, ...]] = {
+    "T06": STORAGE_VESSEL_PROGRAMMATIC_FIELDS,
+    "T07": STORAGE_VESSEL_PROGRAMMATIC_FIELDS,
+    "T08": STORAGE_VESSEL_PROGRAMMATIC_FIELDS,
+    "T09": STORAGE_VESSEL_PROGRAMMATIC_FIELDS,
+    "T12": (
+        "programmatic_reactor_specification",
+        "equipment_subfamily",
+        "working_volume_m3",
+        "catalyst_bed_volume_m3",
+        "active_tube_inner_diameter_mm",
+        "active_tube_length_screening_mm",
+        "one_tube_geometric_screening_volume_m3",
+        "required_total_reactor_volume_m3",
+        "selected_tube_count",
+        "reaction_tube_count",
+        "reaction_tube_material_grade",
+        "reactor_shell_inner_diameter_mm",
+        "nominal_process_tube_wall_thickness_mm",
+        "nominal_shell_wall_thickness_mm",
+        "agitator_type",
+        "agitator_material_grade",
+        "baffle_count",
+        "impeller_diameter_ratio",
+        "agitator_power_density_kw_m3",
+        "rotational_speed_rpm",
+        "shaft_power_kw",
+        "motor_power_kw",
+        "jacket_type",
+        "jacket_material_grade",
+        "formula_only_shell_thickness_mm",
+        "formula_only_head_thickness_mm",
+        "preliminary_nominal_shell_thickness_mm",
+        "preliminary_nominal_head_thickness_mm",
+        "selected_wall_thickness_mm",
+        "corrosion_allowance_mm",
+        "shell_material_grade",
+        "internals_material_grade",
+    ),
+    "T13": (
+        "programmatic_vessel_separator_specification",
+        "equipment_subfamily",
+        "vessel_diameter_screening_mm",
+        "vessel_height_or_length_screening_mm",
+        "gas_flow_m3_h",
+        "liquid_flow_m3_h",
+        "gas_density_kg_m3",
+        "liquid_density_kg_m3",
+        "souders_brown_k_m_s",
+        "separator_allowable_gas_velocity_m_s",
+        "separator_gas_capacity_diameter_mm",
+        "liquid_retention_time_min",
+        "normal_liquid_level_percent",
+        "liquid_holdup_required_volume_m3",
+        "liquid_holdup_available_volume_m3",
+        "separator_hydraulic_screening_status",
+        "demister_type",
+        "demister_nominal_diameter_mm",
+        "design_droplet_size_um",
+        "demister_pressure_drop_kpa",
+        "separator_internals_specification",
+        "inlet_nozzle_target_velocity_m_s",
+        "gas_outlet_nozzle_target_velocity_m_s",
+        "liquid_outlet_nozzle_target_velocity_m_s",
+        "formula_only_shell_thickness_mm",
+        "formula_only_head_thickness_mm",
+        "preliminary_nominal_shell_thickness_mm",
+        "preliminary_nominal_head_thickness_mm",
+        "corrosion_allowance_mm",
+        "internals_material_grade",
+    ),
+    "T15": (
+        "programmatic_crystallizer_specification",
+        "equipment_subfamily",
+        "crystallization_mode",
+        "slurry_flow_m3_h",
+        "retention_time_min",
+        "fill_fraction",
+        "working_volume_m3",
+        "volume_m3",
+        "crystallizer_height_to_diameter_ratio",
+        "diameter_mm",
+        "height_mm",
+        "heat_duty_kw",
+        "overall_u_w_m2k",
+        "lmtd_k",
+        "lmtd_correction_factor",
+        "heat_transfer_area_m2",
+        "agitator_type",
+        "agitator_power_density_kw_m3",
+        "rotational_speed_rpm",
+        "shaft_power_kw",
+        "motor_power_kw",
+        "draft_tube_specification",
+        "external_circulation_exchanger_specification",
+        "shell_material_grade",
+        "wetted_surface_material_grade",
+        "internals_material_grade",
+        "formula_only_shell_thickness_mm",
+        "preliminary_nominal_shell_thickness_mm",
+        "selected_wall_thickness_mm",
+        "quantity_count",
+    ),
+    "T17": (
+        "programmatic_membrane_package_specification",
+        "equipment_subfamily",
+        "model_designation",
+        "service_route",
+        "main_medium",
+        "membrane_geometry_type",
+        "element_standard_designation",
+        "element_outer_diameter_mm",
+        "element_length_mm",
+        "membrane_area_per_element_m2",
+        "element_count",
+        "elements_per_pressure_vessel",
+        "pressure_vessel_count",
+        "membrane_area_m2",
+        "flux",
+        "selectivity",
+        "recovery_percent",
+        "permeate_flow_m3_h",
+        "feed_flow_m3_h",
+        "concentrate_flow_m3_h",
+        "membrane_material_grade",
+        "pressure_vessel_material_grade",
+        "center_tube_material_grade",
+        "material",
+        "design_pressure_mpa",
+        "design_pressure_basis",
+        "design_temperature_c",
+        "pressure_class",
+        "quantity_count",
+        "technical_specification",
+    ),
+    "T18": (
+        "programmatic_membrane_package_specification",
+        "equipment_subfamily",
+        "model_designation",
+        "separation_type",
+        "solids_feed_kg_h",
+        "filtration_flux_kg_m2_h",
+        "calculated_filter_area_m2",
+        "selected_filter_area_m2",
+        "filter_area_m2",
+        "plate_size_mm",
+        "filter_area_per_chamber_m2",
+        "chamber_count",
+        "cycle_time_h",
+        "filtration_pressure_mpa",
+        "cake_moisture_percent",
+        "wash_requirement",
+        "washing_arrangement",
+        "plate_material_grade",
+        "filter_cloth_material_grade",
+        "frame_material_grade",
+        "hydraulic_closing_pressure_mpa",
+        "material",
+        "design_temperature_c",
+        "quantity_count",
+        "technical_specification",
+    ),
+    "T19": (
+        "programmatic_membrane_package_specification",
+        "equipment_subfamily",
+        "model_designation",
+        "dryer_model_kind",
+        "evaporation_rate_kg_h",
+        "specific_drying_duty_kj_kg",
+        "heat_duty_kw",
+        "evaporation_loading_kg_m2_h",
+        "belt_width_m",
+        "belt_length_m",
+        "belt_area_m2",
+        "drying_zone_count",
+        "residence_time_h",
+        "allowed_solid_temperature_c",
+        "heat_source",
+        "offgas_route",
+        "wetted_surface_material_grade",
+        "enclosure_material_grade",
+        "fan_power_kw",
+        "belt_drive_power_kw",
+        "total_installed_power_kw",
+        "material",
+        "design_temperature_c",
+        "quantity_count",
+        "technical_specification",
+    ),
+    "T20": (
+        "programmatic_membrane_package_specification",
+        "equipment_subfamily",
+        "model_designation",
+        "capacity",
+        "capacity_basis",
+        "cycle_time_h",
+        "adsorption_time_h",
+        "tower_count",
+        "vessel_diameter_mm",
+        "bed_volume_m3_per_tower",
+        "bed_height_mm",
+        "adsorbent_type",
+        "adsorbent_bulk_density_kg_m3",
+        "adsorbent_mass_kg_per_tower",
+        "regeneration_method",
+        "allowable_pressure_drop_kpa",
+        "shell_material_grade",
+        "internals_material_grade",
+        "material",
+        "design_pressure_mpa",
+        "design_pressure_basis",
+        "design_temperature_c",
+        "pressure_class",
+        "quantity_count",
+        "technical_specification",
+    ),
+    "T03": (
+        "programmatic_turbine_specification",
+        "equipment_subfamily",
+        "model_designation",
+        "flow_m3_h",
+        "inlet_pressure_mpa",
+        "outlet_pressure_mpa",
+        "pressure_basis",
+        "expansion_pressure_ratio",
+        "density_kg_m3",
+        "pressure_drop_head_component_m",
+        "pressure_drop_power_component_kw",
+        "pressure_component_shaft_power_screening_kw",
+        "shaft_power_kw",
+        "efficiency_percent",
+        "rotational_speed_rpm",
+        "generator_efficiency_percent",
+        "electrical_power_kw",
+        "generator_power_kw",
+        "runaway_speed_rpm",
+        "casing_material_grade",
+        "impeller_material_grade",
+        "shaft_material_grade",
+        "seal_type",
+        "bearing_type",
+        "coupling_type",
+        "material",
+        "quantity_count",
+        "technical_specification",
+    ),
+    "T04": (
+        "programmatic_turbine_specification",
+        "equipment_subfamily",
+        "model_designation",
+        "flow_m3_h",
+        "inlet_pressure_mpa",
+        "outlet_pressure_mpa",
+        "pressure_basis",
+        "expansion_pressure_ratio",
+        "gas_molecular_weight",
+        "compressibility_factor",
+        "heat_capacity_ratio_k",
+        "gas_density_kg_m3",
+        "mass_flow_kg_s",
+        "inlet_temperature_c",
+        "outlet_temperature_c",
+        "stage_count",
+        "per_stage_pressure_ratio",
+        "expander_isentropic_specific_work_kj_kg",
+        "expander_actual_specific_work_kj_kg",
+        "shaft_power_kw",
+        "efficiency_percent",
+        "rotational_speed_rpm",
+        "generator_efficiency_percent",
+        "electrical_power_kw",
+        "generator_power_kw",
+        "runaway_speed_rpm",
+        "casing_material_grade",
+        "impeller_material_grade",
+        "shaft_material_grade",
+        "seal_type",
+        "bearing_type",
+        "coupling_type",
+        "material",
+        "quantity_count",
+        "technical_specification",
+    ),
+}
+
+PROGRAMMATIC_OPTIONAL_SUPPLEMENTAL_FIELDS = {
+    "packing_type",
+    "packing_material_grade",
+    "packing_specific_area_m2_m3",
+    "packing_void_fraction",
+    "packing_corrugation_angle_deg",
+    "packing_design_flood_fraction",
+    "packing_hetp_m",
+    "packing_pressure_drop_kpa_m",
+    "packing_bed_section_max_height_m",
+    "packing_bed_height_m",
+    "packing_section_count",
+    "liquid_redistributor_count",
+    "packing_total_pressure_drop_kpa",
+    "gas_flow_m3_h",
+    "gas_density_kg_m3",
+    "souders_brown_k_m_s",
+    "separator_allowable_gas_velocity_m_s",
+    "separator_gas_capacity_diameter_mm",
+    "demister_type",
+    "demister_nominal_diameter_mm",
+    "design_droplet_size_um",
+    "demister_pressure_drop_kpa",
+    "gas_outlet_nozzle_target_velocity_m_s",
 }
 
 
@@ -324,6 +802,283 @@ FALLBACK_FIELD_METADATA: dict[str, dict[str, Any]] = {
     },
     "selection_agent_control_status": {
         "label": "Agent计算后选型控制状态",
+    },
+    "exchanger_default_parameter_package": {
+        "label": "换热器热工/水力/结构保底参数包（逐值来源）",
+    },
+    "programmatic_tower_specification": {
+        "label": "程序生成的塔器具体预选规格与分支链",
+    },
+    "programmatic_vessel_separator_specification": {
+        "label": "程序生成的容器/分离器具体预选规格与分支链",
+    },
+    "programmatic_reactor_specification": {
+        "label": "程序生成的反应器具体预选规格与分支链",
+    },
+    "programmatic_crystallizer_specification": {
+        "label": "程序生成的结晶器具体预选规格与分支链",
+    },
+    "programmatic_storage_vessel_specification": {
+        "label": "程序生成的储罐/回流罐/缓冲罐具体预选规格与分支链",
+    },
+    "programmatic_auxiliary_specification": {
+        "label": "程序生成的辅助设备具体预选规格与分支链",
+    },
+    "programmatic_membrane_package_specification": {
+        "label": "程序生成的膜/过滤/干燥/吸附成套设备规格与分支链",
+    },
+    "programmatic_turbine_specification": {
+        "label": "程序生成的液力回收/气体膨胀透平规格与分支链",
+    },
+    "equipment_subfamily": {"label": "程序识别的设备子类别"},
+    "model_designation": {"label": "程序生成的具体候选型号/规格代号"},
+    "compression_pressure_ratio": {"label": "总压比", "unit": "-"},
+    "stage_count": {"label": "程序选择的压缩级数", "unit": "级"},
+    "per_stage_pressure_ratio": {"label": "单级压比", "unit": "-"},
+    "intercooler_count": {"label": "级间冷却器数量", "unit": "台"},
+    "outlet_temperature_c": {"label": "程序估算末级出口温度", "unit": "°C"},
+    "gas_molecular_weight": {"label": "气体平均分子量", "unit": "kg/kmol"},
+    "compressibility_factor": {"label": "气体压缩因子", "unit": "-"},
+    "heat_capacity_ratio_k": {"label": "气体比热比", "unit": "-"},
+    "efficiency_percent": {"label": "设备效率", "unit": "%"},
+    "total_power_kw": {"label": "含辅助功率的总输入功率", "unit": "kW"},
+    "cooling_arrangement": {"label": "程序选择的冷却配置"},
+    "driver_type": {"label": "程序选择的驱动型式"},
+    "casing_material_grade": {"label": "机壳/气缸材料牌号"},
+    "impeller_material_grade": {"label": "叶轮/运动件材料牌号"},
+    "shaft_material_grade": {"label": "轴/曲轴材料牌号"},
+    "seal_type": {"label": "程序选择的轴封型式"},
+    "volume_basis": {"label": "容积计算基准"},
+    "inner_diameter_mm": {"label": "适配容器内径初算", "unit": "mm"},
+    "impeller_diameter_mm": {"label": "搅拌桨直径候选", "unit": "mm"},
+    "torque_nm": {"label": "程序计算轴扭矩", "unit": "N·m"},
+    "shaft_diameter_mm": {"label": "搅拌轴直径候选", "unit": "mm"},
+    "gearbox_ratio": {"label": "减速机传动比候选", "unit": "-"},
+    "mixing_metric": {"label": "混合任务/验收指标"},
+    "medium_name": {"label": "介质名称"},
+    "target_velocity_m_s": {"label": "设计目标流速", "unit": "m/s"},
+    "required_inner_diameter_mm": {"label": "水力所需最小内径", "unit": "mm"},
+    "selected_dn": {"label": "程序选择公称直径", "unit": "DN"},
+    "selected_outer_diameter_mm": {"label": "程序选择管外径", "unit": "mm"},
+    "selected_wall_thickness_mm": {"label": "程序选择壁厚", "unit": "mm"},
+    "element_type": {"label": "静态混合元件具体型式"},
+    "element_count": {"label": "静态混合元件数量", "unit": "个"},
+    "element_length_to_diameter_ratio": {
+        "label": "单元长度/内径比",
+        "unit": "-",
+    },
+    "length_mm": {"label": "设备程序选定总长", "unit": "mm"},
+    "local_resistance_coefficient_per_element": {
+        "label": "单个混合元件局部阻力系数",
+        "unit": "-",
+    },
+    "flow_regime": {"label": "程序判定流态"},
+    "pressure_drop_kpa": {"label": "程序计算压降", "unit": "kPa"},
+    "allowable_pressure_drop_kpa": {"label": "允许压降", "unit": "kPa"},
+    "blockage_cleaning_boundary": {"label": "堵塞与清洗结构边界"},
+    "service_route": {"label": "程序选择的膜分离服务路线"},
+    "element_standard_designation": {"label": "膜元件具体规格"},
+    "element_outer_diameter_mm": {"label": "膜元件外径", "unit": "mm"},
+    "element_length_mm": {"label": "膜元件长度", "unit": "mm"},
+    "membrane_area_per_element_m2": {
+        "label": "单支膜元件有效面积",
+        "unit": "m2",
+    },
+    "elements_per_pressure_vessel": {
+        "label": "每支膜壳最多装填元件数",
+        "unit": "支",
+    },
+    "pressure_vessel_count": {"label": "膜壳数量", "unit": "支"},
+    "permeate_flow_m3_h": {"label": "程序计算产水/渗透液量", "unit": "m3/h"},
+    "feed_flow_m3_h": {"label": "程序计算膜装置进料量", "unit": "m3/h"},
+    "concentrate_flow_m3_h": {"label": "程序计算浓水量", "unit": "m3/h"},
+    "membrane_material_grade": {"label": "膜层材料/构造"},
+    "pressure_vessel_material_grade": {"label": "膜壳材料"},
+    "center_tube_material_grade": {"label": "膜元件中心管材料"},
+    "calculated_filter_area_m2": {"label": "公式所需过滤面积", "unit": "m2"},
+    "selected_filter_area_m2": {"label": "程序选择实际过滤面积", "unit": "m2"},
+    "plate_size_mm": {"label": "滤板规格尺寸", "unit": "mm"},
+    "filter_area_per_chamber_m2": {"label": "单厢过滤面积", "unit": "m2"},
+    "chamber_count": {"label": "程序选择滤室数量", "unit": "厢"},
+    "filtration_pressure_mpa": {"label": "过滤工作压力候选", "unit": "MPa"},
+    "washing_arrangement": {"label": "程序选择滤饼洗涤/出液配置"},
+    "plate_material_grade": {"label": "滤板材料牌号"},
+    "filter_cloth_material_grade": {"label": "滤布材料牌号"},
+    "frame_material_grade": {"label": "机架材料牌号"},
+    "hydraulic_closing_pressure_mpa": {
+        "label": "液压压紧压力候选",
+        "unit": "MPa",
+    },
+    "evaporation_loading_kg_m2_h": {
+        "label": "程序采用单位网带蒸发强度",
+        "unit": "kg/(m2·h)",
+    },
+    "belt_width_m": {"label": "有效网带宽度", "unit": "m"},
+    "belt_length_m": {"label": "有效干燥长度", "unit": "m"},
+    "belt_area_m2": {"label": "实际有效网带面积", "unit": "m2"},
+    "drying_zone_count": {"label": "程序选择干燥温区数", "unit": "区"},
+    "residence_time_h": {"label": "物料干燥停留时间候选", "unit": "h"},
+    "enclosure_material_grade": {"label": "干燥器外壳材料"},
+    "fan_power_kw": {"label": "循环风机电机候选", "unit": "kW"},
+    "belt_drive_power_kw": {"label": "网带驱动功率候选", "unit": "kW"},
+    "total_installed_power_kw": {"label": "成套装机功率候选", "unit": "kW"},
+    "capacity_basis": {"label": "成套处理能力数值基准"},
+    "tower_count": {"label": "吸附塔数量", "unit": "台"},
+    "adsorption_time_h": {"label": "单塔吸附时间候选", "unit": "h"},
+    "vessel_diameter_mm": {"label": "吸附塔直径候选", "unit": "mm"},
+    "bed_volume_m3_per_tower": {"label": "单塔吸附床层容积", "unit": "m3"},
+    "bed_height_mm": {"label": "吸附床层高度候选", "unit": "mm"},
+    "adsorbent_type": {"label": "程序选择吸附剂具体类型"},
+    "adsorbent_bulk_density_kg_m3": {
+        "label": "吸附剂堆积密度",
+        "unit": "kg/m3",
+    },
+    "adsorbent_mass_kg_per_tower": {
+        "label": "单塔吸附剂装填量",
+        "unit": "kg",
+    },
+    "regeneration_method": {"label": "程序选择吸附剂再生方式"},
+    "generator_efficiency_percent": {"label": "发电机效率", "unit": "%"},
+    "generator_power_kw": {"label": "发电机额定功率候选", "unit": "kW"},
+    "runaway_speed_rpm": {"label": "飞逸/超速筛查转速", "unit": "r/min"},
+    "bearing_type": {"label": "程序选择轴承型式"},
+    "coupling_type": {"label": "程序选择联轴器/齿轮箱型式"},
+    "mass_flow_kg_s": {"label": "气体质量流量初算", "unit": "kg/s"},
+    "expander_isentropic_specific_work_kj_kg": {
+        "label": "气体膨胀等熵比功",
+        "unit": "kJ/kg",
+    },
+    "expander_actual_specific_work_kj_kg": {
+        "label": "气体膨胀实际比功",
+        "unit": "kJ/kg",
+    },
+    "working_volume_m3": {"label": "反应器工作容积", "unit": "m3"},
+    "catalyst_bed_volume_m3": {"label": "催化剂床层容积", "unit": "m3"},
+    "reaction_tube_material_grade": {"label": "反应管材料牌号"},
+    "reaction_tube_count": {"label": "反应管数量", "unit": "根"},
+    "agitator_type": {"label": "程序选择的搅拌器具体型式"},
+    "agitator_material_grade": {"label": "搅拌器材料牌号"},
+    "baffle_count": {"label": "挡板数量", "unit": "块"},
+    "impeller_diameter_ratio": {"label": "叶轮直径/釜径比", "unit": "-"},
+    "agitator_power_density_kw_m3": {
+        "label": "搅拌功率密度（程序保底）",
+        "unit": "kW/m3",
+    },
+    "rotational_speed_rpm": {"label": "搅拌转速候选", "unit": "rpm"},
+    "shaft_power_kw": {"label": "搅拌轴功率初算", "unit": "kW"},
+    "motor_power_kw": {"label": "搅拌电机功率候选", "unit": "kW"},
+    "jacket_type": {"label": "程序选择的夹套型式"},
+    "jacket_material_grade": {"label": "夹套材料牌号"},
+    "crystallization_mode": {"label": "结晶操作路线"},
+    "slurry_flow_m3_h": {"label": "结晶浆液体积流量", "unit": "m3/h"},
+    "crystallizer_height_to_diameter_ratio": {
+        "label": "结晶器高径比",
+        "unit": "-",
+    },
+    "draft_tube_specification": {"label": "导流筒/挡板具体规格"},
+    "external_circulation_exchanger_specification": {
+        "label": "外循环换热器具体规格",
+    },
+    "wetted_surface_material_grade": {"label": "湿接触表面材料牌号"},
+    "vessel_geometry_ratio": {"label": "容器高径比/长径比", "unit": "-"},
+    "vessel_internals_specification": {"label": "容器内件具体规格"},
+    "vessel_diameter_screening_mm": {
+        "label": "容器直径程序初筛值",
+        "unit": "mm",
+    },
+    "vessel_height_or_length_screening_mm": {
+        "label": "容器高度/长度程序初筛值",
+        "unit": "mm",
+    },
+    "gas_flow_m3_h": {"label": "气相体积流量", "unit": "m3/h"},
+    "liquid_flow_m3_h": {"label": "液相体积流量", "unit": "m3/h"},
+    "gas_density_kg_m3": {"label": "气相密度", "unit": "kg/m3"},
+    "liquid_density_kg_m3": {"label": "液相密度", "unit": "kg/m3"},
+    "souders_brown_k_m_s": {
+        "label": "Souders-Brown系数（程序保底）",
+        "unit": "m/s",
+    },
+    "separator_allowable_gas_velocity_m_s": {
+        "label": "分离器允许气速初算",
+        "unit": "m/s",
+    },
+    "separator_gas_capacity_diameter_mm": {
+        "label": "气相容量所需直径初算",
+        "unit": "mm",
+    },
+    "liquid_retention_time_min": {
+        "label": "液相停留时间（程序保底）",
+        "unit": "min",
+    },
+    "normal_liquid_level_percent": {
+        "label": "正常液位（程序保底）",
+        "unit": "%",
+    },
+    "liquid_holdup_required_volume_m3": {
+        "label": "停留时间所需持液容积",
+        "unit": "m3",
+    },
+    "liquid_holdup_available_volume_m3": {
+        "label": "正常液位可用持液容积初算",
+        "unit": "m3",
+    },
+    "separator_hydraulic_screening_status": {
+        "label": "分离器水力初筛状态",
+    },
+    "demister_type": {"label": "程序选择的除沫器具体型式"},
+    "demister_nominal_diameter_mm": {
+        "label": "除沫器公称直径初选",
+        "unit": "mm",
+    },
+    "design_droplet_size_um": {
+        "label": "设计液滴粒径（程序保底）",
+        "unit": "um",
+    },
+    "demister_pressure_drop_kpa": {
+        "label": "除沫器压降（程序保底）",
+        "unit": "kPa",
+    },
+    "separator_internals_specification": {
+        "label": "程序选择的分离器内件规格",
+    },
+    "inlet_nozzle_target_velocity_m_s": {
+        "label": "入口接管目标流速（程序保底）",
+        "unit": "m/s",
+    },
+    "gas_outlet_nozzle_target_velocity_m_s": {
+        "label": "气相出口接管目标流速（程序保底）",
+        "unit": "m/s",
+    },
+    "liquid_outlet_nozzle_target_velocity_m_s": {
+        "label": "液相出口接管目标流速（程序保底）",
+        "unit": "m/s",
+    },
+    "tower_internals_type": {"label": "程序选择的塔内件型式"},
+    "packing_or_tray_specification": {"label": "填料/塔板具体规格"},
+    "shell_material_grade": {"label": "壳体材料牌号"},
+    "internals_material_grade": {"label": "内件材料牌号"},
+    "skirt_material_grade": {"label": "裙座材料牌号"},
+    "corrosion_allowance_mm": {"label": "腐蚀裕量（程序保底）", "unit": "mm"},
+    "packing_type": {"label": "填料具体型式"},
+    "packing_material_grade": {"label": "填料材料牌号"},
+    "packing_specific_area_m2_m3": {"label": "填料名义比表面积", "unit": "m2/m3"},
+    "packing_void_fraction": {"label": "填料空隙率", "unit": "-"},
+    "packing_corrugation_angle_deg": {"label": "填料波纹倾角", "unit": "deg"},
+    "packing_design_flood_fraction": {"label": "填料设计泛点率", "unit": "-"},
+    "packing_hetp_m": {"label": "填料等板高度保底值", "unit": "m"},
+    "packing_pressure_drop_kpa_m": {"label": "填料单位床层压降保底值", "unit": "kPa/m"},
+    "packing_bed_section_max_height_m": {"label": "单段填料最大预布置高度", "unit": "m"},
+    "packing_bed_height_m": {"label": "填料床层总高度初算", "unit": "m"},
+    "packing_section_count": {"label": "填料分段数量初算", "unit": "count"},
+    "liquid_redistributor_count": {"label": "液体再分布器数量初算", "unit": "count"},
+    "packing_total_pressure_drop_kpa": {"label": "填料床层总压降初算", "unit": "kPa"},
+    "preliminary_nominal_shell_thickness_mm": {
+        "label": "筒体名义厚度程序候选（非正式）",
+        "unit": "mm",
+    },
+    "preliminary_nominal_head_thickness_mm": {
+        "label": "封头名义厚度程序候选（非正式）",
+        "unit": "mm",
     },
     "actual_velocity_m_s": {
         "label": "实际流速（程序水力核算）",
@@ -398,6 +1153,84 @@ FALLBACK_FIELD_METADATA: dict[str, dict[str, Any]] = {
     },
     "endpoint_pressure_drop_formal_acceptance": {
         "label": "端点压差已完成正式验收",
+    },
+    "piping_class_component_schedule": {
+        "label": "程序展开的管道等级元件表（候选）",
+    },
+    "standard_bundle": {
+        "label": "管道标准角色与版本包",
+    },
+    "wall_calculation_branch": {
+        "label": "壁厚计算采用分支",
+    },
+    "required_nominal_wall_thickness_mm": {
+        "label": "公式所需最小名义壁厚",
+        "unit": "mm",
+    },
+    "allowable_stress_mpa": {
+        "label": "壁厚筛查许用应力",
+        "unit": "MPa",
+    },
+    "mill_negative_tolerance_fraction": {
+        "label": "管材壁厚负偏差比例",
+        "unit": "-",
+    },
+    "selection_margin_structure": {
+        "label": "管径/壁厚/压力等级选型裕量结构",
+    },
+    "wall_selection_margin_mm": {
+        "label": "所选壁厚超过公式需求的总裕量",
+        "unit": "mm",
+    },
+    "hydraulic_diameter_margin_mm": {
+        "label": "所选内径超过水力需求的裕量",
+        "unit": "mm",
+    },
+    "pressure_series_margin_mpa": {
+        "label": "温度折减后压力系列筛查裕量",
+        "unit": "MPa",
+    },
+    "pressure_temperature_screening": {
+        "label": "压力—温度额定值保底筛查",
+    },
+    "material_compatibility_status": {
+        "label": "管道材料相容性状态",
+    },
+    "material_parameter_ledger": {
+        "label": "管材选择参数账本（逐值来源与采用分支）",
+    },
+    "material_selection_chain": {
+        "label": "管材参数三级取值链",
+    },
+    "standard_material_table_route": {
+        "label": "GB/T 20801材料许用应力表检索与QA状态",
+    },
+    "general_material_selection_rules": {
+        "label": "管道材料选择通用规则",
+    },
+    "absolute_roughness_mm": {
+        "label": "水力计算采用的绝对粗糙度",
+        "unit": "mm",
+    },
+    "hydraulic_property_input_ledger": {
+        "label": "水力学物性取值账本",
+    },
+    "hydraulic_default_parameter_package": {
+        "label": "水力学默认保底参数包",
+    },
+    "total_line_pressure_drop_kpa": {
+        "label": "全线/参考段总压降",
+        "unit": "kPa",
+    },
+    "total_line_hydraulic_branch": {
+        "label": "全线水力计算采用分支",
+    },
+    "line_length_m": {
+        "label": "水力计算采用长度",
+        "unit": "m",
+    },
+    "hydraulic_missing_physical_inputs": {
+        "label": "水力计算尚缺物理路线输入",
     },
     "equipment_tag": {"label": "设备位号"},
     "equipment_name": {"label": "设备名称"},
@@ -735,11 +1568,12 @@ def normalise_output_profiles(raw: Mapping[str, Any], *, source: Mapping[str, An
         }
     else:
         raise CustomerDeliveryError("field_definitions must be an object or list")
+    profile_definitions = {**FALLBACK_FIELD_METADATA, **definitions}
     common_raw = raw.get("global_output_columns", raw.get("common_delivery_fields", []))
     if not isinstance(common_raw, list):
         raise CustomerDeliveryError("common_delivery_fields must be a list")
     common = [
-        _normalise_field(item, definitions, default_order=index)
+        _normalise_field(item, profile_definitions, default_order=index)
         for index, item in enumerate(common_raw)
     ]
     mapped_families = _algorithm_profile_family_map(raw)
@@ -756,7 +1590,7 @@ def normalise_output_profiles(raw: Mapping[str, Any], *, source: Mapping[str, An
         fields_raw = [*common, *_flatten_profile_fields(raw_profile)]
         fields = [
             item if isinstance(item, Mapping) and "source_fields" in item else
-            _normalise_field(item, definitions, default_order=index)
+            _normalise_field(item, profile_definitions, default_order=index)
             for index, item in enumerate(fields_raw)
         ]
         existing_field_ids = {
@@ -775,7 +1609,12 @@ def normalise_output_profiles(raw: Mapping[str, Any], *, source: Mapping[str, An
                     _normalise_field(
                         {
                             "field_id": field_id,
-                            "requirement": "required",
+                            "requirement": (
+                                "optional"
+                                if field_id
+                                in PROGRAMMATIC_OPTIONAL_SUPPLEMENTAL_FIELDS
+                                else "required"
+                            ),
                             "delivery_extension": (
                                 "PROGRAMMATIC_STAGE1_SUPPLEMENT"
                             ),
@@ -785,11 +1624,41 @@ def normalise_output_profiles(raw: Mapping[str, Any], *, source: Mapping[str, An
                                 "authority-profile field."
                             ),
                         },
-                        definitions,
+                        profile_definitions,
                         default_order=len(fields),
                     )
                 )
                 existing_field_ids.add(field_id)
+        for field_id in PROGRAMMATIC_PROFILE_SUPPLEMENTAL_FIELDS.get(
+            profile_id,
+            (),
+        ):
+            if field_id in existing_field_ids:
+                continue
+            fields.append(
+                _normalise_field(
+                    {
+                        "field_id": field_id,
+                        "requirement": (
+                            "optional"
+                            if field_id
+                            in PROGRAMMATIC_OPTIONAL_SUPPLEMENTAL_FIELDS
+                            else "required"
+                        ),
+                        "delivery_extension": (
+                            "PROGRAMMATIC_STAGE1_PROFILE_SUPPLEMENT"
+                        ),
+                        "claim_boundary": (
+                            "Subtype-specific deterministic screening field; "
+                            "it is not added to unrelated equipment profiles "
+                            "and does not replace formal authority evidence."
+                        ),
+                    },
+                    profile_definitions,
+                    default_order=len(fields),
+                )
+            )
+            existing_field_ids.add(field_id)
         subtype_tokens = _as_string_list(
             raw_profile.get("conditional_subtype_tokens", raw_profile.get("subfamily_ids", raw_profile.get("subfamily_id")))
         )
@@ -813,7 +1682,11 @@ def normalise_output_profiles(raw: Mapping[str, Any], *, source: Mapping[str, An
             "discriminator": _json_safe(discriminator),
             "authority_section_id": raw_profile.get("authority_section_id"),
             "authority_overview_columns": [
-                _normalise_field(item, definitions, default_order=index)
+                _normalise_field(
+                    item,
+                    profile_definitions,
+                    default_order=index,
+                )
                 for index, item in enumerate(authority_columns_raw)
             ] if isinstance(authority_columns_raw, list) else [],
             "fields": fields,
@@ -1085,10 +1958,11 @@ def _validate_deterministic_node(node: Mapping[str, Any], name: str, expected_sc
         raise CustomerDeliveryError(f"{name} is not marked deterministic")
     if node.get("llm_used") is not False:
         estimates = node.get("model_estimate_inputs")
-        controlled = (
-            isinstance(estimates, list)
-            and bool(estimates)
-            and all(
+        choices = node.get("ai_engineering_choice_inputs")
+        estimates = estimates if isinstance(estimates, list) else []
+        choices = choices if isinstance(choices, list) else []
+        controlled_estimates = (
+            all(
                 isinstance(item, Mapping)
                 and item.get("source_kind") == "llm_last_resort_engineering_estimate"
                 and item.get("evidence_class") == "J"
@@ -1097,6 +1971,24 @@ def _validate_deterministic_node(node: Mapping[str, Any], name: str, expected_sc
                 and item.get("overwrite_allowed") is False
                 for item in estimates
             )
+        )
+        controlled_choices = (
+            all(
+                isinstance(item, Mapping)
+                and item.get("source_kind") == "ai_registered_engineering_choice"
+                and item.get("evidence_class") == "J"
+                and item.get("result_status") == "PROVISIONAL"
+                and item.get("promotion_cap") == "TYPE_SCREENING"
+                and item.get("overwrite_allowed") is False
+                and _present(item.get("axis_id"))
+                and _present(item.get("choice_id"))
+                for item in choices
+            )
+        )
+        controlled = (
+            bool(estimates or choices)
+            and controlled_estimates
+            and controlled_choices
         )
         if not controlled:
             raise CustomerDeliveryError(
@@ -1287,6 +2179,612 @@ def _verified_programmatic_valve_specification(value: Any) -> dict[str, Any]:
     return specification
 
 
+def _verified_programmatic_tower_specification(value: Any) -> dict[str, Any]:
+    """Verify the matcher-owned preliminary tower specification."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    specification = copy.deepcopy(dict(value))
+    if specification.get("schema") != "programmatic-tower-specification-v1":
+        raise CustomerDeliveryError(
+            "programmatic tower specification schema is invalid"
+        )
+    if (
+        specification.get("deterministic") is not True
+        or specification.get("llm_used") is not False
+    ):
+        raise CustomerDeliveryError(
+            "programmatic tower specification is not deterministic"
+        )
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return specification
+    if specification.get("program_generated") is not True:
+        raise CustomerDeliveryError(
+            "selected tower specification is not marked program-generated"
+        )
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    if not _HASH_RE.fullmatch(declared_hash):
+        raise CustomerDeliveryError(
+            "selected tower specification has no valid SHA-256 binding"
+        )
+    fields = specification.get("fields")
+    if not isinstance(fields, Mapping) or not fields:
+        raise CustomerDeliveryError(
+            "selected tower specification has no field descriptors"
+        )
+    hash_payload = copy.deepcopy(specification)
+    hash_payload.pop("program_specification_sha256", None)
+    payload_fields = hash_payload.get("fields")
+    if isinstance(payload_fields, Mapping):
+        for field_id, descriptor in payload_fields.items():
+            if not isinstance(descriptor, Mapping):
+                raise CustomerDeliveryError(
+                    f"tower specification field {field_id!r} is not a descriptor"
+                )
+            descriptor.pop("program_specification_sha256", None)
+    if _sha256_json(hash_payload) != declared_hash:
+        raise CustomerDeliveryError(
+            "programmatic tower specification SHA-256 does not match its canonical payload"
+        )
+    for field_id, descriptor in fields.items():
+        if not isinstance(descriptor, Mapping):
+            raise CustomerDeliveryError(
+                f"tower specification field {field_id!r} is not a descriptor"
+            )
+        if (
+            str(
+                descriptor.get("program_specification_sha256") or ""
+            ).upper()
+            != declared_hash
+        ):
+            raise CustomerDeliveryError(
+                f"tower specification field {field_id!r} is not bound to the specification hash"
+            )
+    return specification
+
+
+def _verified_programmatic_vessel_separator_specification(
+    value: Any,
+) -> dict[str, Any]:
+    """Verify the matcher-owned preliminary vessel/separator specification."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    specification = copy.deepcopy(dict(value))
+    if (
+        specification.get("schema")
+        != "programmatic-vessel-separator-specification-v1"
+    ):
+        raise CustomerDeliveryError(
+            "programmatic vessel/separator specification schema is invalid"
+        )
+    if (
+        specification.get("deterministic") is not True
+        or specification.get("llm_used") is not False
+    ):
+        raise CustomerDeliveryError(
+            "programmatic vessel/separator specification is not deterministic"
+        )
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return specification
+    if specification.get("program_generated") is not True:
+        raise CustomerDeliveryError(
+            "selected vessel/separator specification is not marked program-generated"
+        )
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    if not _HASH_RE.fullmatch(declared_hash):
+        raise CustomerDeliveryError(
+            "selected vessel/separator specification has no valid SHA-256 binding"
+        )
+    fields = specification.get("fields")
+    if not isinstance(fields, Mapping) or not fields:
+        raise CustomerDeliveryError(
+            "selected vessel/separator specification has no field descriptors"
+        )
+    hash_payload = copy.deepcopy(specification)
+    hash_payload.pop("program_specification_sha256", None)
+    payload_fields = hash_payload.get("fields")
+    if isinstance(payload_fields, Mapping):
+        for field_id, descriptor in payload_fields.items():
+            if not isinstance(descriptor, Mapping):
+                raise CustomerDeliveryError(
+                    "vessel/separator specification field "
+                    f"{field_id!r} is not a descriptor"
+                )
+            descriptor.pop("program_specification_sha256", None)
+    if _sha256_json(hash_payload) != declared_hash:
+        raise CustomerDeliveryError(
+            "programmatic vessel/separator specification SHA-256 "
+            "does not match its canonical payload"
+        )
+    for field_id, descriptor in fields.items():
+        if not isinstance(descriptor, Mapping):
+            raise CustomerDeliveryError(
+                "vessel/separator specification field "
+                f"{field_id!r} is not a descriptor"
+            )
+        if (
+            str(
+                descriptor.get("program_specification_sha256") or ""
+            ).upper()
+            != declared_hash
+        ):
+            raise CustomerDeliveryError(
+                "vessel/separator specification field "
+                f"{field_id!r} is not bound to the specification hash"
+            )
+    return specification
+
+
+def _verified_programmatic_reactor_specification(
+    value: Any,
+) -> dict[str, Any]:
+    """Verify the matcher-owned preliminary reactor specification."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    specification = copy.deepcopy(dict(value))
+    if specification.get("schema") != "programmatic-reactor-specification-v1":
+        raise CustomerDeliveryError(
+            "programmatic reactor specification schema is invalid"
+        )
+    if (
+        specification.get("deterministic") is not True
+        or specification.get("llm_used") is not False
+    ):
+        raise CustomerDeliveryError(
+            "programmatic reactor specification is not deterministic"
+        )
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return specification
+    if specification.get("program_generated") is not True:
+        raise CustomerDeliveryError(
+            "selected reactor specification is not marked program-generated"
+        )
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    if not _HASH_RE.fullmatch(declared_hash):
+        raise CustomerDeliveryError(
+            "selected reactor specification has no valid SHA-256 binding"
+        )
+    fields = specification.get("fields")
+    if not isinstance(fields, Mapping) or not fields:
+        raise CustomerDeliveryError(
+            "selected reactor specification has no field descriptors"
+        )
+    hash_payload = copy.deepcopy(specification)
+    hash_payload.pop("program_specification_sha256", None)
+    payload_fields = hash_payload.get("fields")
+    if isinstance(payload_fields, Mapping):
+        for field_id, descriptor in payload_fields.items():
+            if not isinstance(descriptor, Mapping):
+                raise CustomerDeliveryError(
+                    f"reactor specification field {field_id!r} is not a descriptor"
+                )
+            descriptor.pop("program_specification_sha256", None)
+    if _sha256_json(hash_payload) != declared_hash:
+        raise CustomerDeliveryError(
+            "programmatic reactor specification SHA-256 does not match "
+            "its canonical payload"
+        )
+    for field_id, descriptor in fields.items():
+        if not isinstance(descriptor, Mapping):
+            raise CustomerDeliveryError(
+                f"reactor specification field {field_id!r} is not a descriptor"
+            )
+        if (
+            str(
+                descriptor.get("program_specification_sha256") or ""
+            ).upper()
+            != declared_hash
+        ):
+            raise CustomerDeliveryError(
+                f"reactor specification field {field_id!r} is not bound "
+                "to the specification hash"
+            )
+    return specification
+
+
+def _verified_programmatic_crystallizer_specification(
+    value: Any,
+) -> dict[str, Any]:
+    """Verify the matcher-owned preliminary crystallizer specification."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    specification = copy.deepcopy(dict(value))
+    if (
+        specification.get("schema")
+        != "programmatic-crystallizer-specification-v1"
+    ):
+        raise CustomerDeliveryError(
+            "programmatic crystallizer specification schema is invalid"
+        )
+    if (
+        specification.get("deterministic") is not True
+        or specification.get("llm_used") is not False
+    ):
+        raise CustomerDeliveryError(
+            "programmatic crystallizer specification is not deterministic"
+        )
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return specification
+    if specification.get("program_generated") is not True:
+        raise CustomerDeliveryError(
+            "selected crystallizer specification is not marked program-generated"
+        )
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    if not _HASH_RE.fullmatch(declared_hash):
+        raise CustomerDeliveryError(
+            "selected crystallizer specification has no valid SHA-256 binding"
+        )
+    fields = specification.get("fields")
+    if not isinstance(fields, Mapping) or not fields:
+        raise CustomerDeliveryError(
+            "selected crystallizer specification has no field descriptors"
+        )
+    hash_payload = copy.deepcopy(specification)
+    hash_payload.pop("program_specification_sha256", None)
+    payload_fields = hash_payload.get("fields")
+    if isinstance(payload_fields, Mapping):
+        for field_id, descriptor in payload_fields.items():
+            if not isinstance(descriptor, Mapping):
+                raise CustomerDeliveryError(
+                    f"crystallizer specification field {field_id!r} "
+                    "is not a descriptor"
+                )
+            descriptor.pop("program_specification_sha256", None)
+    if _sha256_json(hash_payload) != declared_hash:
+        raise CustomerDeliveryError(
+            "programmatic crystallizer specification SHA-256 does not "
+            "match its canonical payload"
+        )
+    for field_id, descriptor in fields.items():
+        if not isinstance(descriptor, Mapping):
+            raise CustomerDeliveryError(
+                f"crystallizer specification field {field_id!r} "
+                "is not a descriptor"
+            )
+        if (
+            str(
+                descriptor.get("program_specification_sha256") or ""
+            ).upper()
+            != declared_hash
+        ):
+            raise CustomerDeliveryError(
+                f"crystallizer specification field {field_id!r} is not "
+                "bound to the specification hash"
+            )
+    return specification
+
+
+def _verified_programmatic_storage_vessel_specification(
+    value: Any,
+) -> dict[str, Any]:
+    """Verify the matcher-owned preliminary storage-vessel specification."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    specification = copy.deepcopy(dict(value))
+    if (
+        specification.get("schema")
+        != "programmatic-storage-vessel-specification-v1"
+    ):
+        raise CustomerDeliveryError(
+            "programmatic storage-vessel specification schema is invalid"
+        )
+    if (
+        specification.get("deterministic") is not True
+        or specification.get("llm_used") is not False
+    ):
+        raise CustomerDeliveryError(
+            "programmatic storage-vessel specification is not deterministic"
+        )
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return specification
+    if specification.get("program_generated") is not True:
+        raise CustomerDeliveryError(
+            "selected storage-vessel specification is not program-generated"
+        )
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    if not _HASH_RE.fullmatch(declared_hash):
+        raise CustomerDeliveryError(
+            "selected storage-vessel specification has no valid SHA-256 binding"
+        )
+    fields = specification.get("fields")
+    if not isinstance(fields, Mapping) or not fields:
+        raise CustomerDeliveryError(
+            "selected storage-vessel specification has no field descriptors"
+        )
+    hash_payload = copy.deepcopy(specification)
+    hash_payload.pop("program_specification_sha256", None)
+    payload_fields = hash_payload.get("fields")
+    if isinstance(payload_fields, Mapping):
+        for field_id, descriptor in payload_fields.items():
+            if not isinstance(descriptor, Mapping):
+                raise CustomerDeliveryError(
+                    f"storage-vessel specification field {field_id!r} "
+                    "is not a descriptor"
+                )
+            descriptor.pop("program_specification_sha256", None)
+    if _sha256_json(hash_payload) != declared_hash:
+        raise CustomerDeliveryError(
+            "programmatic storage-vessel specification SHA-256 does not "
+            "match its canonical payload"
+        )
+    for field_id, descriptor in fields.items():
+        if not isinstance(descriptor, Mapping):
+            raise CustomerDeliveryError(
+                f"storage-vessel specification field {field_id!r} "
+                "is not a descriptor"
+            )
+        if (
+            str(
+                descriptor.get("program_specification_sha256") or ""
+            ).upper()
+            != declared_hash
+        ):
+            raise CustomerDeliveryError(
+                f"storage-vessel specification field {field_id!r} is not "
+                "bound to the specification hash"
+            )
+    return specification
+
+
+def _verified_programmatic_auxiliary_specification(
+    value: Any,
+) -> dict[str, Any]:
+    """Verify the matcher-owned compressor/agitator/static-mixer specification."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    specification = copy.deepcopy(dict(value))
+    if (
+        specification.get("schema")
+        != "programmatic-auxiliary-equipment-specification-v1"
+    ):
+        raise CustomerDeliveryError(
+            "programmatic auxiliary-equipment specification schema is invalid"
+        )
+    if (
+        specification.get("deterministic") is not True
+        or specification.get("llm_used") is not False
+    ):
+        raise CustomerDeliveryError(
+            "programmatic auxiliary-equipment specification is not deterministic"
+        )
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return specification
+    if specification.get("program_generated") is not True:
+        raise CustomerDeliveryError(
+            "selected auxiliary-equipment specification is not program-generated"
+        )
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    if not _HASH_RE.fullmatch(declared_hash):
+        raise CustomerDeliveryError(
+            "selected auxiliary-equipment specification has no valid SHA-256 binding"
+        )
+    fields = specification.get("fields")
+    if not isinstance(fields, Mapping) or not fields:
+        raise CustomerDeliveryError(
+            "selected auxiliary-equipment specification has no field descriptors"
+        )
+    hash_payload = copy.deepcopy(specification)
+    hash_payload.pop("program_specification_sha256", None)
+    payload_fields = hash_payload.get("fields")
+    if isinstance(payload_fields, Mapping):
+        for field_id, descriptor in payload_fields.items():
+            if not isinstance(descriptor, Mapping):
+                raise CustomerDeliveryError(
+                    f"auxiliary-equipment specification field {field_id!r} "
+                    "is not a descriptor"
+                )
+            descriptor.pop("program_specification_sha256", None)
+    if _sha256_json(hash_payload) != declared_hash:
+        raise CustomerDeliveryError(
+            "programmatic auxiliary-equipment specification SHA-256 does not "
+            "match its canonical payload"
+        )
+    for field_id, descriptor in fields.items():
+        if not isinstance(descriptor, Mapping):
+            raise CustomerDeliveryError(
+                f"auxiliary-equipment specification field {field_id!r} "
+                "is not a descriptor"
+            )
+        if (
+            str(
+                descriptor.get("program_specification_sha256") or ""
+            ).upper()
+            != declared_hash
+        ):
+            raise CustomerDeliveryError(
+                f"auxiliary-equipment specification field {field_id!r} is not "
+                "bound to the specification hash"
+            )
+    return specification
+
+
+def _verified_programmatic_membrane_package_specification(
+    value: Any,
+) -> dict[str, Any]:
+    """Verify the matcher-owned membrane/filter/dryer/TSA specification."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    specification = copy.deepcopy(dict(value))
+    if (
+        specification.get("schema")
+        != "programmatic-membrane-package-specification-v1"
+    ):
+        raise CustomerDeliveryError(
+            "programmatic membrane-package specification schema is invalid"
+        )
+    if (
+        specification.get("deterministic") is not True
+        or specification.get("llm_used") is not False
+    ):
+        raise CustomerDeliveryError(
+            "programmatic membrane-package specification is not deterministic"
+        )
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return specification
+    if specification.get("program_generated") is not True:
+        raise CustomerDeliveryError(
+            "selected membrane-package specification is not program-generated"
+        )
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    if not _HASH_RE.fullmatch(declared_hash):
+        raise CustomerDeliveryError(
+            "selected membrane-package specification has no valid SHA-256 binding"
+        )
+    fields = specification.get("fields")
+    if not isinstance(fields, Mapping) or not fields:
+        raise CustomerDeliveryError(
+            "selected membrane-package specification has no field descriptors"
+        )
+    hash_payload = copy.deepcopy(specification)
+    hash_payload.pop("program_specification_sha256", None)
+    payload_fields = hash_payload.get("fields")
+    if isinstance(payload_fields, Mapping):
+        for field_id, descriptor in payload_fields.items():
+            if not isinstance(descriptor, Mapping):
+                raise CustomerDeliveryError(
+                    f"membrane-package specification field {field_id!r} "
+                    "is not a descriptor"
+                )
+            descriptor.pop("program_specification_sha256", None)
+    if _sha256_json(hash_payload) != declared_hash:
+        raise CustomerDeliveryError(
+            "programmatic membrane-package specification SHA-256 does not "
+            "match its canonical payload"
+        )
+    for field_id, descriptor in fields.items():
+        if not isinstance(descriptor, Mapping):
+            raise CustomerDeliveryError(
+                f"membrane-package specification field {field_id!r} "
+                "is not a descriptor"
+            )
+        if (
+            str(
+                descriptor.get("program_specification_sha256") or ""
+            ).upper()
+            != declared_hash
+        ):
+            raise CustomerDeliveryError(
+                f"membrane-package specification field {field_id!r} is not "
+                "bound to the specification hash"
+            )
+    return specification
+
+
+def _verified_programmatic_turbine_specification(
+    value: Any,
+) -> dict[str, Any]:
+    """Verify the matcher-owned liquid/gas turbine specification."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    specification = copy.deepcopy(dict(value))
+    if specification.get("schema") != "programmatic-turbine-specification-v1":
+        raise CustomerDeliveryError(
+            "programmatic turbine specification schema is invalid"
+        )
+    if (
+        specification.get("deterministic") is not True
+        or specification.get("llm_used") is not False
+    ):
+        raise CustomerDeliveryError(
+            "programmatic turbine specification is not deterministic"
+        )
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return specification
+    if specification.get("program_generated") is not True:
+        raise CustomerDeliveryError(
+            "selected turbine specification is not program-generated"
+        )
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    if not _HASH_RE.fullmatch(declared_hash):
+        raise CustomerDeliveryError(
+            "selected turbine specification has no valid SHA-256 binding"
+        )
+    fields = specification.get("fields")
+    if not isinstance(fields, Mapping) or not fields:
+        raise CustomerDeliveryError(
+            "selected turbine specification has no field descriptors"
+        )
+    hash_payload = copy.deepcopy(specification)
+    hash_payload.pop("program_specification_sha256", None)
+    payload_fields = hash_payload.get("fields")
+    if isinstance(payload_fields, Mapping):
+        for field_id, descriptor in payload_fields.items():
+            if not isinstance(descriptor, Mapping):
+                raise CustomerDeliveryError(
+                    f"turbine specification field {field_id!r} "
+                    "is not a descriptor"
+                )
+            descriptor.pop("program_specification_sha256", None)
+    if _sha256_json(hash_payload) != declared_hash:
+        raise CustomerDeliveryError(
+            "programmatic turbine specification SHA-256 does not match "
+            "its canonical payload"
+        )
+    for field_id, descriptor in fields.items():
+        if not isinstance(descriptor, Mapping):
+            raise CustomerDeliveryError(
+                f"turbine specification field {field_id!r} is not a descriptor"
+            )
+        if (
+            str(
+                descriptor.get("program_specification_sha256") or ""
+            ).upper()
+            != declared_hash
+        ):
+            raise CustomerDeliveryError(
+                f"turbine specification field {field_id!r} is not bound "
+                "to the specification hash"
+            )
+    return specification
+
+
 def _verified_engineering_adjustment_plan(value: Any) -> dict[str, Any]:
     """Verify a matcher-owned nonstandard/multi-unit modification plan."""
 
@@ -1447,6 +2945,164 @@ def _context(
                 and _present(descriptor.get("value"))
             ):
                 values[str(field_id)] = descriptor.get("value")
+    tower_specification = _verified_programmatic_tower_specification(
+        result.get("programmatic_tower_specification")
+    )
+    if (
+        tower_specification.get("status")
+        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        and isinstance(tower_specification.get("fields"), Mapping)
+    ):
+        for field_id, descriptor in tower_specification["fields"].items():
+            if (
+                isinstance(descriptor, Mapping)
+                and descriptor.get("value") is not None
+            ):
+                values[str(field_id)] = descriptor.get("value")
+        values["programmatic_tower_specification"] = tower_specification
+    vessel_separator_specification = (
+        _verified_programmatic_vessel_separator_specification(
+            result.get("programmatic_vessel_separator_specification")
+        )
+    )
+    if (
+        vessel_separator_specification.get("status")
+        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        and isinstance(
+            vessel_separator_specification.get("fields"),
+            Mapping,
+        )
+    ):
+        for (
+            field_id,
+            descriptor,
+        ) in vessel_separator_specification["fields"].items():
+            if (
+                isinstance(descriptor, Mapping)
+                and descriptor.get("value") is not None
+            ):
+                values[str(field_id)] = descriptor.get("value")
+        values[
+            "programmatic_vessel_separator_specification"
+        ] = vessel_separator_specification
+    reactor_specification = _verified_programmatic_reactor_specification(
+        result.get("programmatic_reactor_specification")
+    )
+    if (
+        reactor_specification.get("status")
+        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        and isinstance(reactor_specification.get("fields"), Mapping)
+    ):
+        for field_id, descriptor in reactor_specification["fields"].items():
+            if (
+                isinstance(descriptor, Mapping)
+                and descriptor.get("value") is not None
+            ):
+                values[str(field_id)] = descriptor.get("value")
+        values["programmatic_reactor_specification"] = reactor_specification
+    crystallizer_specification = (
+        _verified_programmatic_crystallizer_specification(
+            result.get("programmatic_crystallizer_specification")
+        )
+    )
+    if (
+        crystallizer_specification.get("status")
+        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        and isinstance(crystallizer_specification.get("fields"), Mapping)
+    ):
+        for (
+            field_id,
+            descriptor,
+        ) in crystallizer_specification["fields"].items():
+            if (
+                isinstance(descriptor, Mapping)
+                and descriptor.get("value") is not None
+            ):
+                values[str(field_id)] = descriptor.get("value")
+        values[
+            "programmatic_crystallizer_specification"
+        ] = crystallizer_specification
+    storage_vessel_specification = (
+        _verified_programmatic_storage_vessel_specification(
+            result.get("programmatic_storage_vessel_specification")
+        )
+    )
+    if (
+        storage_vessel_specification.get("status")
+        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        and isinstance(storage_vessel_specification.get("fields"), Mapping)
+    ):
+        for (
+            field_id,
+            descriptor,
+        ) in storage_vessel_specification["fields"].items():
+            if (
+                isinstance(descriptor, Mapping)
+                and descriptor.get("value") is not None
+            ):
+                values[str(field_id)] = descriptor.get("value")
+        values[
+            "programmatic_storage_vessel_specification"
+        ] = storage_vessel_specification
+    auxiliary_specification = (
+        _verified_programmatic_auxiliary_specification(
+            result.get("programmatic_auxiliary_specification")
+        )
+    )
+    if (
+        auxiliary_specification.get("status")
+        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        and isinstance(auxiliary_specification.get("fields"), Mapping)
+    ):
+        for field_id, descriptor in auxiliary_specification["fields"].items():
+            if (
+                isinstance(descriptor, Mapping)
+                and descriptor.get("value") is not None
+            ):
+                values[str(field_id)] = descriptor.get("value")
+        values[
+            "programmatic_auxiliary_specification"
+        ] = auxiliary_specification
+    membrane_package_specification = (
+        _verified_programmatic_membrane_package_specification(
+            result.get("programmatic_membrane_package_specification")
+        )
+    )
+    if (
+        membrane_package_specification.get("status")
+        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        and isinstance(
+            membrane_package_specification.get("fields"),
+            Mapping,
+        )
+    ):
+        for (
+            field_id,
+            descriptor,
+        ) in membrane_package_specification["fields"].items():
+            if (
+                isinstance(descriptor, Mapping)
+                and descriptor.get("value") is not None
+            ):
+                values[str(field_id)] = descriptor.get("value")
+        values[
+            "programmatic_membrane_package_specification"
+        ] = membrane_package_specification
+    turbine_specification = _verified_programmatic_turbine_specification(
+        result.get("programmatic_turbine_specification")
+    )
+    if (
+        turbine_specification.get("status")
+        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        and isinstance(turbine_specification.get("fields"), Mapping)
+    ):
+        for field_id, descriptor in turbine_specification["fields"].items():
+            if (
+                isinstance(descriptor, Mapping)
+                and descriptor.get("value") is not None
+            ):
+                values[str(field_id)] = descriptor.get("value")
+        values["programmatic_turbine_specification"] = turbine_specification
     tag = values.get("equipment_tag") or values.get("line_number")
     input_sha = str(result.get("input_sha256") or _sha256_json(result)).upper()
     if _present(tag):
@@ -1556,6 +3212,30 @@ def _context(
         "programmatic_pipe_specification": _json_safe(pipe_specification),
         "programmatic_valve_specification": _json_safe(
             valve_specification
+        ),
+        "programmatic_tower_specification": _json_safe(
+            tower_specification
+        ),
+        "programmatic_vessel_separator_specification": _json_safe(
+            vessel_separator_specification
+        ),
+        "programmatic_reactor_specification": _json_safe(
+            reactor_specification
+        ),
+        "programmatic_crystallizer_specification": _json_safe(
+            crystallizer_specification
+        ),
+        "programmatic_storage_vessel_specification": _json_safe(
+            storage_vessel_specification
+        ),
+        "programmatic_auxiliary_specification": _json_safe(
+            auxiliary_specification
+        ),
+        "programmatic_membrane_package_specification": _json_safe(
+            membrane_package_specification
+        ),
+        "programmatic_turbine_specification": _json_safe(
+            turbine_specification
         ),
         "aspen_delivery_values": _json_safe(aspen_delivery_values),
         "aspen_parameter_lineage": _json_safe(aspen_parameter_lineage),
@@ -1947,6 +3627,28 @@ def _leading_candidate_audit(context: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _model_value(context: Mapping[str, Any]) -> tuple[Any, str]:
+    adjustment_plan = context.get("engineering_adjustment_plan", {})
+    adjustment_configuration = (
+        adjustment_plan.get("configuration", {})
+        if isinstance(adjustment_plan, Mapping)
+        else {}
+    )
+    if (
+        isinstance(adjustment_plan, Mapping)
+        and adjustment_plan.get("triggered") is True
+        and isinstance(adjustment_configuration, Mapping)
+        and _present(
+            adjustment_configuration.get(
+                "candidate_model_or_designation"
+            )
+        )
+    ):
+        return (
+            adjustment_configuration.get(
+                "candidate_model_or_designation"
+            ),
+            "ALGORITHMIC_SYSTEM_MODIFICATION_DESIGNATION",
+        )
     pipe_specification = context.get("programmatic_pipe_specification", {})
     if (
         isinstance(pipe_specification, Mapping)
@@ -1971,27 +3673,139 @@ def _model_value(context: Mapping[str, Any]) -> tuple[Any, str]:
             valve_specification.get("designation"),
             "PROGRAMMATIC_VALVE_ENGINEERING_DESIGNATION",
         )
-    adjustment_plan = context.get("engineering_adjustment_plan", {})
-    adjustment_configuration = (
-        adjustment_plan.get("configuration", {})
-        if isinstance(adjustment_plan, Mapping)
+    tower_specification = context.get(
+        "programmatic_tower_specification",
+        {},
+    )
+    tower_fields = (
+        tower_specification.get("fields", {})
+        if isinstance(tower_specification, Mapping)
         else {}
     )
+    tower_designation = (
+        tower_fields.get("model_designation", {}).get("value")
+        if isinstance(tower_fields, Mapping)
+        and isinstance(tower_fields.get("model_designation"), Mapping)
+        else None
+    )
+    tower_model = (
+        context.get("model")
+        if isinstance(context.get("model"), Mapping)
+        else {}
+    )
+    tower_leading = (
+        tower_model.get("leading_candidate")
+        if isinstance(tower_model.get("leading_candidate"), Mapping)
+        else {}
+    )
+    tower_safe_upstream_designation = str(
+        tower_leading.get("designation") or ""
+    )
     if (
-        isinstance(adjustment_plan, Mapping)
-        and adjustment_plan.get("triggered") is True
-        and isinstance(adjustment_configuration, Mapping)
-        and _present(
-            adjustment_configuration.get(
-                "candidate_model_or_designation"
+        _present(tower_designation)
+        and "N_stage_Aspen=" in tower_safe_upstream_designation
+        and "Di_formal=OPEN" in tower_safe_upstream_designation
+        and "H_formal=OPEN" in tower_safe_upstream_designation
+        and all(
+            token not in tower_safe_upstream_designation
+            for token in (
+                "Di_screen=",
+                "H_layout_screen=",
+                "shell_formula_t=",
             )
         )
     ):
+        tower_designation = (
+            f"{tower_safe_upstream_designation} | "
+            f"program_candidate_code={tower_designation}"
+        )
+    if (
+        isinstance(tower_specification, Mapping)
+        and tower_specification.get("status")
+        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        and _present(tower_designation)
+    ):
         return (
-            adjustment_configuration.get(
-                "candidate_model_or_designation"
-            ),
-            "ALGORITHMIC_SYSTEM_MODIFICATION_DESIGNATION",
+            tower_designation,
+            "PROGRAMMATIC_TOWER_ENGINEERING_DESIGNATION",
+        )
+    membrane_package_specification = context.get(
+        "programmatic_membrane_package_specification",
+        {},
+    )
+    membrane_package_fields = (
+        membrane_package_specification.get("fields", {})
+        if isinstance(membrane_package_specification, Mapping)
+        else {}
+    )
+    membrane_package_designation = (
+        membrane_package_fields.get("model_designation", {}).get("value")
+        if isinstance(membrane_package_fields, Mapping)
+        and isinstance(
+            membrane_package_fields.get("model_designation"),
+            Mapping,
+        )
+        else None
+    )
+    if (
+        isinstance(membrane_package_specification, Mapping)
+        and membrane_package_specification.get("status")
+        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        and _present(membrane_package_designation)
+    ):
+        return (
+            membrane_package_designation,
+            "PROGRAMMATIC_MEMBRANE_PACKAGE_ENGINEERING_DESIGNATION",
+        )
+    turbine_specification = context.get(
+        "programmatic_turbine_specification",
+        {},
+    )
+    turbine_fields = (
+        turbine_specification.get("fields", {})
+        if isinstance(turbine_specification, Mapping)
+        else {}
+    )
+    turbine_designation = (
+        turbine_fields.get("model_designation", {}).get("value")
+        if isinstance(turbine_fields, Mapping)
+        and isinstance(turbine_fields.get("model_designation"), Mapping)
+        else None
+    )
+    if (
+        isinstance(turbine_specification, Mapping)
+        and turbine_specification.get("status")
+        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        and _present(turbine_designation)
+    ):
+        return (
+            turbine_designation,
+            "PROGRAMMATIC_TURBINE_ENGINEERING_DESIGNATION",
+        )
+    auxiliary_specification = context.get(
+        "programmatic_auxiliary_specification",
+        {},
+    )
+    auxiliary_fields = (
+        auxiliary_specification.get("fields", {})
+        if isinstance(auxiliary_specification, Mapping)
+        else {}
+    )
+    auxiliary_designation = (
+        auxiliary_fields.get("model_designation", {}).get("value")
+        if isinstance(auxiliary_fields, Mapping)
+        and isinstance(auxiliary_fields.get("model_designation"), Mapping)
+        else None
+    )
+    if (
+        isinstance(auxiliary_specification, Mapping)
+        and auxiliary_specification.get("status")
+        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        and _present(auxiliary_designation)
+    ):
+        return (
+            auxiliary_designation,
+            "PROGRAMMATIC_AUXILIARY_ENGINEERING_DESIGNATION",
         )
     model = context["model"]
     status = _model_status(context)
@@ -2122,6 +3936,691 @@ def _programmatic_pipe_spec_cell(
     }
 
 
+def _programmatic_tower_spec_cell(
+    source_field: str,
+    context: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    specification = context.get("programmatic_tower_specification")
+    if not isinstance(specification, Mapping):
+        return None
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return None
+    fields = specification.get("fields")
+    descriptor = fields.get(source_field) if isinstance(fields, Mapping) else None
+    if (
+        not isinstance(descriptor, Mapping)
+        or descriptor.get("value") is None
+    ):
+        return None
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    source = {
+        "kind": "deterministic_programmatic_tower_specification",
+        "field_id": source_field,
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "specification_status": specification.get("status"),
+        "program_specification_sha256": declared_hash,
+        "policy_id": specification.get("policy_id"),
+        "field_origin": descriptor.get("origin"),
+        "field_evidence_class": descriptor.get("evidence_class"),
+        "result_status": descriptor.get("result_status"),
+        "promotion_cap": descriptor.get("promotion_cap"),
+        "formal_design_evidence": descriptor.get(
+            "formal_design_evidence", False
+        ),
+        "active_in_selected_branch": descriptor.get(
+            "active_in_selected_branch"
+        ),
+        "selection_branch": _json_safe(
+            specification.get("selection_branch", {})
+        ),
+        "selection_branch_sha256": _sha256_json(
+            specification.get("selection_branch", {})
+        ),
+        "warning": descriptor.get("warning"),
+        "basis": _json_safe(descriptor.get("basis", [])),
+    }
+    lineage = (
+        context.get("aspen_parameter_lineage", {}).get(source_field)
+        if isinstance(context.get("aspen_parameter_lineage"), Mapping)
+        else None
+    )
+    state = str(
+        descriptor.get("state") or "PROGRAM_PRELIMINARY_SELECTED"
+    )
+    if isinstance(lineage, Mapping):
+        source["aspen_parameter_lineage"] = _json_safe(lineage)
+        source["aspen_parameter_lineage_sha256"] = _sha256_json(lineage)
+        source["evidence_class"] = str(
+            lineage.get("evidence_class")
+            or descriptor.get("evidence_class")
+            or "J"
+        )
+        if _aspen_process_lineage(lineage):
+            state = "DERIVED_FROM_ASPEN"
+    else:
+        source["evidence_class"] = str(
+            descriptor.get("evidence_class") or "J"
+        )
+    return {
+        "value": _json_safe(descriptor.get("value")),
+        "unit": descriptor.get("unit"),
+        "state": state,
+        "source": source,
+        "equation_chain": descriptor.get("equation_chain"),
+        "formula_chain": descriptor.get("equation_chain"),
+    }
+
+
+def _programmatic_reactor_spec_cell(
+    source_field: str,
+    context: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    specification = context.get("programmatic_reactor_specification")
+    if not isinstance(specification, Mapping):
+        return None
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return None
+    fields = specification.get("fields")
+    descriptor = (
+        fields.get(source_field) if isinstance(fields, Mapping) else None
+    )
+    if (
+        not isinstance(descriptor, Mapping)
+        or descriptor.get("value") is None
+    ):
+        return None
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    source = {
+        "kind": "deterministic_programmatic_reactor_specification",
+        "field_id": source_field,
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "specification_status": specification.get("status"),
+        "program_specification_sha256": declared_hash,
+        "policy_id": specification.get("policy_id"),
+        "field_origin": descriptor.get("origin"),
+        "field_evidence_class": descriptor.get("evidence_class"),
+        "result_status": descriptor.get("result_status"),
+        "promotion_cap": descriptor.get("promotion_cap"),
+        "formal_design_evidence": descriptor.get(
+            "formal_design_evidence",
+            False,
+        ),
+        "active_in_selected_branch": descriptor.get(
+            "active_in_selected_branch"
+        ),
+        "selection_branch": _json_safe(
+            specification.get("selection_branch", {})
+        ),
+        "selection_branch_sha256": _sha256_json(
+            specification.get("selection_branch", {})
+        ),
+        "warning": descriptor.get("warning"),
+        "basis": _json_safe(descriptor.get("basis", [])),
+    }
+    lineage = (
+        context.get("aspen_parameter_lineage", {}).get(source_field)
+        if isinstance(context.get("aspen_parameter_lineage"), Mapping)
+        else None
+    )
+    state = str(
+        descriptor.get("state") or "PROGRAM_PRELIMINARY_SELECTED"
+    )
+    if isinstance(lineage, Mapping):
+        source["aspen_parameter_lineage"] = _json_safe(lineage)
+        source["aspen_parameter_lineage_sha256"] = _sha256_json(lineage)
+        source["evidence_class"] = str(
+            lineage.get("evidence_class")
+            or descriptor.get("evidence_class")
+            or "J"
+        )
+        if _aspen_process_lineage(lineage):
+            state = "DERIVED_FROM_ASPEN"
+    else:
+        source["evidence_class"] = str(
+            descriptor.get("evidence_class") or "J"
+        )
+    return {
+        "value": _json_safe(descriptor.get("value")),
+        "unit": descriptor.get("unit"),
+        "state": state,
+        "source": source,
+        "equation_chain": descriptor.get("equation_chain"),
+        "formula_chain": descriptor.get("equation_chain"),
+    }
+
+
+def _programmatic_crystallizer_spec_cell(
+    source_field: str,
+    context: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    specification = context.get("programmatic_crystallizer_specification")
+    if not isinstance(specification, Mapping):
+        return None
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return None
+    fields = specification.get("fields")
+    descriptor = (
+        fields.get(source_field) if isinstance(fields, Mapping) else None
+    )
+    if (
+        not isinstance(descriptor, Mapping)
+        or descriptor.get("value") is None
+    ):
+        return None
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    source = {
+        "kind": "deterministic_programmatic_crystallizer_specification",
+        "field_id": source_field,
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "specification_status": specification.get("status"),
+        "program_specification_sha256": declared_hash,
+        "policy_id": specification.get("policy_id"),
+        "field_origin": descriptor.get("origin"),
+        "field_evidence_class": descriptor.get("evidence_class"),
+        "result_status": descriptor.get("result_status"),
+        "promotion_cap": descriptor.get("promotion_cap"),
+        "formal_design_evidence": descriptor.get(
+            "formal_design_evidence",
+            False,
+        ),
+        "active_in_selected_branch": descriptor.get(
+            "active_in_selected_branch"
+        ),
+        "selection_branch": _json_safe(
+            specification.get("selection_branch", {})
+        ),
+        "selection_branch_sha256": _sha256_json(
+            specification.get("selection_branch", {})
+        ),
+        "warning": descriptor.get("warning"),
+        "basis": _json_safe(descriptor.get("basis", [])),
+    }
+    lineage = (
+        context.get("aspen_parameter_lineage", {}).get(source_field)
+        if isinstance(context.get("aspen_parameter_lineage"), Mapping)
+        else None
+    )
+    state = str(
+        descriptor.get("state") or "PROGRAM_PRELIMINARY_SELECTED"
+    )
+    if isinstance(lineage, Mapping):
+        source["aspen_parameter_lineage"] = _json_safe(lineage)
+        source["aspen_parameter_lineage_sha256"] = _sha256_json(lineage)
+        source["evidence_class"] = str(
+            lineage.get("evidence_class")
+            or descriptor.get("evidence_class")
+            or "J"
+        )
+        if _aspen_process_lineage(lineage):
+            state = "DERIVED_FROM_ASPEN"
+    else:
+        source["evidence_class"] = str(
+            descriptor.get("evidence_class") or "J"
+        )
+    return {
+        "value": _json_safe(descriptor.get("value")),
+        "unit": descriptor.get("unit"),
+        "state": state,
+        "source": source,
+        "equation_chain": descriptor.get("equation_chain"),
+        "formula_chain": descriptor.get("equation_chain"),
+    }
+
+
+def _programmatic_storage_vessel_spec_cell(
+    source_field: str,
+    context: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    specification = context.get(
+        "programmatic_storage_vessel_specification"
+    )
+    if not isinstance(specification, Mapping):
+        return None
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return None
+    fields = specification.get("fields")
+    descriptor = (
+        fields.get(source_field) if isinstance(fields, Mapping) else None
+    )
+    if (
+        not isinstance(descriptor, Mapping)
+        or descriptor.get("value") is None
+    ):
+        return None
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    source = {
+        "kind": "deterministic_programmatic_storage_vessel_specification",
+        "field_id": source_field,
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "specification_status": specification.get("status"),
+        "program_specification_sha256": declared_hash,
+        "policy_id": specification.get("policy_id"),
+        "field_origin": descriptor.get("origin"),
+        "field_evidence_class": descriptor.get("evidence_class"),
+        "result_status": descriptor.get("result_status"),
+        "promotion_cap": descriptor.get("promotion_cap"),
+        "formal_design_evidence": descriptor.get(
+            "formal_design_evidence",
+            False,
+        ),
+        "active_in_selected_branch": descriptor.get(
+            "active_in_selected_branch"
+        ),
+        "selection_branch": _json_safe(
+            specification.get("selection_branch", {})
+        ),
+        "selection_branch_sha256": _sha256_json(
+            specification.get("selection_branch", {})
+        ),
+        "warning": descriptor.get("warning"),
+        "basis": _json_safe(descriptor.get("basis", [])),
+    }
+    lineage = (
+        context.get("aspen_parameter_lineage", {}).get(source_field)
+        if isinstance(context.get("aspen_parameter_lineage"), Mapping)
+        else None
+    )
+    state = str(
+        descriptor.get("state") or "PROGRAM_PRELIMINARY_SELECTED"
+    )
+    if isinstance(lineage, Mapping):
+        source["aspen_parameter_lineage"] = _json_safe(lineage)
+        source["aspen_parameter_lineage_sha256"] = _sha256_json(lineage)
+        source["evidence_class"] = str(
+            lineage.get("evidence_class")
+            or descriptor.get("evidence_class")
+            or "J"
+        )
+        if _aspen_process_lineage(lineage):
+            state = "DERIVED_FROM_ASPEN"
+    else:
+        source["evidence_class"] = str(
+            descriptor.get("evidence_class") or "J"
+        )
+    return {
+        "value": _json_safe(descriptor.get("value")),
+        "unit": descriptor.get("unit"),
+        "state": state,
+        "source": source,
+        "equation_chain": descriptor.get("equation_chain"),
+        "formula_chain": descriptor.get("equation_chain"),
+    }
+
+
+def _programmatic_auxiliary_spec_cell(
+    source_field: str,
+    context: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    specification = context.get("programmatic_auxiliary_specification")
+    if not isinstance(specification, Mapping):
+        return None
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return None
+    fields = specification.get("fields")
+    descriptor = (
+        fields.get(source_field) if isinstance(fields, Mapping) else None
+    )
+    if (
+        not isinstance(descriptor, Mapping)
+        or descriptor.get("value") is None
+    ):
+        return None
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    source = {
+        "kind": "deterministic_programmatic_auxiliary_equipment_specification",
+        "field_id": source_field,
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "specification_status": specification.get("status"),
+        "program_specification_sha256": declared_hash,
+        "policy_id": specification.get("policy_id"),
+        "field_origin": descriptor.get("origin"),
+        "field_evidence_class": descriptor.get("evidence_class"),
+        "result_status": descriptor.get("result_status"),
+        "promotion_cap": descriptor.get("promotion_cap"),
+        "formal_design_evidence": descriptor.get(
+            "formal_design_evidence",
+            False,
+        ),
+        "active_in_selected_branch": descriptor.get(
+            "active_in_selected_branch"
+        ),
+        "selection_branch": _json_safe(
+            specification.get("selection_branch", {})
+        ),
+        "selection_branch_sha256": _sha256_json(
+            specification.get("selection_branch", {})
+        ),
+        "warning": descriptor.get("warning"),
+        "basis": _json_safe(descriptor.get("basis", [])),
+    }
+    lineage = (
+        context.get("aspen_parameter_lineage", {}).get(source_field)
+        if isinstance(context.get("aspen_parameter_lineage"), Mapping)
+        else None
+    )
+    state = str(
+        descriptor.get("state") or "PROGRAM_PRELIMINARY_SELECTED"
+    )
+    if isinstance(lineage, Mapping):
+        source["aspen_parameter_lineage"] = _json_safe(lineage)
+        source["aspen_parameter_lineage_sha256"] = _sha256_json(lineage)
+        source["evidence_class"] = str(
+            lineage.get("evidence_class")
+            or descriptor.get("evidence_class")
+            or "J"
+        )
+        if _aspen_process_lineage(lineage):
+            state = "DERIVED_FROM_ASPEN"
+    else:
+        source["evidence_class"] = str(
+            descriptor.get("evidence_class") or "J"
+        )
+    return {
+        "value": _json_safe(descriptor.get("value")),
+        "unit": descriptor.get("unit"),
+        "state": state,
+        "source": source,
+        "equation_chain": descriptor.get("equation_chain"),
+        "formula_chain": descriptor.get("equation_chain"),
+    }
+
+
+def _programmatic_membrane_package_spec_cell(
+    source_field: str,
+    context: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    specification = context.get(
+        "programmatic_membrane_package_specification"
+    )
+    if not isinstance(specification, Mapping):
+        return None
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return None
+    fields = specification.get("fields")
+    descriptor = (
+        fields.get(source_field) if isinstance(fields, Mapping) else None
+    )
+    if (
+        not isinstance(descriptor, Mapping)
+        or descriptor.get("value") is None
+    ):
+        return None
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    source = {
+        "kind": "deterministic_programmatic_membrane_package_specification",
+        "field_id": source_field,
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "specification_status": specification.get("status"),
+        "program_specification_sha256": declared_hash,
+        "policy_id": specification.get("policy_id"),
+        "field_origin": descriptor.get("origin"),
+        "field_evidence_class": descriptor.get("evidence_class"),
+        "result_status": descriptor.get("result_status"),
+        "promotion_cap": descriptor.get("promotion_cap"),
+        "formal_design_evidence": descriptor.get(
+            "formal_design_evidence",
+            False,
+        ),
+        "active_in_selected_branch": descriptor.get(
+            "active_in_selected_branch"
+        ),
+        "selection_branch": _json_safe(
+            specification.get("selection_branch", {})
+        ),
+        "selection_branch_sha256": _sha256_json(
+            specification.get("selection_branch", {})
+        ),
+        "warning": descriptor.get("warning"),
+        "basis": _json_safe(descriptor.get("basis", [])),
+    }
+    lineage = (
+        context.get("aspen_parameter_lineage", {}).get(source_field)
+        if isinstance(context.get("aspen_parameter_lineage"), Mapping)
+        else None
+    )
+    state = str(
+        descriptor.get("state") or "PROGRAM_PRELIMINARY_SELECTED"
+    )
+    if isinstance(lineage, Mapping):
+        source["aspen_parameter_lineage"] = _json_safe(lineage)
+        source["aspen_parameter_lineage_sha256"] = _sha256_json(lineage)
+        source["evidence_class"] = str(
+            lineage.get("evidence_class")
+            or descriptor.get("evidence_class")
+            or "J"
+        )
+        if _aspen_process_lineage(lineage):
+            state = "DERIVED_FROM_ASPEN"
+    else:
+        source["evidence_class"] = str(
+            descriptor.get("evidence_class") or "J"
+        )
+    return {
+        "value": _json_safe(descriptor.get("value")),
+        "unit": descriptor.get("unit"),
+        "state": state,
+        "source": source,
+        "equation_chain": descriptor.get("equation_chain"),
+        "formula_chain": descriptor.get("equation_chain"),
+    }
+
+
+def _programmatic_turbine_spec_cell(
+    source_field: str,
+    context: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    specification = context.get("programmatic_turbine_specification")
+    if not isinstance(specification, Mapping):
+        return None
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return None
+    fields = specification.get("fields")
+    descriptor = (
+        fields.get(source_field) if isinstance(fields, Mapping) else None
+    )
+    if (
+        not isinstance(descriptor, Mapping)
+        or descriptor.get("value") is None
+    ):
+        return None
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    source = {
+        "kind": "deterministic_programmatic_turbine_specification",
+        "field_id": source_field,
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "specification_status": specification.get("status"),
+        "program_specification_sha256": declared_hash,
+        "policy_id": specification.get("policy_id"),
+        "field_origin": descriptor.get("origin"),
+        "field_evidence_class": descriptor.get("evidence_class"),
+        "result_status": descriptor.get("result_status"),
+        "promotion_cap": descriptor.get("promotion_cap"),
+        "formal_design_evidence": descriptor.get(
+            "formal_design_evidence",
+            False,
+        ),
+        "active_in_selected_branch": descriptor.get(
+            "active_in_selected_branch"
+        ),
+        "selection_branch": _json_safe(
+            specification.get("selection_branch", {})
+        ),
+        "selection_branch_sha256": _sha256_json(
+            specification.get("selection_branch", {})
+        ),
+        "warning": descriptor.get("warning"),
+        "basis": _json_safe(descriptor.get("basis", [])),
+    }
+    lineage = (
+        context.get("aspen_parameter_lineage", {}).get(source_field)
+        if isinstance(context.get("aspen_parameter_lineage"), Mapping)
+        else None
+    )
+    state = str(
+        descriptor.get("state") or "PROGRAM_PRELIMINARY_SELECTED"
+    )
+    if isinstance(lineage, Mapping):
+        source["aspen_parameter_lineage"] = _json_safe(lineage)
+        source["aspen_parameter_lineage_sha256"] = _sha256_json(lineage)
+        source["evidence_class"] = str(
+            lineage.get("evidence_class")
+            or descriptor.get("evidence_class")
+            or "J"
+        )
+        if _aspen_process_lineage(lineage):
+            state = "DERIVED_FROM_ASPEN"
+    else:
+        source["evidence_class"] = str(
+            descriptor.get("evidence_class") or "J"
+        )
+    return {
+        "value": _json_safe(descriptor.get("value")),
+        "unit": descriptor.get("unit"),
+        "state": state,
+        "source": source,
+        "equation_chain": descriptor.get("equation_chain"),
+        "formula_chain": descriptor.get("equation_chain"),
+    }
+
+
+def _programmatic_vessel_separator_spec_cell(
+    source_field: str,
+    context: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    specification = context.get(
+        "programmatic_vessel_separator_specification"
+    )
+    if not isinstance(specification, Mapping):
+        return None
+    if (
+        specification.get("status")
+        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    ):
+        return None
+    fields = specification.get("fields")
+    descriptor = (
+        fields.get(source_field) if isinstance(fields, Mapping) else None
+    )
+    if (
+        not isinstance(descriptor, Mapping)
+        or descriptor.get("value") is None
+    ):
+        return None
+    declared_hash = str(
+        specification.get("program_specification_sha256") or ""
+    ).upper()
+    source = {
+        "kind": (
+            "deterministic_programmatic_vessel_separator_specification"
+        ),
+        "field_id": source_field,
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "specification_status": specification.get("status"),
+        "program_specification_sha256": declared_hash,
+        "policy_id": specification.get("policy_id"),
+        "field_origin": descriptor.get("origin"),
+        "field_evidence_class": descriptor.get("evidence_class"),
+        "result_status": descriptor.get("result_status"),
+        "promotion_cap": descriptor.get("promotion_cap"),
+        "formal_design_evidence": descriptor.get(
+            "formal_design_evidence",
+            False,
+        ),
+        "active_in_selected_branch": descriptor.get(
+            "active_in_selected_branch"
+        ),
+        "selection_branch": _json_safe(
+            specification.get("selection_branch", {})
+        ),
+        "selection_branch_sha256": _sha256_json(
+            specification.get("selection_branch", {})
+        ),
+        "warning": descriptor.get("warning"),
+        "basis": _json_safe(descriptor.get("basis", [])),
+    }
+    lineage = (
+        context.get("aspen_parameter_lineage", {}).get(source_field)
+        if isinstance(context.get("aspen_parameter_lineage"), Mapping)
+        else None
+    )
+    state = str(
+        descriptor.get("state") or "PROGRAM_PRELIMINARY_SELECTED"
+    )
+    if isinstance(lineage, Mapping):
+        source["aspen_parameter_lineage"] = _json_safe(lineage)
+        source["aspen_parameter_lineage_sha256"] = _sha256_json(lineage)
+        source["evidence_class"] = str(
+            lineage.get("evidence_class")
+            or descriptor.get("evidence_class")
+            or "J"
+        )
+        if _aspen_process_lineage(lineage):
+            state = "DERIVED_FROM_ASPEN"
+    else:
+        source["evidence_class"] = str(
+            descriptor.get("evidence_class") or "J"
+        )
+    return {
+        "value": _json_safe(descriptor.get("value")),
+        "unit": descriptor.get("unit"),
+        "state": state,
+        "source": source,
+        "equation_chain": descriptor.get("equation_chain"),
+        "formula_chain": descriptor.get("equation_chain"),
+    }
+
+
 def _programmatic_valve_spec_cell(
     source_field: str,
     context: Mapping[str, Any],
@@ -2213,6 +4712,120 @@ def _programmatic_valve_spec_cell(
             descriptor.get("state") or "PROGRAM_PRELIMINARY_SELECTED"
         ),
         "source": source,
+    }
+
+
+def _programmatic_pump_selection_cell(
+    source_field: str,
+    context: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    result = context.get("result")
+    if not isinstance(result, Mapping):
+        return None
+    selection = result.get("pump_engineering_selection")
+    if not isinstance(selection, Mapping):
+        return None
+    material = selection.get("material_and_seal")
+    pressure = selection.get("pressure_and_flange")
+    material = material if isinstance(material, Mapping) else {}
+    pressure = pressure if isinstance(pressure, Mapping) else {}
+    components = material.get("selected_components")
+    components = components if isinstance(components, Mapping) else {}
+    field_values: dict[str, tuple[Any, str | None, Mapping[str, Any]]] = {
+        "material": (
+            "；".join(
+                f"{label}={components.get(key)}"
+                for key, label in (
+                    ("pump_casing", "泵壳"),
+                    ("impeller", "叶轮"),
+                    ("shaft", "轴"),
+                    ("shaft_sleeve", "轴套"),
+                )
+                if _present(components.get(key))
+            ),
+            None,
+            material,
+        ),
+        "pump_casing_material": (
+            components.get("pump_casing"),
+            None,
+            material,
+        ),
+        "impeller_material": (
+            components.get("impeller"),
+            None,
+            material,
+        ),
+        "shaft_material": (
+            components.get("shaft"),
+            None,
+            material,
+        ),
+        "shaft_sleeve_material": (
+            components.get("shaft_sleeve"),
+            None,
+            material,
+        ),
+        "seal_type": (
+            components.get("mechanical_seal"),
+            None,
+            material,
+        ),
+        "secondary_seal_material": (
+            components.get("secondary_seal"),
+            None,
+            material,
+        ),
+        "gasket_material": (
+            components.get("gasket"),
+            None,
+            material,
+        ),
+        "pressure_class": (
+            pressure.get("selected_flange_pressure_class"),
+            None,
+            pressure,
+        ),
+        "maximum_final_discharge_pressure_mpa_gauge": (
+            pressure.get("maximum_final_discharge_pressure_mpa_gauge"),
+            "MPa(g)",
+            pressure,
+        ),
+        "pump_16bar_scope_check": (
+            (
+                pressure.get("gbt5662_16bar_scope_check", {}).get("status")
+                if isinstance(
+                    pressure.get("gbt5662_16bar_scope_check"),
+                    Mapping,
+                )
+                else None
+            ),
+            None,
+            pressure,
+        ),
+    }
+    descriptor = field_values.get(source_field)
+    if descriptor is None or not _present(descriptor[0]):
+        return None
+    value, unit, authority = descriptor
+    return {
+        "value": _json_safe(value),
+        "unit": unit,
+        "state": "PROGRAM_PRELIMINARY_SELECTED",
+        "source": {
+            "kind": "deterministic_programmatic_pump_engineering_selection",
+            "field_id": source_field,
+            "program_generated": True,
+            "deterministic": True,
+            "llm_used": False,
+            "policy_id": authority.get("policy_id"),
+            "selection_sha256": authority.get("selection_sha256"),
+            "evidence_class": authority.get("evidence_class", "J"),
+            "promotion_cap": authority.get(
+                "promotion_cap", "TYPE_SCREENING"
+            ),
+            "formal_design_evidence": False,
+        },
     }
 
 
@@ -2653,10 +5266,25 @@ def _source_cell(source_field: str, context: Mapping[str, Any]) -> dict[str, Any
         answer["program_generated"] = True
         return answer
 
+    programmatic_cell = _programmatic_vessel_separator_spec_cell(
+        source_field,
+        context,
+    )
+    if programmatic_cell is not None:
+        return programmatic_cell
+    programmatic_cell = _programmatic_tower_spec_cell(source_field, context)
+    if programmatic_cell is not None:
+        return programmatic_cell
     programmatic_cell = _programmatic_pipe_spec_cell(source_field, context)
     if programmatic_cell is not None:
         return programmatic_cell
     programmatic_cell = _programmatic_valve_spec_cell(
+        source_field,
+        context,
+    )
+    if programmatic_cell is not None:
+        return programmatic_cell
+    programmatic_cell = _programmatic_pump_selection_cell(
         source_field,
         context,
     )
@@ -2992,8 +5620,23 @@ def _evidence_records(context: Mapping[str, Any]) -> list[dict[str, Any]]:
             ).upper(),
             "status": pipe_specification.get("status"),
             "aspen_export_sha256": (
+                (
+                    pipe_specification.get("source_binding", {}).get(
+                        "aspen_export_sha256"
+                    )
+                    or pipe_specification.get("source_binding", {}).get(
+                        "source_sha256"
+                    )
+                    or pipe_specification.get("source_binding", {}).get(
+                        "manual_input_record_sha256"
+                    )
+                )
+                if isinstance(pipe_specification.get("source_binding"), Mapping)
+                else None
+            ),
+            "input_source_kind": (
                 pipe_specification.get("source_binding", {}).get(
-                    "aspen_export_sha256"
+                    "input_source_kind"
                 )
                 if isinstance(pipe_specification.get("source_binding"), Mapping)
                 else None
@@ -3579,10 +6222,50 @@ def _normal_cell(field: Mapping[str, Any], context: Mapping[str, Any]) -> dict[s
     values = context["values"]
     rejected_screening_aliases: list[dict[str, Any]] = []
     for source_field in field.get("source_fields", [field["field_id"]]):
-        programmatic_cell = _programmatic_pipe_spec_cell(
+        programmatic_cell = _programmatic_turbine_spec_cell(
             str(source_field),
             context,
         )
+        if programmatic_cell is None:
+            programmatic_cell = _programmatic_membrane_package_spec_cell(
+                str(source_field),
+                context,
+            )
+        if programmatic_cell is None:
+            programmatic_cell = _programmatic_auxiliary_spec_cell(
+                str(source_field),
+                context,
+            )
+        if programmatic_cell is None:
+            programmatic_cell = _programmatic_storage_vessel_spec_cell(
+                str(source_field),
+                context,
+            )
+        if programmatic_cell is None:
+            programmatic_cell = _programmatic_crystallizer_spec_cell(
+                str(source_field),
+                context,
+            )
+        if programmatic_cell is None:
+            programmatic_cell = _programmatic_reactor_spec_cell(
+                str(source_field),
+                context,
+            )
+        if programmatic_cell is None:
+            programmatic_cell = _programmatic_vessel_separator_spec_cell(
+                str(source_field),
+                context,
+            )
+        if programmatic_cell is None:
+            programmatic_cell = _programmatic_tower_spec_cell(
+                str(source_field),
+                context,
+            )
+        if programmatic_cell is None:
+            programmatic_cell = _programmatic_pipe_spec_cell(
+                str(source_field),
+                context,
+            )
         if programmatic_cell is not None:
             return {
                 "field_id": field["field_id"],
@@ -3594,8 +6277,8 @@ def _normal_cell(field: Mapping[str, Any], context: Mapping[str, Any]) -> dict[s
                 ),
                 "source_field_id": source_field,
                 "source": _json_safe(programmatic_cell.get("source", {})),
-                "equation_chain": None,
-                "formula_chain": None,
+                "equation_chain": programmatic_cell.get("equation_chain"),
+                "formula_chain": programmatic_cell.get("formula_chain"),
             }
         bound_cell = _source_cell(str(source_field), context)
         if bound_cell is not None:
@@ -3905,6 +6588,99 @@ def _field_cell(
                         "program_specification_sha256"
                     )
                     if isinstance(valve_specification, Mapping)
+                    else None
+                ),
+                **candidate_source_metadata,
+            }
+        elif state == "PROGRAMMATIC_TOWER_ENGINEERING_DESIGNATION":
+            tower_specification = context.get(
+                "programmatic_tower_specification",
+                {},
+            )
+            model_source = {
+                "kind": "deterministic_programmatic_tower_specification",
+                "program_generated": True,
+                "deterministic": True,
+                "llm_used": False,
+                "program_specification_sha256": (
+                    tower_specification.get(
+                        "program_specification_sha256"
+                    )
+                    if isinstance(tower_specification, Mapping)
+                    else None
+                ),
+                "promotion_cap": "TYPE_SCREENING",
+                "formal_design_evidence": False,
+                **candidate_source_metadata,
+            }
+        elif (
+            state
+            == "PROGRAMMATIC_MEMBRANE_PACKAGE_ENGINEERING_DESIGNATION"
+        ):
+            membrane_package_specification = context.get(
+                "programmatic_membrane_package_specification",
+                {},
+            )
+            model_source = {
+                "kind": (
+                    "deterministic_programmatic_"
+                    "membrane_package_specification"
+                ),
+                "program_generated": True,
+                "deterministic": True,
+                "llm_used": False,
+                "program_specification_sha256": (
+                    membrane_package_specification.get(
+                        "program_specification_sha256"
+                    )
+                    if isinstance(
+                        membrane_package_specification,
+                        Mapping,
+                    )
+                    else None
+                ),
+                **candidate_source_metadata,
+            }
+        elif state == "PROGRAMMATIC_TURBINE_ENGINEERING_DESIGNATION":
+            turbine_specification = context.get(
+                "programmatic_turbine_specification",
+                {},
+            )
+            model_source = {
+                "kind": (
+                    "deterministic_programmatic_"
+                    "turbine_specification"
+                ),
+                "program_generated": True,
+                "deterministic": True,
+                "llm_used": False,
+                "program_specification_sha256": (
+                    turbine_specification.get(
+                        "program_specification_sha256"
+                    )
+                    if isinstance(turbine_specification, Mapping)
+                    else None
+                ),
+                **candidate_source_metadata,
+            }
+        elif state == "PROGRAMMATIC_AUXILIARY_ENGINEERING_DESIGNATION":
+            auxiliary_specification = context.get(
+                "programmatic_auxiliary_specification",
+                {},
+            )
+            model_source = {
+                "kind": (
+                    "deterministic_programmatic_"
+                    "auxiliary_equipment_specification"
+                ),
+                "program_generated": True,
+                "deterministic": True,
+                "llm_used": False,
+                "program_specification_sha256": (
+                    auxiliary_specification.get(
+                        "program_specification_sha256"
+                    )
+                    if isinstance(auxiliary_specification, Mapping)
                     else None
                 ),
                 **candidate_source_metadata,
@@ -4436,8 +7212,16 @@ SELECTOR_RULE_SOURCE_KINDS = {
     "deterministic_family_match",
     "deterministic_model_recommendation",
     "deterministic_model_status",
+    "deterministic_programmatic_auxiliary_equipment_specification",
+    "deterministic_programmatic_crystallizer_specification",
+    "deterministic_programmatic_membrane_package_specification",
     "deterministic_programmatic_pipe_specification",
+    "deterministic_programmatic_reactor_specification",
+    "deterministic_programmatic_storage_vessel_specification",
+    "deterministic_programmatic_tower_specification",
+    "deterministic_programmatic_turbine_specification",
     "deterministic_programmatic_valve_specification",
+    "deterministic_programmatic_vessel_separator_specification",
     "deterministic_projection_of_existing_fields",
     "deterministic_standard_fields",
     "deterministic_terminal_selection",

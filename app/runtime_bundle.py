@@ -37,6 +37,7 @@ REQUIRED_RUNTIME_PATHS = {
     "knowledge_graph/README.md",
     "knowledge_graph/equipment_match_rules.json",
     "knowledge_graph/equipment_model_recommendation_rules.json",
+    "knowledge_graph/ai_engineering_choice_registry.json",
     "knowledge_graph/equipment_parameter_chain_templates.json",
     "knowledge_graph/equipment_customer_output_profiles.json",
     "knowledge_graph/equipment_design_parameter_package.schema.json",
