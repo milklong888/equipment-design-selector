@@ -69,7 +69,7 @@ Aspen COM / 提取 JSON / 人工输入
 | `.gitignore` | 排除真实 Aspen 文件、知识包、构建缓存、运行输出、旧发布目录和临时数据库；只允许明确列出的脱敏数据进入 Git。 |
 | `README.md` | 项目总说明，描述系统目标、功能、工作机理、设备族覆盖、可靠性边界、运行方式和验证状态。 |
 | `THIRD_PARTY_NOTICES.md` | 记录程序使用的第三方组件、许可证和再分发提示，供打包与交付审查。 |
-| `build_equipment_design_app.ps1` | Windows 构建入口；收集 Python/Tk 运行时、应用资源和冻结知识包，生成图形版与 CLI 版独立程序。 |
+| `build_equipment_design_app.ps1` | Windows 构建入口；收集 Python/Tk 运行时、应用资源和冻结知识包，生成图形版与 CLI 版独立程序；`-OneDir` 用于大型知识资产的可靠目录包，`-BuildDir` 可把 1.42 GiB 构建缓存放到其他磁盘。 |
 | `requirements-app.txt` | 源码运行和构建所需的最小 Python 依赖清单。 |
 | `使用说明.md` | 面向非开发用户说明拖入 Aspen 文件、人工录入、运行选型、改参重算、导出报告和 Agent 设置。 |
 
@@ -80,6 +80,7 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/__init__.py` | 声明本地设备设计应用包，提供稳定的 Python 包边界。 |
 | `app/app_core.py` | 应用总编排核心；加载目录和参数定义，处理人工/自动匹配，连接计算、选型、连接部件、客户交付和运行时验证。 |
 | `app/aspen_com_import.py` | Aspen COM 隔离导入器；复制工程、读取单位与运行状态、遍历流股和模块、提取物性，并支持在副本中添加输运物性后重跑。 |
+| `app/aspen_suite.py` | Aspen 多案例执行器；载入 GUI 队列或 JSON 清单，预校验源文件哈希，严格串行调用单案导入，单案失败后继续，并原子生成逐案 JSON/Markdown 汇总和具体候选覆盖门禁。 |
 | `app/aspen_pfd.py` | 把 Aspen 模块、流股拓扑和统一参数确定性映射为 PFD 节点；只确定设备族/应用类型，不冒充厂家机械型号。 |
 | `app/authority_revision.py` | 生成并验证当前确定性权威版本，把核心源码、模式、运行时清单和哈希绑定为一次可审计修订。 |
 | `app/customer_delivery.py` | 将匹配器已有的机器状态投影为客户设备一览表、设备数据表和证据索引；不重新计算或擅自升级证据。 |
@@ -94,7 +95,7 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/runtime_bundle.py` | 创建和校验冻结知识包清单，检查文件数量、大小、SHA-256、额外文件、链接和 SQLite 完整性，异常时关闭运行。 |
 | `app/source_code_manifest.json` | 当前固定核心源码快照的路径与 SHA-256 清单，用于证明打包程序运行的是哪一组源码。 |
 | `app/source_code_manifest.py` | 创建、校验并对比核心源码清单；检测源码缺失、篡改、额外文件和打包快照漂移。 |
-| `app/tk_gui.py` | 主 Tk 图形界面；实现四种入口、中文下拉框、Aspen 导入、设备一览表、推导流程、改参重算、报告和 LLM 设置。 |
+| `app/tk_gui.py` | 主 Tk 图形界面；实现四种入口、中文下拉框、Aspen 单案/多文件队列/清单批处理、逐案进度与结果载入、设备一览表、推导流程、改参重算、报告和 LLM 设置。 |
 | `app/user_guide.py` | 内置到 GUI 的中文操作说明文本，使独立程序不依赖外部说明文件也能提供帮助。 |
 | `app/viscosity_fallback.py` | 黏度缺失时的受控估算器；气体使用 Sutherland/Wilke 路线，液体使用组分混合路线，并对越界、两相和资料不足明确阻断或警告。 |
 
@@ -170,6 +171,7 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/tests/test_agent_pfd.py` | 验证 Agent 的 PFD 构建、覆盖、恢复自动映射、局部重算和产物哈希。 |
 | `app/tests/test_app_core.py` | 验证应用目录、人工字段合同、泵计算闭合、候选层级和设备族具体型式。 |
 | `app/tests/test_aspen_com_import.py` | 验证 Aspen COM 导入的压力基准、单位、运行状态、拓扑、物性和输运性质提取。 |
+| `app/tests/test_aspen_suite.py` | 验证多案例严格串行、清单相对路径、哈希失败后继续、选型与正式证据分层、具体设备/管线候选覆盖及增量报告。 |
 | `app/tests/test_aspen_equipment_derivation.py` | 验证 Aspen 流股/模块推导、单位换算、泵功率/NPSH、换热、塔器、管线和异常历史归属。 |
 | `app/tests/test_aspen_pfd.py` | 验证模块类型、拓扑和参数到设备族/PFD 的确定性映射，不错误提升机械型号。 |
 | `app/tests/test_audit_multi_bkp_overview_gate.py` | 验证多 BKP 一览表的字段完整性、开放缺口、具体型式措辞和单元格/行/表哈希。 |

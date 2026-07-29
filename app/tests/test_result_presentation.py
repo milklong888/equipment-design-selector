@@ -305,6 +305,103 @@ class ResultPresentationTests(unittest.TestCase):
         self.assertIn("未给出专门型式条件，采用设备族登记默认型式。", rendered)
         self.assertIn("tower:registered_default:single_pass_sieve_tray", rendered)
 
+    def test_every_registered_programmatic_branch_is_visible_and_translated(self) -> None:
+        fixture = json.loads(
+            (
+                APP_DIR
+                / "fixtures"
+                / "all_family_minimum_meaningful_inputs.json"
+            ).read_text(encoding="utf-8")
+        )
+        expected_branch_families = {
+            "family_tower",
+            "family_reactor_vessel_separator",
+            "family_storage_vessel",
+            "family_compressor",
+            "family_agitator",
+            "family_static_mixer",
+            "family_membrane",
+            "family_package_equipment",
+            "family_liquid_power_recovery_turbine",
+            "family_gas_expander_turbine",
+        }
+        observed: set[str] = set()
+        for case in fixture["cases"]:
+            family_id = case["family_id"]
+            if family_id not in expected_branch_families:
+                continue
+            response = app_core.auto_match({
+                "equipment_family": family_id,
+                "equipment_tag": f"BRANCH-{family_id}",
+                **case["values"],
+            })
+            presentation = result_presentation.build_presentation(response)
+            card = presentation["equipment"][0]
+            branches = card["branch_selection"][
+                "programmatic_selection_branches"
+            ]
+            with self.subTest(family_id=family_id):
+                self.assertEqual(len(branches), 1)
+                branch = branches[0]
+                self.assertTrue(branch["deterministic"])
+                self.assertFalse(branch["llm_used"])
+                self.assertTrue(branch["choices"])
+                self.assertIn("设备专用算法分支", branch["branch_narrative"])
+                self.assertIn(
+                    branch["specification_label"],
+                    branch["branch_narrative"],
+                )
+                for field_id, raw_value in branch[
+                    "selection_branch"
+                ].items():
+                    if not field_id.endswith("_branch_id") or not raw_value:
+                        continue
+                    self.assertIn(
+                        str(raw_value),
+                        "\n".join(
+                            card["branch_selection"]["natural_language"]
+                        ),
+                    )
+                self.assertTrue(
+                    all(
+                        choice["label"] != choice["field_id"]
+                        for choice in branch["choices"]
+                        if choice["field_id"] in {
+                            "recommended_type",
+                            "fallback_profile_id",
+                        }
+                        or choice["field_id"].endswith("_branch_id")
+                    )
+                )
+            observed.add(family_id)
+        self.assertEqual(observed, expected_branch_families)
+
+        tower_case = next(
+            item
+            for item in fixture["cases"]
+            if item["family_id"] == "family_tower"
+        )
+        tower = app_core.auto_match({
+            "equipment_family": "family_tower",
+            "equipment_tag": "T-BRANCH-TRACE",
+            **tower_case["values"],
+        })
+        tower_presentation = result_presentation.build_presentation(tower)
+        html = result_presentation.render_html(tower_presentation)
+        answer = result_presentation.build_organized_answer(
+            tower_presentation
+        )
+        markdown = result_presentation.render_organized_markdown(answer)
+        for visible_text in (
+            "设备专用算法分支",
+            "塔器专用选型器",
+            "SINGLE_PASS_SIEVE_TRAY_REGISTERED_DEFAULT",
+            "登记默认的单溢流筛板塔盘",
+            "塔板数×按直径选取的板间距",
+        ):
+            self.assertIn(visible_text, html)
+            self.assertIn(visible_text, markdown)
+
     def test_program_selected_main_equipment_and_small_component_branches_are_visible(self) -> None:
         result = app_core.manual_match("block:PUMP", {
             "equipment_tag": "P-BRANCH-OUTPUT",
@@ -329,6 +426,12 @@ class ResultPresentationTests(unittest.TestCase):
             "轴向吸入离心泵",
         )
         self.assertTrue(card["branch_selection"]["natural_language"])
+        branch_text = "\n".join(
+            card["branch_selection"]["natural_language"]
+        )
+        self.assertIn("系统构型分支依据", branch_text)
+        self.assertIn("等价比较方案 1", branch_text)
+        self.assertIn("未证明系统曲线或热工水力等价", branch_text)
         self.assertIn(
             "HT250",
             card["selected_output"]["pump_material_and_seal"][
@@ -428,6 +531,8 @@ class ResultPresentationTests(unittest.TestCase):
         self.assertIn("泵材料与密封", html)
         self.assertIn("HT250", html)
         self.assertIn("程序选择法兰压力等级", html)
+        self.assertIn("系统构型分支依据", html)
+        self.assertIn("等价比较方案 1", html)
         self.assertIn("详细计算链条", html)
         self.assertLess(
             html.index("分支选择（自然文字）"),

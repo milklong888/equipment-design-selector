@@ -1,12 +1,24 @@
 param(
     [string]$OutputDir = "dist",
     [string]$PythonExe = "",
+    [string]$BuildDir = "",
+    [string]$KnowledgeArchiveDir = "",
     [switch]$Console,
+    [switch]$OneDir,
     [switch]$PrepareOnly
 )
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$BuildRoot = if ([string]::IsNullOrWhiteSpace($BuildDir)) {
+    Join-Path $Root 'build'
+}
+else {
+    [IO.Path]::GetFullPath($BuildDir)
+}
+$PackageMode = if ($OneDir) { '--onedir' } else { '--onefile' }
+$GuiWorkPath = Join-Path $BuildRoot 'equipment_design_app'
+$AgentWorkPath = Join-Path $BuildRoot 'equipment_design_agent'
 $Python = if ([string]::IsNullOrWhiteSpace($PythonExe)) {
     (Get-Command python -ErrorAction Stop).Source
 }
@@ -45,17 +57,32 @@ if ($LASTEXITCODE -ne 0 -or $TkinterDndVersion -ne '0.6.2') {
 }
 $WindowMode = if ($Console) { '--console' } else { '--windowed' }
 $Workspace = Split-Path -Parent $Root
+$RepositoryGraph = Join-Path $Root 'equipment_selection_graph\equipment_selection_graph_v2.json'
 $GraphCandidates = @(
-    Get-ChildItem -LiteralPath $Workspace -Directory -ErrorAction Stop |
-        ForEach-Object { Join-Path $_.FullName 'knowledge_graph\equipment_selection_graph_v2.json' } |
-        Where-Object { Test-Path -LiteralPath $_ }
+    if (Test-Path -LiteralPath $RepositoryGraph -PathType Leaf) {
+        $RepositoryGraph
+    }
+    else {
+        Get-ChildItem -LiteralPath $Workspace -Directory -ErrorAction Stop |
+            ForEach-Object { Join-Path $_.FullName 'knowledge_graph\equipment_selection_graph_v2.json' } |
+            Where-Object { Test-Path -LiteralPath $_ }
+    }
 )
 if ($GraphCandidates.Count -ne 1) {
     throw "Expected exactly one authoritative equipment_selection_graph_v2.json, found $($GraphCandidates.Count)."
 }
 $Graph = $GraphCandidates[0]
 $GraphDir = Split-Path -Parent $Graph
-$BundleRoot = Join-Path $Root 'build\bundle_assets'
+$KnowledgeArchive = if ([string]::IsNullOrWhiteSpace($KnowledgeArchiveDir)) {
+    $null
+}
+else {
+    [IO.Path]::GetFullPath($KnowledgeArchiveDir)
+}
+if ($KnowledgeArchive -and -not (Test-Path -LiteralPath $KnowledgeArchive -PathType Container)) {
+    throw "Knowledge archive directory is missing: $KnowledgeArchive"
+}
+$BundleRoot = Join-Path $BuildRoot 'bundle_assets'
 $BundledKnowledge = Join-Path $BundleRoot 'knowledge_graph'
 $BundledModelGraph = Join-Path $BundleRoot 'equipment_selection_graph'
 $BundledData = Join-Path $BundleRoot 'data'
@@ -109,7 +136,7 @@ function Copy-LongPathFile {
 
 function Reset-BundleDirectory {
     param([Parameter(Mandatory = $true)][string]$Path)
-    Assert-ChildPath -ChildPath $Path -ParentPath (Join-Path $Root 'build')
+    Assert-ChildPath -ChildPath $Path -ParentPath $BuildRoot
     if (Test-Path -LiteralPath $Path) {
         [IO.Directory]::Delete((ConvertTo-LongPath -Path $Path), $true)
     }
@@ -218,9 +245,16 @@ function Assert-SourceCodeAuthorityCurrent {
 }
 
 Reset-BundleDirectory -Path $BundleRoot
-$knowledgeFileCount = Copy-RuntimeKnowledgeAssets `
+$archiveKnowledgeFileCount = 0
+if ($KnowledgeArchive) {
+    $archiveKnowledgeFileCount = Copy-RuntimeKnowledgeAssets `
+        -SourceRoot $KnowledgeArchive `
+        -DestinationRoot $BundledKnowledge
+}
+$repositoryKnowledgeFileCount = Copy-RuntimeKnowledgeAssets `
     -SourceRoot (Join-Path $Root 'knowledge_graph') `
     -DestinationRoot $BundledKnowledge
+$knowledgeFileCount = $archiveKnowledgeFileCount + $repositoryKnowledgeFileCount
 $SelectorRuntimeSource = Join-Path $Root 'knowledge_graph\type_selection\hgt20592_20635'
 $SelectorRuntimeDestination = Join-Path $BundledKnowledge 'type_selection\hgt20592_20635'
 $selectorFileCount = Copy-HashManifestPackage `
@@ -289,7 +323,9 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $manifest = Get-Content -LiteralPath $BundleManifest -Raw -Encoding UTF8 | ConvertFrom-Json
 
 Write-Host "Runtime knowledge snapshot prepared: $($manifest.total_files) files, $([math]::Round($manifest.total_size_bytes / 1MB, 2)) MiB"
-Write-Host "  copied equipment tree files: $knowledgeFileCount"
+Write-Host "  copied archived knowledge files: $archiveKnowledgeFileCount"
+Write-Host "  overlaid repository files:       $repositoryKnowledgeFileCount"
+Write-Host "  copied knowledge files total:    $knowledgeFileCount"
 Write-Host "  copied selector package files: $selectorFileCount"
 Write-Host "  copied model graph files:     $modelFileCount"
 Write-Host "  bundle revision:              $($manifest.bundle_revision)"
@@ -302,15 +338,15 @@ if ($PrepareOnly) {
 Push-Location $Root
 try {
     Assert-SourceCodeAuthorityCurrent
-    & $Python -m PyInstaller --noconfirm --clean $WindowMode --onefile `
+    & $Python -m PyInstaller --noconfirm --clean $WindowMode $PackageMode `
         --name 'EquipmentDesignGraphApp' `
         --icon $AppIcon `
         --distpath $OutputDir `
-        --workpath 'build\equipment_design_app' `
-        --specpath 'build' `
+        --workpath $GuiWorkPath `
+        --specpath $BuildRoot `
         --paths (Join-Path $Root 'app') --paths (Join-Path $Root 'scripts') `
         --hidden-import 'pythoncom' --hidden-import 'win32com.client' `
-        --hidden-import 'app_core' --hidden-import 'llm_bridge' --hidden-import 'runtime_bundle' --hidden-import 'source_code_manifest' --hidden-import 'aspen_com_import' --hidden-import 'aspen_pfd' --hidden-import 'pfd_canvas' --hidden-import 'tk_gui' --hidden-import 'derivation_workbench' --hidden-import 'user_guide' --hidden-import 'viscosity_fallback' --hidden-import 'tkinterdnd2' --hidden-import 'tkinterdnd2.TkinterDnD' --hidden-import 'equipment_design_agent' --hidden-import 'result_presentation' --hidden-import 'customer_delivery' `
+        --hidden-import 'app_core' --hidden-import 'llm_bridge' --hidden-import 'runtime_bundle' --hidden-import 'source_code_manifest' --hidden-import 'aspen_com_import' --hidden-import 'aspen_suite' --hidden-import 'aspen_pfd' --hidden-import 'pfd_canvas' --hidden-import 'tk_gui' --hidden-import 'derivation_workbench' --hidden-import 'user_guide' --hidden-import 'viscosity_fallback' --hidden-import 'tkinterdnd2' --hidden-import 'tkinterdnd2.TkinterDnD' --hidden-import 'equipment_design_agent' --hidden-import 'result_presentation' --hidden-import 'customer_delivery' `
         --hidden-import 'equipment_calc' --hidden-import 'equipment_design_match' --hidden-import 'aspen_equipment_derivation' `
         --add-data "$BundledKnowledge;knowledge_graph" `
         --add-data "$BundledModelGraph;equipment_selection_graph" `
@@ -324,15 +360,15 @@ try {
         (Join-Path $Root 'app\equipment_design_app.py')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Assert-SourceCodeAuthorityCurrent
-    & $Python -m PyInstaller --noconfirm --clean --console --onefile `
+    & $Python -m PyInstaller --noconfirm --clean --console $PackageMode `
         --name 'EquipmentDesignAgentCLI' `
         --icon $AppIcon `
         --distpath $OutputDir `
-        --workpath 'build\equipment_design_agent' `
-        --specpath 'build' `
+        --workpath $AgentWorkPath `
+        --specpath $BuildRoot `
         --paths (Join-Path $Root 'app') --paths (Join-Path $Root 'scripts') `
         --hidden-import 'pythoncom' --hidden-import 'win32com.client' `
-        --hidden-import 'equipment_design_app' --hidden-import 'app_core' --hidden-import 'llm_bridge' --hidden-import 'runtime_bundle' --hidden-import 'source_code_manifest' --hidden-import 'aspen_com_import' --hidden-import 'aspen_pfd' --hidden-import 'result_presentation' --hidden-import 'customer_delivery' --hidden-import 'viscosity_fallback' `
+        --hidden-import 'equipment_design_app' --hidden-import 'app_core' --hidden-import 'llm_bridge' --hidden-import 'runtime_bundle' --hidden-import 'source_code_manifest' --hidden-import 'aspen_com_import' --hidden-import 'aspen_suite' --hidden-import 'aspen_pfd' --hidden-import 'result_presentation' --hidden-import 'customer_delivery' --hidden-import 'viscosity_fallback' `
         --hidden-import 'equipment_calc' --hidden-import 'equipment_design_match' --hidden-import 'aspen_equipment_derivation' `
         --add-data "$BundledKnowledge;knowledge_graph" `
         --add-data "$BundledModelGraph;equipment_selection_graph" `

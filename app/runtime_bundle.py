@@ -101,12 +101,27 @@ class RuntimeBundleError(RuntimeError):
     pass
 
 
+def _filesystem_path(path: Path) -> str:
+    """Return an OS path that remains usable beyond legacy Windows MAX_PATH."""
+
+    value = os.path.abspath(os.fspath(path))
+    if os.name != "nt" or value.startswith("\\\\?\\"):
+        return value
+    if value.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + value[2:]
+    return "\\\\?\\" + value
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    with open(_filesystem_path(path), "rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest().upper()
+
+
+def _file_size(path: Path) -> int:
+    return int(os.stat(_filesystem_path(path)).st_size)
 
 
 def _canonical_sha256(value: Any) -> str:
@@ -133,21 +148,33 @@ def _absolute_without_resolving_links(path: Path) -> Path:
 
 
 def _is_link_or_junction(path: Path) -> bool:
-    if path.is_symlink():
+    filesystem_path = _filesystem_path(path)
+    if os.path.islink(filesystem_path):
         return True
-    is_junction = getattr(path, "is_junction", None)
-    return bool(is_junction and is_junction())
+    if os.name != "nt":
+        return False
+    try:
+        attributes = int(
+            getattr(
+                os.stat(filesystem_path, follow_symlinks=False),
+                "st_file_attributes",
+                0,
+            )
+        )
+    except OSError:
+        return False
+    return bool(attributes & 0x400)
 
 
 def _walk_regular_files(root: Path) -> Iterable[Path]:
     pending = [root]
     while pending:
         directory = pending.pop()
-        with os.scandir(directory) as entries:
+        with os.scandir(_filesystem_path(directory)) as entries:
             ordered = sorted(entries, key=lambda entry: entry.name.casefold())
         child_directories: list[Path] = []
         for entry in ordered:
-            path = Path(entry.path)
+            path = directory / entry.name
             if _is_link_or_junction(path):
                 continue
             if entry.is_dir(follow_symlinks=False):
@@ -216,7 +243,7 @@ def _records(root: Path) -> list[dict[str, Any]]:
         {
             "runtime_path": relative,
             "asset_class": _asset_class(relative),
-            "size_bytes": int(path.stat().st_size),
+            "size_bytes": _file_size(path),
             "sha256": sha256_file(path),
         }
         for relative, path in _runtime_files(root)
@@ -370,7 +397,7 @@ def verify_runtime_bundle(root: Path, *, required: bool = False) -> dict[str, An
     for relative in sorted(expected_paths & actual_paths):
         expected = expected_by_path[relative]
         path = actual_by_path[relative]
-        actual_size = int(path.stat().st_size)
+        actual_size = _file_size(path)
         expected_size = expected.get("size_bytes")
         if not isinstance(expected_size, int) or isinstance(expected_size, bool):
             continue

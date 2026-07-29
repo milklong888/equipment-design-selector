@@ -1433,6 +1433,48 @@ def verified_run_status(parsed: dict[str, Any]) -> dict[str, int] | None:
     return {name: counts[name] for name in required}
 
 
+def classify_run_evidence(
+    parsed: dict[str, Any],
+    *,
+    run_requested: bool,
+    raw_history_present: bool,
+) -> dict[str, Any]:
+    """Separate successful COM execution from formal clean-run evidence."""
+
+    if not run_requested:
+        return {
+            "status": "NOT_REQUESTED_READ_ONLY",
+            "clean": False,
+            "run_requested": False,
+            "raw_history_present": raw_history_present,
+            "counts": None,
+            "problem_lines": [],
+        }
+    counts = verified_run_status(parsed)
+    problems = (
+        [str(item) for item in parsed.get("problem_lines", [])]
+        if isinstance(parsed.get("problem_lines"), list)
+        else []
+    )
+    if counts is None or not raw_history_present:
+        status = "RUN_EVIDENCE_MISSING"
+        clean = False
+    elif any(counts.values()) or problems:
+        status = "DIRTY_RUN_EVIDENCE"
+        clean = False
+    else:
+        status = "CLEAN_RUN_EVIDENCE"
+        clean = True
+    return {
+        "status": status,
+        "clean": clean,
+        "run_requested": True,
+        "raw_history_present": raw_history_present,
+        "counts": counts,
+        "problem_lines": problems[:200],
+    }
+
+
 def create_aspen() -> tuple[Any, str]:
     import win32com.client as win32
 
@@ -2214,6 +2256,13 @@ def run_real(
 
             run_status = verified_run_status(parsed)
             case["run_status"] = run_status
+            run_evidence_gate = classify_run_evidence(
+                parsed,
+                run_requested=run,
+                raw_history_present=history_path is not None,
+            )
+            case["run_evidence_gate"] = run_evidence_gate
+            metadata["run_evidence_gate"] = run_evidence_gate
             if history_path is not None and parsed.get("found"):
                 history_text = history_path.read_text(encoding="utf-8", errors="replace")
                 recovered_results = parse_history_block_results(history_text)
@@ -2240,6 +2289,8 @@ def run_real(
             )
             metadata.update({
                 "status": worker_status,
+                "selection_result_available": isinstance(pipeline.get("result"), dict),
+                "formal_run_evidence_ready": bool(run_evidence_gate.get("clean")),
                 "history_parse": parsed,
                 "stream_count": len(bundle["streams"]),
                 "block_count": len(bundle["blocks"]),

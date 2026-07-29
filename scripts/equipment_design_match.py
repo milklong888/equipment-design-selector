@@ -13696,6 +13696,7 @@ ENGINEERING_ADJUSTMENT_SUPPORTED_FAMILIES = {
     "family_tower",
 }
 EXCHANGER_SINGLE_UNIT_REVIEW_AREA_M2 = 500.0
+EXCHANGER_MAX_PRIMARY_PARALLEL_TRAINS = 4
 TOWER_SINGLE_TRAIN_REVIEW_DIAMETER_MM = 4200.0
 TOWER_SINGLE_TRAIN_REVIEW_HEIGHT_MM = 60000.0
 PUMP_REFERENCE_FIT_LOG_DISTANCE_LIMIT = 0.45
@@ -13704,6 +13705,9 @@ PUMP_MAX_SERIES_UNITS_PER_TRAIN = 6
 PUMP_MAX_TOTAL_OPERATING_UNITS = 24
 PUMP_REGISTERED_SHUTOFF_HEAD_FACTOR = 1.40
 PUMP_PRESSURE_CLASS_SERIES = (6, 10, 16, 25, 40, 63, 100, 160)
+PUMP_PRELIMINARY_MINIMUM_FLANGE_PN = 16
+PUMP_MISSING_PRESSURE_SUCTION_FALLBACK_MPA_GAUGE = 0.0
+PUMP_MISSING_TEMPERATURE_FALLBACK_C = 40.0
 PUMP_MATERIAL_SELECTION_POLICY_ID = "pump-material-seal-screening-v1"
 PUMP_PRESSURE_SELECTION_POLICY_ID = "pump-series-pressure-and-flange-screening-v1"
 PUMP_REGISTERED_MATERIAL_ROUTES: dict[str, dict[str, Any]] = {
@@ -13821,6 +13825,28 @@ def _pump_series_parallel_screen(
     duty could be divided before a vendor rerates the complete system.
     """
 
+    single_reference = _best_pump_reference_point(flow_m3_h, head_m)
+    if (
+        float(single_reference["normalized_log_distance"])
+        <= PUMP_REFERENCE_FIT_LOG_DISTANCE_LIMIT
+    ):
+        return {
+            "parallel_train_count": 1,
+            "series_units_per_train": 1,
+            "operating_unit_count": 1,
+            "per_unit_flow_m3_h": flow_m3_h,
+            "per_unit_head_m": head_m,
+            "objective": float(
+                single_reference["normalized_log_distance"]
+            ),
+            "reference": single_reference,
+            "selection_reason": (
+                "single_reference_point_within_registered_fit_limit; "
+                "do_not_create_series_or_parallel_units merely to obtain a "
+                "closer catalog reference point"
+            ),
+        }
+
     candidates: list[dict[str, Any]] = []
     for parallel_count in range(1, PUMP_MAX_PARALLEL_TRAINS + 1):
         for series_count in range(
@@ -13836,13 +13862,14 @@ def _pump_series_parallel_screen(
                 per_unit_flow,
                 per_unit_head,
             )
-            # Prefer a genuinely closer reference point, then fewer installed
-            # units and fewer series interfaces.  The penalties only break
-            # engineering-screening ties; they do not imply life-cycle cost.
+            # Only split a duty after the single reference point has failed the
+            # registered fit limit.  Unit and series penalties are deliberately
+            # material: a mathematically closer catalog point does not justify
+            # three separate pumps in series for an ordinary single-pump duty.
             objective = (
                 float(reference["normalized_log_distance"])
-                + 0.0125 * (operating_unit_count - 1)
-                + 0.01 * (series_count - 1)
+                + 0.35 * (operating_unit_count - 1)
+                + 0.25 * (series_count - 1)
             )
             candidates.append({
                 "parallel_train_count": parallel_count,
@@ -13852,6 +13879,10 @@ def _pump_series_parallel_screen(
                 "per_unit_head_m": per_unit_head,
                 "objective": objective,
                 "reference": reference,
+                "selection_reason": (
+                    "single_reference_point_outside_registered_fit_limit; "
+                    "screened series_parallel_grid_with_unit_penalty"
+                ),
             })
     candidates.sort(key=lambda item: (
         item["objective"],
@@ -13863,6 +13894,466 @@ def _pump_series_parallel_screen(
     if not candidates:
         raise ValueError("pump series/parallel screening grid is empty")
     return candidates[0]
+
+
+def _exchanger_package_value(
+    package: dict[str, Any] | None,
+    field_id: str,
+    default: Any = None,
+) -> Any:
+    if not isinstance(package, dict):
+        return default
+    parameters = package.get("parameters")
+    if not isinstance(parameters, dict):
+        return default
+    descriptor = parameters.get(field_id)
+    if not isinstance(descriptor, dict):
+        return default
+    value = descriptor.get("value")
+    return default if value in (None, "") else value
+
+
+def _exchanger_unit_program_designation(
+    package: dict[str, Any] | None,
+    *,
+    area_m2: float,
+    duty_kw: float | None,
+) -> dict[str, Any]:
+    construction = (
+        package.get("construction_selection", {})
+        if isinstance(package, dict)
+        else {}
+    )
+    branch_id = str(construction.get("branch_id") or "")
+    selected_type = str(
+        construction.get("selected_type")
+        or "固定管板式管壳换热器"
+    )
+    if branch_id == "GASKETED_CHEVRON_PLATE_HEAT_EXCHANGER":
+        effective_plate_area = float(
+            numeric(
+                _exchanger_package_value(
+                    package,
+                    "plate_effective_area_m2",
+                    0.5,
+                )
+            )
+            or 0.5
+        )
+        plate_count = max(
+            4,
+            int(math.ceil(area_m2 / effective_plate_area)) + 2,
+        )
+        plate_grade = str(
+            _exchanger_package_value(
+                package,
+                "heat_transfer_plate_material_grade",
+                "S31603",
+            )
+        )
+        gasket_grade = str(
+            _exchanger_package_value(
+                package,
+                "plate_gasket_material_grade",
+                "EPDM",
+            )
+        )
+        code = (
+            f"PHE-GASKETED-CHEVRON-A{area_m2:.1f}"
+            f"-N{plate_count}-{plate_grade}-{gasket_grade}"
+        )
+        detail = {
+            "heat_transfer_area_m2": round(area_m2, 6),
+            "heat_duty_kw": (
+                round(duty_kw, 6) if duty_kw is not None else None
+            ),
+            "plate_count_estimate": plate_count,
+            "plate_effective_area_m2": effective_plate_area,
+            "heat_transfer_plate_material_grade": plate_grade,
+            "plate_gasket_material_grade": gasket_grade,
+        }
+    else:
+        tube_od_mm = float(
+            numeric(
+                _exchanger_package_value(
+                    package,
+                    "tube_outer_diameter_mm",
+                    25.0,
+                )
+            )
+            or 25.0
+        )
+        tube_length_mm = float(
+            numeric(
+                _exchanger_package_value(
+                    package,
+                    "tube_length_mm",
+                    3000.0,
+                )
+            )
+            or 3000.0
+        )
+        area_per_tube = (
+            math.pi * tube_od_mm / 1000.0 * tube_length_mm / 1000.0
+        )
+        tube_count = max(
+            1,
+            int(math.ceil(area_m2 / area_per_tube)),
+        )
+        shell_grade = str(
+            _exchanger_package_value(
+                package,
+                "shell_material_grade",
+                "Q345R",
+            )
+        )
+        tube_grade = str(
+            _exchanger_package_value(
+                package,
+                "tube_material_grade",
+                "10",
+            )
+        )
+        code = (
+            f"STHE-FT-1S2T-A{area_m2:.1f}"
+            f"-D{tube_od_mm:g}-L{tube_length_mm:g}"
+            f"-N{tube_count}-{shell_grade}-{tube_grade}"
+        )
+        detail = {
+            "heat_transfer_area_m2": round(area_m2, 6),
+            "heat_duty_kw": (
+                round(duty_kw, 6) if duty_kw is not None else None
+            ),
+            "tube_count_estimate": tube_count,
+            "tube_outer_diameter_mm": tube_od_mm,
+            "tube_length_mm": tube_length_mm,
+            "shell_material_grade": shell_grade,
+            "tube_material_grade": tube_grade,
+        }
+    return {
+        "selected_type": selected_type,
+        "program_model_designation": code,
+        "unit_detail": detail,
+        "claim_boundary": (
+            "complete program preliminary specification; not a vendor model, "
+            "EDR rating, GB/T 151 mechanical design, or procurement release"
+        ),
+    }
+
+
+def _exchanger_primary_series_parallel_grid(
+    minimum_unit_count: int,
+) -> tuple[int, int]:
+    if minimum_unit_count <= EXCHANGER_MAX_PRIMARY_PARALLEL_TRAINS:
+        return minimum_unit_count, 1
+    candidates: list[tuple[float, int, int]] = []
+    for parallel_count in range(
+        1,
+        EXCHANGER_MAX_PRIMARY_PARALLEL_TRAINS + 1,
+    ):
+        series_count = int(
+            math.ceil(minimum_unit_count / parallel_count)
+        )
+        operating_count = parallel_count * series_count
+        excess_count = operating_count - minimum_unit_count
+        objective = (
+            2.0 * excess_count
+            + 0.50 * (series_count - 1) ** 2
+            + 0.15 * (parallel_count - 1) ** 2
+        )
+        candidates.append(
+            (objective, parallel_count, series_count)
+        )
+    candidates.sort(key=lambda row: (row[0], row[1] * row[2], row[2]))
+    _, parallel_count, series_count = candidates[0]
+    return parallel_count, series_count
+
+
+def _exchanger_equivalent_recommendations(
+    *,
+    area_m2: float,
+    duty_kw: float | None,
+    recommended_type: str,
+    package: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    minimum_unit_count = max(
+        1,
+        int(math.ceil(area_m2 / EXCHANGER_SINGLE_UNIT_REVIEW_AREA_M2)),
+    )
+    primary_parallel, primary_series = (
+        _exchanger_primary_series_parallel_grid(minimum_unit_count)
+    )
+    configurations: list[
+        tuple[str, int, int, str, str]
+    ] = [
+        (
+            "PRIMARY_BALANCED_MODULAR_ARRANGEMENT",
+            primary_parallel,
+            primary_series,
+            (
+                "限制主推荐并联总管数量，同时使每台面积不超过登记的"
+                "500 m²单台复核触发值。"
+            ),
+            (
+                "串联台数会增加压降；并联列数会引入流量分配误差。"
+                "当前只证明总热负荷和总面积守恒。"
+            ),
+        )
+    ]
+    if minimum_unit_count > 1:
+        configurations.extend([
+            (
+                "ALTERNATIVE_ALL_PARALLEL_LOW_PRESSURE_DROP",
+                minimum_unit_count,
+                1,
+                "优先降低单列串联压降并便于单台隔离。",
+                "并联支路多，必须校核总管、流量分配和低负荷运行。",
+            ),
+            (
+                "ALTERNATIVE_ALL_SERIES_THERMAL_LENGTH",
+                1,
+                minimum_unit_count,
+                "提供最大的串联热长度，适合需要分段温度程序的比较方案。",
+                "全流量依次通过全部设备，压降和控制耦合最大。",
+            ),
+        ])
+    options: list[dict[str, Any]] = []
+    seen: set[tuple[int, int]] = set()
+    for (
+        option_id,
+        parallel_count,
+        series_count,
+        suitability,
+        risk,
+    ) in configurations:
+        identity = (parallel_count, series_count)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        operating_count = parallel_count * series_count
+        per_unit_area = area_m2 / operating_count
+        per_unit_duty = (
+            duty_kw / operating_count
+            if duty_kw is not None
+            else None
+        )
+        unit = _exchanger_unit_program_designation(
+            package,
+            area_m2=per_unit_area,
+            duty_kw=per_unit_duty,
+        )
+        if parallel_count > 1 and series_count == 1:
+            system_designation = (
+                f"{parallel_count}×{100.0 / parallel_count:.1f}%并联 "
+                f"{recommended_type}；单台A≈{per_unit_area:.3f} m²"
+                f"；程序单台规格={unit['program_model_designation']}"
+            )
+        elif parallel_count == 1 and series_count > 1:
+            system_designation = (
+                f"1列×{series_count}台串联 {recommended_type}；"
+                f"单台A≈{per_unit_area:.3f} m²"
+                f"；程序单台规格={unit['program_model_designation']}"
+            )
+        else:
+            system_designation = (
+                f"{parallel_count}列并联×每列{series_count}台串联 "
+                f"{recommended_type}；每列负荷≈"
+                f"{100.0 / parallel_count:.1f}%"
+                f"；单台A≈{per_unit_area:.3f} m²"
+                f"；程序单台规格={unit['program_model_designation']}"
+            )
+        options.append({
+            "option_id": option_id,
+            "rank": 1 if not options else len(options) + 1,
+            "status": "PROGRAM_COMPLETE_EQUIVALENT_SCREENING_OPTION",
+            "parallel_train_count": parallel_count,
+            "series_units_per_train": series_count,
+            "operating_unit_count": operating_count,
+            "load_split_percent_per_parallel_train": round(
+                100.0 / parallel_count,
+                6,
+            ),
+            "per_unit_target": {
+                "heat_transfer_area_m2": round(per_unit_area, 6),
+                "heat_duty_kw": (
+                    round(per_unit_duty, 6)
+                    if per_unit_duty is not None
+                    else None
+                ),
+            },
+            "program_unit_specification": unit,
+            "system_candidate_designation": system_designation,
+            "equivalence_basis": {
+                "total_area_conserved": True,
+                "total_heat_duty_conserved": duty_kw is not None,
+                "thermal_hydraulic_equivalence_proven": False,
+            },
+            "suitability": suitability,
+            "risks": [risk],
+            "required_validation": [
+                "same-case hot/cold side flow routing and terminal temperatures",
+                "LMTD correction factor or segmented temperature-profile rating",
+                "allowable pressure drop for both sides",
+                "parallel header distribution and control philosophy",
+                "EDR or equivalent thermal rating plus GB/T 151 mechanical design",
+            ],
+            "evidence_class": "J",
+            "formal_use_allowed": False,
+        })
+    return options
+
+
+def _pump_specific_program_type(
+    recommended_type: str,
+    head_m: float,
+) -> tuple[str, str, int]:
+    if recommended_type == "轴流泵":
+        return "立式导叶式轴流泵", "PAX-VERTICAL-DIFFUSER", 1
+    if recommended_type == "立式混流泵":
+        return "立式导叶式混流泵", "PMF-VERTICAL-DIFFUSER", 1
+    if recommended_type == "多级离心泵":
+        estimated_stages = max(2, int(math.ceil(head_m / 80.0)))
+        if head_m >= 600.0:
+            return (
+                "卧式双壳体多级离心泵（BB5类工程型式）",
+                "PMS-BB5-DOUBLE-CASING",
+                estimated_stages,
+            )
+        return (
+            "卧式节段式多级离心泵",
+            "PMS-RING-SECTION",
+            estimated_stages,
+        )
+    return recommended_type or "轴向吸入离心泵", "PES-END-SUCTION", 1
+
+
+def _pump_equivalent_recommendations(
+    *,
+    flow_m3_h: float,
+    head_m: float,
+    recommended_type: str,
+    configuration: dict[str, Any],
+) -> list[dict[str, Any]]:
+    primary_parallel = max(
+        1,
+        int(
+            numeric(
+                configuration.get("parallel_train_count_estimate")
+            )
+            or 1
+        ),
+    )
+    primary_series = max(
+        1,
+        int(
+            numeric(
+                configuration.get("series_units_per_train_estimate")
+            )
+            or 1
+        ),
+    )
+    configurations: list[
+        tuple[str, int, int, str, str]
+    ] = [
+        (
+            "PRIMARY_PROGRAM_SELECTED_ARRANGEMENT",
+            primary_parallel,
+            primary_series,
+            "程序按设备型式规则和参考点适配度选择的主方案。",
+            "必须用系统曲线和厂家全曲线复核实际工作点。",
+        )
+    ]
+    if primary_parallel == 1 and primary_series == 1:
+        configurations.append(
+            (
+                "ALTERNATIVE_TWO_BY_FIFTY_PERCENT_PARALLEL",
+                2,
+                1,
+                "适合需要分级调节或检修冗余的比较方案。",
+                "两台并联不会在任意系统曲线上自动得到两倍流量；"
+                "必须核对合成曲线、BEP和最小连续流量。",
+            )
+        )
+    elif primary_parallel > 1:
+        configurations.append(
+            (
+                "ALTERNATIVE_SINGLE_LARGER_UNIT",
+                1,
+                primary_series,
+                "减少并联总管和控制复杂度的比较方案。",
+                "单机流量增大，设备可得性、NPSHr、运输和故障影响增大。",
+            )
+        )
+    if primary_series > 1:
+        configurations.append(
+            (
+                "ALTERNATIVE_SINGLE_MULTISTAGE_MACHINE",
+                primary_parallel,
+                1,
+                "以一台内部多级泵替代多台独立泵串联的比较方案。",
+                "内部级数、转子动力学、末级承压和轴封仍须厂家核定。",
+            )
+        )
+    options: list[dict[str, Any]] = []
+    seen: set[tuple[int, int]] = set()
+    for option_id, parallel_count, series_count, suitability, risk in configurations:
+        identity = (parallel_count, series_count)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        per_unit_flow = flow_m3_h / parallel_count
+        per_unit_head = head_m / series_count
+        specific_type, code_prefix, hydraulic_stages = (
+            _pump_specific_program_type(recommended_type, per_unit_head)
+        )
+        code = (
+            f"{code_prefix}-{hydraulic_stages}ST"
+            f"-Q{per_unit_flow:.3f}-H{per_unit_head:.3f}"
+            f"-P{parallel_count}S{series_count}"
+        )
+        designation = (
+            f"{parallel_count}并联×{series_count}串联 {specific_type}；"
+            f"程序工程规格={code}；单机Q≈{per_unit_flow:.3f} m³/h，"
+            f"H≈{per_unit_head:.3f} m；"
+            f"内部水力级数估算={hydraulic_stages}"
+        )
+        options.append({
+            "option_id": option_id,
+            "rank": 1 if not options else len(options) + 1,
+            "status": "PROGRAM_COMPLETE_EQUIVALENT_SCREENING_OPTION",
+            "parallel_train_count": parallel_count,
+            "series_units_per_train": series_count,
+            "operating_unit_count": parallel_count * series_count,
+            "standby_train_count_recommendation": 1,
+            "installed_unit_count_estimate": (
+                parallel_count * series_count + series_count
+            ),
+            "per_unit_target": {
+                "flow_m3_h": round(per_unit_flow, 6),
+                "head_m": round(per_unit_head, 6),
+            },
+            "specific_pump_type": specific_type,
+            "hydraulic_stage_count_estimate": hydraulic_stages,
+            "program_model_designation": code,
+            "system_candidate_designation": designation,
+            "equivalence_basis": {
+                "flow_split_arithmetic_closed": True,
+                "head_addition_arithmetic_closed": True,
+                "system_curve_and_vendor_curve_equivalence_proven": False,
+            },
+            "suitability": suitability,
+            "risks": [risk],
+            "required_validation": [
+                "complete vendor Q-H-efficiency-power-NPSHr curves",
+                "system curve and all intended operating combinations",
+                "BEP, preferred/allowable operating region and minimum flow",
+                "NPSHa margin at the worst liquid level and temperature",
+                "series interstage pressure or parallel check-valve/control logic",
+            ],
+            "evidence_class": "J",
+            "formal_use_allowed": False,
+        })
+    return options
 
 
 def _pump_text_level(value: Any) -> str:
@@ -14174,6 +14665,19 @@ def _pump_pressure_and_flange_selection(
     if inlet_gauge is None and outlet_gauge is not None and total_head is not None:
         inlet_gauge = outlet_gauge - density * 9.80665 * total_head / 1_000_000.0
         inlet_conversion = "BACK_CALCULATED_FROM_OUTLET_MINUS_RHO_G_H"
+    if inlet_gauge is None and per_unit_shutoff_head is not None:
+        inlet_gauge = PUMP_MISSING_PRESSURE_SUCTION_FALLBACK_MPA_GAUGE
+        inlet_conversion = (
+            "PROGRAM_ATMOSPHERIC_SUCTION_GAUGE_FALLBACK_WARNING"
+        )
+        warnings.append({
+            "code": "PUMP_SUCTION_PRESSURE_FALLBACK",
+            "message": (
+                "吸入口压力及可反算的出口压力均缺失，程序按0 MPa(g)吸入压力完成"
+                "关死点承压和法兰等级初筛；该值必须显示为J类保底，补实际最低吸入"
+                "压力后单泵重算。"
+            ),
+        })
     stage_pressures: list[dict[str, Any]] = []
     final_shutoff_gauge: float | None = None
     if inlet_gauge is not None and per_unit_shutoff_head is not None:
@@ -14210,18 +14714,42 @@ def _pump_pressure_and_flange_selection(
         ),
         None,
     )
+    temperature_source = "DIRECT_OR_ASPEN"
+    if temperature is None:
+        temperature = PUMP_MISSING_TEMPERATURE_FALLBACK_C
+        temperature_source = (
+            "PROGRAM_NEAR_AMBIENT_TEMPERATURE_FALLBACK_WARNING"
+        )
+        warnings.append({
+            "code": "PUMP_DESIGN_TEMPERATURE_FALLBACK",
+            "message": (
+                f"泵设计/操作温度缺失，程序按 {temperature:g} ℃完成材料和法兰"
+                "温度分支初筛；这不是项目设计温度，补齐开停车和最不利温度后必须重算。"
+            ),
+        })
     selected_pn: int | None = None
+    selected_pressure_class: str | None = None
     pn_status = "BLOCKED_PRESSURE_UNAVAILABLE"
     if required_pressure is not None:
-        minimum_pn = required_pressure * 10.0
+        minimum_pn = max(
+            float(PUMP_PRELIMINARY_MINIMUM_FLANGE_PN),
+            required_pressure * 10.0,
+        )
         eligible = [pn for pn in PUMP_PRESSURE_CLASS_SERIES if pn >= minimum_pn]
         if eligible:
             selected_pn = eligible[0]
-            pn_status = "SELECTED_FROM_REGISTERED_PN_SERIES"
+            selected_pressure_class = f"PN{selected_pn}"
+            pn_status = (
+                "SELECTED_WITH_REGISTERED_PROCESS_PUMP_PN16_FLOOR"
+                if required_pressure * 10.0
+                < PUMP_PRELIMINARY_MINIMUM_FLANGE_PN
+                else "SELECTED_FROM_REGISTERED_PN_SERIES"
+            )
             if temperature is not None and temperature > 120.0:
                 current_index = PUMP_PRESSURE_CLASS_SERIES.index(selected_pn)
                 if current_index + 1 < len(PUMP_PRESSURE_CLASS_SERIES):
                     selected_pn = PUMP_PRESSURE_CLASS_SERIES[current_index + 1]
+                    selected_pressure_class = f"PN{selected_pn}"
                     pn_status = "SELECTED_ONE_CLASS_HIGHER_PENDING_TEMPERATURE_RATING"
                     warnings.append({
                         "code": "FLANGE_TEMPERATURE_DERATING_PENDING",
@@ -14232,6 +14760,17 @@ def _pump_pressure_and_flange_selection(
                     })
         else:
             pn_status = "ABOVE_REGISTERED_PN160_SERIES"
+            selected_pressure_class = (
+                "PN160以上专用高压整体法兰/壳体路线（程序工程规格）"
+            )
+            warnings.append({
+                "code": "PUMP_PRESSURE_ABOVE_REGISTERED_PN_SERIES_COMPLETE_ROUTE",
+                "message": (
+                    "所需承压超过程序登记PN160系列；程序仍给出专用高压整体法兰/"
+                    "壳体工程路线以保持一览表完整，但具体Class、法兰结构和材料温压"
+                    "额定值必须由高压泵厂家及机械专业确定。"
+                ),
+            })
 
     estimated_shutoff = (
         shutoff_source == "PROGRAM_REGISTERED_CONSERVATIVE_SCREENING_FACTOR"
@@ -14262,9 +14801,7 @@ def _pump_pressure_and_flange_selection(
 
     status = (
         "CALCULATED_AND_PRESSURE_CLASS_SELECTED"
-        if required_pressure is not None and selected_pn is not None
-        else "CALCULATED_ABOVE_REGISTERED_PN_RANGE"
-        if required_pressure is not None
+        if required_pressure is not None and selected_pressure_class is not None
         else "BLOCKED_PRESSURE_BASIS_OR_HEAD"
     )
     result = {
@@ -14288,14 +14825,14 @@ def _pump_pressure_and_flange_selection(
         "outlet_pressure_conversion": outlet_conversion,
         "design_pressure_mpa_gauge": design_pressure_gauge,
         "design_pressure_conversion": design_pressure_conversion,
+        "temperature_c": temperature,
+        "temperature_source": temperature_source,
         "stage_pressure_chain": stage_pressures,
         "maximum_final_discharge_pressure_mpa_gauge": final_shutoff_gauge,
         "required_pressure_rating_mpa_gauge": (
             round(required_pressure, 9) if required_pressure is not None else None
         ),
-        "selected_flange_pressure_class": (
-            f"PN{selected_pn}" if selected_pn is not None else None
-        ),
+        "selected_flange_pressure_class": selected_pressure_class,
         "pressure_class_selection_status": pn_status,
         "gbt5662_16bar_scope_check": {
             "status": gbt5662_status,
@@ -14331,14 +14868,20 @@ def _pump_pressure_and_flange_selection(
             },
             {
                 "calculation_id": "pump_flange_pressure_class_selection",
-                "status": "CALCULATED" if selected_pn is not None else "BLOCKED",
+                "status": (
+                    "CALCULATED"
+                    if selected_pressure_class is not None
+                    else "BLOCKED"
+                ),
                 "formula": "select minimum registered PN with PN/10 >= P_required,g",
                 "substitution": (
-                    f"min(PN in {list(PUMP_PRESSURE_CLASS_SERIES)} where PN/10 >= {required_pressure:g})"
+                    "min registered process-pump pressure route with "
+                    f"PN >= max({PUMP_PRELIMINARY_MINIMUM_FLANGE_PN}, "
+                    f"{required_pressure:g}*10)"
                     if required_pressure is not None
                     else None
                 ),
-                "value": f"PN{selected_pn}" if selected_pn is not None else None,
+                "value": selected_pressure_class,
                 "unit": None,
                 "source": "PROGRAM_REGISTERED_PN_SERIES",
             },
@@ -14360,6 +14903,38 @@ def build_pump_engineering_selection(
     pressure = _pump_pressure_and_flange_selection(
         params, engineering_adjustment_plan
     )
+    configuration = (
+        engineering_adjustment_plan.get("configuration", {})
+        if isinstance(engineering_adjustment_plan, dict)
+        else {}
+    )
+    if not isinstance(configuration, dict):
+        configuration = {}
+    equivalent_recommendations = (
+        engineering_adjustment_plan.get("equivalent_recommendations", [])
+        if isinstance(engineering_adjustment_plan, dict)
+        else []
+    )
+    if not isinstance(equivalent_recommendations, list):
+        equivalent_recommendations = []
+    selected_components = material.get("selected_components", {})
+    if not isinstance(selected_components, dict):
+        selected_components = {}
+    component_text = "；".join(
+        f"{key}={value}" for key, value in selected_components.items()
+    )
+    base_designation = str(
+        configuration.get("candidate_model_or_designation")
+        or "流程泵程序工程规格"
+    )
+    complete_candidate_designation = (
+        f"{base_designation}；运行台数="
+        f"{configuration.get('operating_unit_count_estimate', 1)}，"
+        f"备用列={configuration.get('standby_train_count_recommendation', 1)}，"
+        f"安装台数={configuration.get('installed_unit_count_estimate', 2)}；"
+        f"法兰承压路线={pressure.get('selected_flange_pressure_class')}；"
+        f"材料/密封路线={material.get('route_id')}；{component_text}"
+    )
     result = {
         "schema": "pump-engineering-selection-v1",
         "status": (
@@ -14372,6 +14947,14 @@ def build_pump_engineering_selection(
         "llm_used": False,
         "material_and_seal": material,
         "pressure_and_flange": pressure,
+        "complete_candidate_designation": complete_candidate_designation,
+        "equivalent_recommendations": equivalent_recommendations,
+        "input_completeness": engineering_adjustment_plan.get(
+            "input_completeness", {}
+        ),
+        "branch_narrative": engineering_adjustment_plan.get(
+            "branch_narrative"
+        ),
         "warnings": [
             *material.get("warnings", []),
             *pressure.get("warnings", []),
@@ -14473,6 +15056,7 @@ def build_engineering_adjustment_plan(
     model_recommendation: dict[str, Any],
     calculations: list[dict[str, Any]],
     pending: list[dict[str, Any]],
+    exchanger_parameter_package: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a fixed, warning-bound modification plan after calculations.
 
@@ -14515,6 +15099,35 @@ def build_engineering_adjustment_plan(
         family_id,
         calculation_audit=calculation_audit,
     )
+    fallback_records = [
+        item
+        for item in parameter_package.get("design_fallbacks", [])
+        if isinstance(item, dict)
+        and item.get("state")
+        != "SUPERSEDED_BY_DETERMINISTIC_CALCULATION"
+    ]
+    fallback_fields = sorted({
+        str(item.get("field_id"))
+        for item in fallback_records
+        if str(item.get("field_id") or "").strip()
+    })
+    plan["input_completeness"] = {
+        "status": (
+            "COMPLETE_PROGRAM_CANDIDATE_WITH_ANNOTATED_FALLBACKS"
+            if fallback_fields
+            else "COMPLETE_PROGRAM_CANDIDATE_FROM_DIRECT_OR_DERIVED_INPUTS"
+        ),
+        "fallback_fields": fallback_fields,
+        "fallback_count": len(fallback_fields),
+        "missing_conditions_do_not_blank_program_candidate": True,
+        "fallback_records_sha256": _canonical_sha256(fallback_records),
+        "warning": (
+            "缺失条件由登记默认或内置公式补齐，程序候选保持完整；"
+            "所有保底字段均为J类、禁止直接采购/施工/报审，用户修改后必须单设备重算。"
+            if fallback_fields
+            else None
+        ),
+    }
     configuration = plan["configuration"]
     recommended_type = str(
         model_recommendation.get("recommended_type") or ""
@@ -14559,9 +15172,19 @@ def build_engineering_adjustment_plan(
     }:
         area = _positive_float(params.get("heat_transfer_area_m2"))
         duty = _positive_float(params.get("heat_duty_kw"))
+        emergency_defaults_used: list[str] = []
+        if area is None:
+            area = 19.607843
+            emergency_defaults_used.append("heat_transfer_area_m2=19.607843")
+        if duty is None:
+            duty = 100.0
+            emergency_defaults_used.append("heat_duty_kw=100")
         plan["screening_policy"] = {
             "single_unit_review_area_m2": (
                 EXCHANGER_SINGLE_UNIT_REVIEW_AREA_M2
+            ),
+            "maximum_primary_parallel_train_count": (
+                EXCHANGER_MAX_PRIMARY_PARALLEL_TRAINS
             ),
             "threshold_kind": (
                 "PROGRAM_REGISTERED_REVIEW_TRIGGER_NOT_NATIONAL_STANDARD_LIMIT"
@@ -14570,69 +15193,70 @@ def build_engineering_adjustment_plan(
                 "NOT_PROVEN_NO_BUNDLED_AREA_SERIES_LOOKUP"
             ),
         }
-        if area is None:
-            plan["status"] = "BLOCKED_REQUIRED_CALCULATION_INPUTS"
-            plan["trigger_codes"] = ["HEAT_TRANSFER_AREA_UNAVAILABLE"]
-            configuration["arrangement_code"] = (
-                "WAITING_THERMAL_CALCULATION"
+        equivalent_options = _exchanger_equivalent_recommendations(
+            area_m2=area,
+            duty_kw=duty,
+            recommended_type=(
+                recommended_type or "固定管板式管壳换热器"
+            ),
+            package=exchanger_parameter_package,
+        )
+        primary = equivalent_options[0]
+        parallel_count = int(primary["parallel_train_count"])
+        series_count = int(primary["series_units_per_train"])
+        operating_count = int(primary["operating_unit_count"])
+        configuration.update({
+            "arrangement_code": primary["option_id"],
+            "parallel_train_count_estimate": parallel_count,
+            "series_units_per_train_estimate": series_count,
+            "operating_unit_count_estimate": operating_count,
+            "standby_train_count_recommendation": 0,
+            "installed_unit_count_estimate": operating_count,
+            "load_split_percent_per_parallel_train": (
+                primary["load_split_percent_per_parallel_train"]
+            ),
+            "per_unit_target": dict(primary["per_unit_target"]),
+            "candidate_model_or_designation": primary[
+                "system_candidate_designation"
+            ],
+            "program_unit_specification": primary[
+                "program_unit_specification"
+            ],
+        })
+        plan["equivalent_recommendations"] = equivalent_options
+        plan["branch_narrative"] = (
+            "程序先用同一输入链计算总换热面积，再按单台500 m²登记复核触发值"
+            f"得到至少{math.ceil(area / EXCHANGER_SINGLE_UNIT_REVIEW_AREA_M2)}台；"
+            f"主分支选择{parallel_count}列并联×每列{series_count}台串联，"
+            "并同时输出全并联和全串联等价比较方案。等价仅指总面积/总热负荷守恒，"
+            "不声称冷热侧温度程序、压降或流量分配已经等价。"
+        )
+        if operating_count > 1:
+            plan["status"] = "RECOMMENDED_ALGORITHMIC_MODIFICATION"
+            plan["triggered"] = True
+            plan["trigger_codes"] = [
+                "EXCHANGER_SINGLE_UNIT_AREA_REVIEW_TRIGGER_EXCEEDED",
+                "STANDARD_AREA_SERIES_COVERAGE_NOT_PROVEN",
+                "SERIES_PARALLEL_EQUIVALENCE_REQUIRES_EDR",
+            ]
+        if emergency_defaults_used:
+            plan["status"] = (
+                "RECOMMENDED_COMPLETE_FALLBACK_CANDIDATE"
             )
-            configuration["candidate_model_or_designation"] = (
-                f"{recommended_type or '换热器'}（面积与分台方案待计算）"
-            )
-        else:
-            unit_count = max(
-                1,
-                int(
-                    math.ceil(
-                        area / EXCHANGER_SINGLE_UNIT_REVIEW_AREA_M2
-                    )
+            plan["triggered"] = True
+            plan["trigger_codes"] = sorted(set([
+                *plan.get("trigger_codes", []),
+                "EXCHANGER_EMERGENCY_COMPLETE_FALLBACK_APPLIED",
+            ]))
+            plan["emergency_fallbacks"] = emergency_defaults_used
+            plan["warnings"].append({
+                "code": "EXCHANGER_EMERGENCY_COMPLETE_FALLBACK",
+                "severity": "WARNING",
+                "message": (
+                    "正常登记默认链仍未形成正面积/热负荷时，程序采用100 kW、"
+                    "19.607843 m²最低完整换热器候选；仅用于一览表占位和继续计算。"
                 ),
-            )
-            per_unit_area = area / unit_count
-            per_unit_duty = duty / unit_count if duty is not None else None
-            configuration.update({
-                "parallel_train_count_estimate": unit_count,
-                "series_units_per_train_estimate": 1,
-                "operating_unit_count_estimate": unit_count,
-                "standby_train_count_recommendation": 0,
-                "installed_unit_count_estimate": unit_count,
-                "load_split_percent_per_parallel_train": (
-                    100.0 / unit_count
-                ),
-                "per_unit_target": {
-                    "heat_transfer_area_m2": round(per_unit_area, 6),
-                    "heat_duty_kw": (
-                        round(per_unit_duty, 6)
-                        if per_unit_duty is not None
-                        else None
-                    ),
-                },
             })
-            if unit_count > 1:
-                plan["status"] = (
-                    "RECOMMENDED_ALGORITHMIC_MODIFICATION"
-                )
-                plan["triggered"] = True
-                plan["trigger_codes"] = [
-                    "EXCHANGER_SINGLE_UNIT_AREA_REVIEW_TRIGGER_EXCEEDED",
-                    "STANDARD_AREA_SERIES_COVERAGE_NOT_PROVEN",
-                ]
-                configuration["arrangement_code"] = (
-                    "PARALLEL_EQUAL_DUTY_EXCHANGER_TRAINS"
-                )
-                configuration["candidate_model_or_designation"] = (
-                    f"{unit_count}×{100.0 / unit_count:.1f}%并联 "
-                    f"{recommended_type or '管壳式换热器'}"
-                    f"（单台A≈{per_unit_area:.3f} m²；"
-                    "单台型号由EDR/厂家复核后确定）"
-                )
-            else:
-                leading = model_recommendation.get("leading_candidate")
-                configuration["candidate_model_or_designation"] = (
-                    leading.get("designation")
-                    if isinstance(leading, dict)
-                    else recommended_type
-                )
         plan["required_actions"] = [
             {
                 "action_code": "THERMAL_RATING_AND_SPLIT_REVIEW",
@@ -14659,6 +15283,13 @@ def build_engineering_adjustment_plan(
     elif family_id == "family_pump":
         flow = _positive_float(params.get("flow_m3_h"))
         head = _positive_float(params.get("head_m"))
+        emergency_defaults_used: list[str] = []
+        if flow is None:
+            flow = 10.0
+            emergency_defaults_used.append("flow_m3_h=10")
+        if head is None:
+            head = 30.0
+            emergency_defaults_used.append("head_m=30")
         lookup = (
             model_recommendation.get("pump_standard_lookup")
             if isinstance(
@@ -14683,214 +15314,223 @@ def build_engineering_adjustment_plan(
             ),
             "catalog_state": lookup.get("status"),
         }
-        if flow is None or head is None:
-            plan["status"] = "BLOCKED_REQUIRED_CALCULATION_INPUTS"
-            plan["trigger_codes"] = ["PUMP_DUTY_POINT_UNAVAILABLE"]
-            configuration["arrangement_code"] = (
-                "WAITING_FLOW_AND_HEAD"
-            )
-            configuration["candidate_model_or_designation"] = (
-                f"{recommended_type or '泵'}（Q/H与分台方案待计算）"
-            )
-        else:
-            pressure_failed = lookup.get("status") == "STANDARD_SCOPE_FAILED"
-            npsh_state = (
-                lookup.get("npsh_constraint", {}).get("status")
-                if isinstance(lookup.get("npsh_constraint"), dict)
-                else None
-            )
-            npsh_failed = npsh_state == "FAIL"
-            catalog_applicable = (
-                recommended_type == "轴向吸入离心泵"
-                and lookup.get("status")
-                != "NOT_APPLICABLE_TERMINAL_TYPE"
-            )
-            if not catalog_applicable:
-                # The terminal pump-form rule has already selected an axial or
-                # multistage route.  GB/T 5662 end-suction markings must not be
-                # reused across that boundary.  We can still estimate a load
-                # split, but the output remains an engineering designation.
-                if recommended_type == "轴流泵":
-                    parallel_count = max(
-                        1,
-                        int(math.ceil(flow / 2000.0)),
-                    )
-                    arrangement_code = (
-                        "PARALLEL_AXIAL_FLOW_PUMP_TRAINS_VENDOR_RATING"
-                    )
-                    route_basis = (
-                        "registered axial-flow terminal rule at "
-                        "Q >= 2000 m3/h; 2000 m3/h is a split trigger, "
-                        "not a certified unit capacity"
-                    )
-                else:
-                    parallel_count = 1
-                    arrangement_code = (
-                        "MULTISTAGE_OR_SPECIAL_DUTY_PUMP_VENDOR_RATING"
-                    )
-                    route_basis = (
-                        "registered non-GB/T-5662 terminal pump-form rule"
-                    )
-                plan["triggered"] = True
-                plan["trigger_codes"] = [
-                    "PUMP_TERMINAL_TYPE_OUTSIDE_GBT5662_CATALOG",
-                    *(
-                        ["PUMP_NPSH_CONSTRAINT_FAILED"]
-                        if npsh_failed
-                        else []
-                    ),
-                ]
-                plan["status"] = (
-                    "REVIEW_REQUIRED_NO_SAFE_AUTOMATIC_CONFIGURATION"
+        pressure_failed = lookup.get("status") == "STANDARD_SCOPE_FAILED"
+        npsh_state = (
+            lookup.get("npsh_constraint", {}).get("status")
+            if isinstance(lookup.get("npsh_constraint"), dict)
+            else None
+        )
+        npsh_failed = npsh_state == "FAIL"
+        catalog_applicable = (
+            recommended_type == "轴向吸入离心泵"
+            and lookup.get("status") != "NOT_APPLICABLE_TERMINAL_TYPE"
+        )
+        if not catalog_applicable:
+            # Terminal pump-form selection is already outside the GB/T 5662
+            # end-suction catalog.  Keep a complete program engineering
+            # specification and mark the manufacturer rating as the formal gate.
+            if recommended_type in {"轴流泵", "立式混流泵"}:
+                parallel_count = max(1, int(math.ceil(flow / 2000.0)))
+                arrangement_code = (
+                    "PARALLEL_AXIAL_FLOW_PROGRAM_TRAINS"
+                    if recommended_type == "轴流泵"
+                    else "PARALLEL_MIXED_FLOW_PROGRAM_TRAINS"
+                )
+                route_basis = (
+                    f"registered {recommended_type} terminal rule; "
+                    "2000 m3/h per train is a J-class split trigger, not a "
+                    "certified unit capacity"
+                )
+            else:
+                parallel_count = 1
+                arrangement_code = (
+                    "INTERNAL_MULTISTAGE_OR_SPECIAL_DUTY_PROGRAM_PUMP"
+                )
+                route_basis = (
+                    "registered non-GB/T-5662 terminal pump-form rule; "
+                    "independent external series pumps are not preferred when "
+                    "one internally multistage machine can carry the head"
+                )
+            plan["triggered"] = True
+            plan["trigger_codes"] = [
+                "PUMP_TERMINAL_TYPE_OUTSIDE_GBT5662_CATALOG",
+                *(
+                    ["PUMP_NPSH_CONSTRAINT_FAILED"]
                     if npsh_failed
+                    else []
+                ),
+            ]
+            plan["status"] = (
+                "REVIEW_REQUIRED_COMPLETE_PROGRAM_CANDIDATE"
+                if npsh_failed
+                else "RECOMMENDED_ALGORITHMIC_MODIFICATION"
+            )
+            per_unit_flow = flow / parallel_count
+            configuration.update({
+                "arrangement_code": arrangement_code,
+                "parallel_train_count_estimate": parallel_count,
+                "series_units_per_train_estimate": 1,
+                "operating_unit_count_estimate": parallel_count,
+                "standby_train_count_recommendation": 1,
+                "installed_unit_count_estimate": parallel_count + 1,
+                "load_split_percent_per_parallel_train": (
+                    100.0 / parallel_count
+                ),
+                "per_unit_target": {
+                    "flow_m3_h": round(per_unit_flow, 6),
+                    "head_m": round(head, 6),
+                },
+                "candidate_standard_marking": None,
+                "terminal_route_split_basis": route_basis,
+            })
+        else:
+            single = _best_pump_reference_point(flow, head)
+            system = _pump_series_parallel_screen(flow, head)
+            fit_outside = (
+                float(single["normalized_log_distance"])
+                > PUMP_REFERENCE_FIT_LOG_DISTANCE_LIMIT
+            )
+            configuration.update({
+                "parallel_train_count_estimate": (
+                    system["parallel_train_count"]
+                ),
+                "series_units_per_train_estimate": (
+                    system["series_units_per_train"]
+                ),
+                "operating_unit_count_estimate": (
+                    system["operating_unit_count"]
+                ),
+                "standby_train_count_recommendation": 1,
+                "installed_unit_count_estimate": (
+                    system["operating_unit_count"]
+                    + system["series_units_per_train"]
+                ),
+                "load_split_percent_per_parallel_train": (
+                    100.0 / system["parallel_train_count"]
+                ),
+                "per_unit_target": {
+                    "flow_m3_h": round(
+                        system["per_unit_flow_m3_h"],
+                        6,
+                    ),
+                    "head_m": round(
+                        system["per_unit_head_m"],
+                        6,
+                    ),
+                },
+                "reference_fit": {
+                    "single_unit_log_distance": round(
+                        float(single["normalized_log_distance"]),
+                        9,
+                    ),
+                    "adjusted_per_unit_log_distance": round(
+                        float(
+                            system["reference"][
+                                "normalized_log_distance"
+                            ]
+                        ),
+                        9,
+                    ),
+                    "metric": (
+                        "Euclidean distance in ln(Q/Qref), ln(H/Href)"
+                    ),
+                    "selection_reason": system.get("selection_reason"),
+                },
+            })
+            trigger_codes: list[str] = []
+            if fit_outside:
+                trigger_codes.append(
+                    "PUMP_SINGLE_REFERENCE_POINT_FIT_OUTSIDE_POLICY"
+                )
+            if pressure_failed:
+                trigger_codes.append(
+                    "PUMP_GBT5662_PRESSURE_SCOPE_FAILED"
+                )
+            if npsh_failed:
+                trigger_codes.append(
+                    "PUMP_NPSH_CONSTRAINT_FAILED"
+                )
+            multi_unit = (
+                system["parallel_train_count"] > 1
+                or system["series_units_per_train"] > 1
+            )
+            if multi_unit:
+                trigger_codes.append(
+                    "PUMP_SERIES_PARALLEL_DUTY_SPLIT_RECOMMENDED"
+                )
+            if trigger_codes:
+                plan["triggered"] = True
+                plan["trigger_codes"] = sorted(set(trigger_codes))
+                plan["status"] = (
+                    "REVIEW_REQUIRED_COMPLETE_PROGRAM_CANDIDATE"
+                    if pressure_failed or npsh_failed
                     else "RECOMMENDED_ALGORITHMIC_MODIFICATION"
                 )
-                per_unit_flow = flow / parallel_count
-                configuration.update({
-                    "arrangement_code": arrangement_code,
-                    "parallel_train_count_estimate": parallel_count,
-                    "series_units_per_train_estimate": 1,
-                    "operating_unit_count_estimate": parallel_count,
-                    "standby_train_count_recommendation": 1,
-                    "installed_unit_count_estimate": parallel_count + 1,
-                    "load_split_percent_per_parallel_train": (
-                        100.0 / parallel_count
-                    ),
-                    "per_unit_target": {
-                        "flow_m3_h": round(per_unit_flow, 6),
-                        "head_m": round(head, 6),
-                    },
-                    "candidate_standard_marking": None,
-                    "candidate_model_or_designation": (
-                        f"{parallel_count}并联×1串联 "
-                        f"{recommended_type or '专用流程泵'}系统"
-                        f"（单机Q≈{per_unit_flow:.3f} m³/h，"
-                        f"H≈{head:.3f} m；厂家型号待定）"
-                    ),
-                    "terminal_route_split_basis": route_basis,
-                })
-            else:
-                single = _best_pump_reference_point(flow, head)
-                system = _pump_series_parallel_screen(flow, head)
-                fit_outside = (
-                    float(single["normalized_log_distance"])
-                    > PUMP_REFERENCE_FIT_LOG_DISTANCE_LIMIT
-                )
-                configuration.update({
-                    "parallel_train_count_estimate": (
-                        system["parallel_train_count"]
-                    ),
-                    "series_units_per_train_estimate": (
-                        system["series_units_per_train"]
-                    ),
-                    "operating_unit_count_estimate": (
-                        system["operating_unit_count"]
-                    ),
-                    "standby_train_count_recommendation": 1,
-                    "installed_unit_count_estimate": (
-                        system["operating_unit_count"]
-                        + system["series_units_per_train"]
-                    ),
-                    "load_split_percent_per_parallel_train": (
-                        100.0 / system["parallel_train_count"]
-                    ),
-                    "per_unit_target": {
-                        "flow_m3_h": round(
-                            system["per_unit_flow_m3_h"],
-                            6,
-                        ),
-                        "head_m": round(
-                            system["per_unit_head_m"],
-                            6,
-                        ),
-                    },
-                    "reference_fit": {
-                        "single_unit_log_distance": round(
-                            float(single["normalized_log_distance"]),
-                            9,
-                        ),
-                        "adjusted_per_unit_log_distance": round(
-                            float(
-                                system["reference"][
-                                    "normalized_log_distance"
-                                ]
-                            ),
-                            9,
-                        ),
-                        "metric": (
-                            "Euclidean distance in ln(Q/Qref), ln(H/Href)"
-                        ),
-                    },
-                })
-                trigger_codes: list[str] = []
-                if fit_outside:
-                    trigger_codes.append(
-                        "PUMP_SINGLE_REFERENCE_POINT_FIT_OUTSIDE_POLICY"
-                    )
-                if pressure_failed:
-                    trigger_codes.append(
-                        "PUMP_GBT5662_PRESSURE_SCOPE_FAILED"
-                    )
-                if npsh_failed:
-                    trigger_codes.append(
-                        "PUMP_NPSH_CONSTRAINT_FAILED"
-                    )
-                multi_unit = (
-                    system["parallel_train_count"] > 1
-                    or system["series_units_per_train"] > 1
-                )
-                if multi_unit:
-                    trigger_codes.append(
-                        "PUMP_SERIES_PARALLEL_DUTY_SPLIT_RECOMMENDED"
-                    )
-                if trigger_codes:
-                    plan["triggered"] = True
-                    plan["trigger_codes"] = sorted(set(trigger_codes))
-                    plan["status"] = (
-                        "REVIEW_REQUIRED_NO_SAFE_AUTOMATIC_CONFIGURATION"
-                        if pressure_failed or npsh_failed
-                        else "RECOMMENDED_ALGORITHMIC_MODIFICATION"
-                    )
-                reference = system["reference"]
-                parallel_count = system["parallel_train_count"]
-                series_count = system["series_units_per_train"]
-                if pressure_failed:
-                    configuration["arrangement_code"] = (
-                        "HIGH_PRESSURE_SPECIAL_DUTY_PUMP_SYSTEM_REVIEW"
-                    )
-                    configuration["candidate_standard_marking"] = None
-                    configuration["candidate_model_or_designation"] = (
-                        f"{parallel_count}并联×{series_count}串联 "
-                        f"{recommended_type or '专用流程泵'}系统"
-                        f"（单机Q≈{system['per_unit_flow_m3_h']:.3f} m³/h，"
-                        f"H≈{system['per_unit_head_m']:.3f} m；"
-                        "GB/T 5662压力范围不适用，厂家型号待定）"
-                    )
-                else:
-                    configuration["arrangement_code"] = (
-                        "PARALLEL_AND_SERIES_PUMP_TRAINS"
-                        if multi_unit
-                        else "SINGLE_PUMP_REFERENCE_POINT"
-                    )
-                    marking = (
-                        f"{reference['standard']} "
-                        f"{reference['standard_marking']} @ "
-                        f"{reference['speed_rpm']} r/min"
-                    )
-                    configuration["candidate_standard_marking"] = marking
-                    configuration["candidate_model_or_designation"] = (
-                        f"{parallel_count}并联×{series_count}串联：{marking}"
-                        f"（单机Q≈{system['per_unit_flow_m3_h']:.3f} m³/h，"
-                        f"H≈{system['per_unit_head_m']:.3f} m；"
-                        "仅参考点初筛）"
-                    )
-            if npsh_failed:
+            reference = system["reference"]
+            if pressure_failed:
                 configuration["arrangement_code"] = (
-                    "NPSH_HYDRAULIC_REDESIGN_REQUIRED"
+                    "HIGH_PRESSURE_SPECIAL_DUTY_PROGRAM_PUMP"
                 )
-                configuration["model_status"] = (
-                    "BLOCKED_BY_NPSH_UNTIL_VENDOR_AND_SYSTEM_REVIEW"
+                configuration["candidate_standard_marking"] = None
+            else:
+                configuration["arrangement_code"] = (
+                    "PARALLEL_AND_SERIES_PUMP_TRAINS"
+                    if multi_unit
+                    else "SINGLE_PUMP_REFERENCE_POINT"
                 )
+                configuration["candidate_standard_marking"] = (
+                    f"{reference['standard']} "
+                    f"{reference['standard_marking']} @ "
+                    f"{reference['speed_rpm']} r/min"
+                )
+
+        equivalent_options = _pump_equivalent_recommendations(
+            flow_m3_h=flow,
+            head_m=head,
+            recommended_type=recommended_type or "轴向吸入离心泵",
+            configuration=configuration,
+        )
+        primary = equivalent_options[0]
+        configuration["candidate_model_or_designation"] = primary[
+            "system_candidate_designation"
+        ]
+        configuration["program_model_designation"] = primary[
+            "program_model_designation"
+        ]
+        configuration["specific_pump_type"] = primary["specific_pump_type"]
+        configuration["hydraulic_stage_count_estimate"] = primary[
+            "hydraulic_stage_count_estimate"
+        ]
+        plan["equivalent_recommendations"] = equivalent_options
+        plan["branch_narrative"] = (
+            f"程序型式分支选择“{primary['specific_pump_type']}”；"
+            f"系统分支为{primary['parallel_train_count']}并联×"
+            f"{primary['series_units_per_train']}串联，单机目标"
+            f"Q≈{primary['per_unit_target']['flow_m3_h']:.3f} m³/h、"
+            f"H≈{primary['per_unit_target']['head_m']:.3f} m。"
+            "泵的并联流量/串联扬程只做算术闭合，不把它视为真实系统曲线等价；"
+            "厂家全曲线、BEP、NPSHr和承压是正式定型门槛。"
+        )
+        if emergency_defaults_used:
+            plan["triggered"] = True
+            plan["status"] = "RECOMMENDED_COMPLETE_FALLBACK_CANDIDATE"
+            plan["trigger_codes"] = sorted(set([
+                *plan.get("trigger_codes", []),
+                "PUMP_EMERGENCY_COMPLETE_FALLBACK_APPLIED",
+            ]))
+            plan["emergency_fallbacks"] = emergency_defaults_used
+            plan["warnings"].append({
+                "code": "PUMP_EMERGENCY_COMPLETE_FALLBACK",
+                "severity": "WARNING",
+                "message": (
+                    "正常登记默认链仍未形成正Q/H时，程序按Q=10 m³/h、H=30 m"
+                    "给出最低完整泵候选；仅用于一览表占位和继续计算。"
+                ),
+            })
+        if npsh_failed:
+            configuration["model_status"] = (
+                "BLOCKED_BY_NPSH_BUT_COMPLETE_PROGRAM_CANDIDATE_RETAINED"
+            )
         plan["required_actions"] = [
             {
                 "action_code": "VENDOR_CURVE_AND_BEP_REVIEW",
@@ -16706,6 +17346,7 @@ def match_one(
         model_recommendation,
         calculations,
         pending,
+        exchanger_parameter_package=exchanger_default_parameter_package,
     )
     pump_engineering_selection: dict[str, Any] | None = None
     if family_id == "family_pump":
@@ -16721,6 +17362,11 @@ def match_one(
         )
         configuration = engineering_adjustment_plan.get("configuration")
         if isinstance(configuration, dict):
+            configuration["candidate_model_or_designation"] = (
+                pump_engineering_selection.get(
+                    "complete_candidate_designation"
+                )
+            )
             configuration["program_selected_flange_pressure_class"] = (
                 pressure_selection.get("selected_flange_pressure_class")
             )
@@ -16759,11 +17405,22 @@ def match_one(
         ]
         for action in engineering_adjustment_plan.get("required_actions", []):
             if action.get("action_code") == "VENDOR_CURVE_AND_BEP_REVIEW":
-                action["action"] = (
-                    "程序已使用GB/T 5662额定参考点完成泵型与分台初筛；"
-                    "只有升级到厂家最终型号时，才补同转速/叶轮直径的完整Q-H-η、"
-                    "BEP、允许连续运行区、功率和NPSHr曲线。"
-                )
+                if (
+                    isinstance(configuration, dict)
+                    and configuration.get("candidate_standard_marking")
+                ):
+                    action["action"] = (
+                        "程序已使用GB/T 5662额定参考点完成泵型与分台初筛；"
+                        "只有升级到厂家最终型号时，才补同转速/叶轮直径的完整Q-H-η、"
+                        "BEP、允许连续运行区、功率和NPSHr曲线。"
+                    )
+                else:
+                    action["action"] = (
+                        "程序已按终选泵型规则给出具体工程型式、分台数量和单机Q/H，"
+                        "但没有跨泵型借用GB/T 5662轴向吸入泵标记；正式定型必须取得"
+                        "该混流/轴流/多级泵实际厂家的完整Q-H-η、BEP、允许连续运行区、"
+                        "功率和NPSHr曲线。"
+                    )
             elif action.get("action_code") == "MATERIAL_SEAL_DRIVER_REVIEW":
                 action["action_code"] = (
                     "VERIFY_PROGRAM_SELECTED_MATERIAL_AND_SEAL"

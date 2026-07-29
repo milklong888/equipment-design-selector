@@ -630,9 +630,23 @@
         {
           "rule_id": "pump:very_high_flow:axial_flow",
           "recommended_type": "轴流泵",
-          "assumption": "流量达到 2000 m3/h 且未命中高扬程规则时按轴流泵路线终选。",
+          "assumption": "流量达到 2000 m3/h、扬程不超过 20 m 且未命中高扬程规则时按轴流泵路线终选；20 m 是程序登记的型式分流值，不是国标容量边界。",
           "default_applied": false,
-          "all": [{"field": "flow_m3_h", "operator": "gte", "value": 2000.0}]
+          "all": [
+            {"field": "flow_m3_h", "operator": "gte", "value": 2000.0},
+            {"field": "head_m", "operator": "lte", "value": 20.0}
+          ]
+        },
+        {
+          "rule_id": "pump:very_high_flow:mixed_flow",
+          "recommended_type": "立式混流泵",
+          "assumption": "流量达到 2000 m3/h、扬程高于 20 m 且低于 150 m 时，程序优先给出立式导叶式混流泵工程路线；型式与并联台数仍须厂家全曲线、系统曲线和 NPSH 复核。",
+          "default_applied": false,
+          "all": [
+            {"field": "flow_m3_h", "operator": "gte", "value": 2000.0},
+            {"field": "head_m", "operator": "gt", "value": 20.0},
+            {"field": "head_m", "operator": "lt", "value": 150.0}
+          ]
         }
       ],
       "candidate_strategy": "gbt5662_design_point_collect",

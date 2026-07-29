@@ -10,7 +10,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 
 FROZEN_ROOT = getattr(sys, "_MEIPASS", None)
@@ -28,6 +28,7 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 import app_core  # noqa: E402
+import aspen_suite  # noqa: E402
 import llm_bridge  # noqa: E402
 
 
@@ -364,6 +365,8 @@ class EquipmentDesignApi:
         self.window: Any | None = None
         self._worker_lock = threading.RLock()
         self._active_workers: dict[int, subprocess.Popen[str]] = {}
+        self._suite_lock = threading.Lock()
+        self._suite_cancel_event = threading.Event()
         self._agent_protocol_lock = threading.RLock()
 
     def bind_window(self, window: Any) -> None:
@@ -458,6 +461,7 @@ class EquipmentDesignApi:
 
     def cancel_active_operations(self) -> dict[str, Any]:
         """Terminate only worker trees created by this API instance."""
+        self._suite_cancel_event.set()
         with self._worker_lock:
             workers = list(self._active_workers.values())
         terminated: list[int] = []
@@ -556,10 +560,32 @@ class EquipmentDesignApi:
                 if not result_path.is_file():
                     raise RuntimeError(f"Aspen worker 未生成结果文件（returncode={process.returncode}）：{stderr[-1500:]}")
                 result = json.loads(result_path.read_text(encoding="utf-8"))
+                selection_result_available = bool(
+                    isinstance(result, dict)
+                    and isinstance(result.get("result"), dict)
+                    and str(result.get("status") or "").upper() != "FAILED"
+                )
+                operation_completed = process.returncode == 0 or selection_result_available
                 return {
-                    "ok": process.returncode == 0,
+                    "ok": operation_completed,
                     "value": result,
-                    "error": None if process.returncode == 0 else result.get("error", "Aspen 自动导入失败，可切换其他模式。"),
+                    "error": (
+                        None
+                        if operation_completed
+                        else result.get("error", "Aspen 自动导入失败，可切换其他模式。")
+                    ),
+                    "completed_with_warnings": bool(
+                        operation_completed and process.returncode != 0
+                    ),
+                    "warning": (
+                        str(
+                            result.get("error")
+                            or result.get("status")
+                            or "设备选型结果已生成，但正式证据门仍有未闭合项。"
+                        )
+                        if operation_completed and process.returncode != 0
+                        else None
+                    ),
                     "session_dir": str(session),
                     "returncode": process.returncode,
                     "stdout": stdout[-2000:],
@@ -569,6 +595,45 @@ class EquipmentDesignApi:
                 self._unregister_worker(process)
         except Exception as exc:
             return self._error(exc)
+
+    def import_aspen_suite(
+        self,
+        config: dict[str, Any],
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
+        """Run a hash-checked Aspen queue strictly serially through isolated workers."""
+
+        if not self._suite_lock.acquire(blocking=False):
+            return self._error(RuntimeError("已有 Aspen 批量队列正在运行。"))
+        self._suite_cancel_event.clear()
+        try:
+            suite_config = dict(config)
+            requested_output = str(suite_config.get("output_dir") or "").strip()
+            if requested_output:
+                output_dir = Path(requested_output).expanduser().resolve()
+                output_dir.parent.mkdir(parents=True, exist_ok=True)
+            else:
+                OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+                output_dir = OUTPUT_ROOT / (
+                    f"aspen_suite_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+                )
+            suite_config["output_dir"] = str(output_dir)
+            report = aspen_suite.run_suite(
+                suite_config,
+                self.import_aspen,
+                cancelled=self._suite_cancel_event.is_set,
+                progress=progress_callback,
+            )
+            return self._ok(
+                report,
+                session_dir=str(output_dir),
+                report_path=report.get("report_path"),
+                markdown_report_path=report.get("markdown_report_path"),
+            )
+        except Exception as exc:
+            return self._error(exc)
+        finally:
+            self._suite_lock.release()
 
     def llm_review(self, config: dict[str, Any], deterministic_result: dict[str, Any]) -> dict[str, Any]:
         """Compatibility entry that is intentionally routed through strict staging."""

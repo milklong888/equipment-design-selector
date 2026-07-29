@@ -244,6 +244,14 @@ class PFDCanvasView(ttk.Frame):
         self.columnconfigure(0, weight=1)
         self.canvas.bind("<Control-MouseWheel>", self._wheel_zoom)
         self.canvas.bind("<Button-1>", self._clear_selection_from_background, add="+")
+        self.canvas.bind("<Configure>", self._redraw_empty_state, add="+")
+        self.redraw()
+
+    def _redraw_empty_state(self, _event: Any = None) -> None:
+        pfd = self.mapping.get("pfd") if isinstance(self.mapping.get("pfd"), Mapping) else {}
+        nodes = pfd.get("nodes") if isinstance(pfd.get("nodes"), list) else []
+        if not nodes:
+            self.redraw()
 
     def set_mapping(
         self,
@@ -320,8 +328,85 @@ class PFDCanvasView(ttk.Frame):
         nodes = pfd.get("nodes") if isinstance(pfd.get("nodes"), list) else []
         edges = pfd.get("edges") if isinstance(pfd.get("edges"), list) else []
         if not nodes:
-            self.canvas.create_text(30, 30, anchor="nw", text="导入 BKP 后在此显示可交互 PFD。", fill=MUTED, font=self._font(10))
-            self.canvas.configure(scrollregion=(0, 0, 760, 480))
+            width = max(620, self.canvas.winfo_width())
+            height = max(360, self.canvas.winfo_height())
+            card_width = min(560, width - 48)
+            card_height = 188
+            left = (width - card_width) / 2
+            top = max(42, (height - card_height) / 2)
+            self.canvas.create_rectangle(
+                left,
+                top,
+                left + card_width,
+                top + card_height,
+                fill=CARD,
+                outline=LINE,
+                width=1,
+                tags=("role:empty_state",),
+            )
+            self.canvas.create_rectangle(
+                left,
+                top,
+                left + 5,
+                top + card_height,
+                fill=ACCENT,
+                outline=ACCENT,
+                tags=("role:empty_state",),
+            )
+            self.canvas.create_text(
+                left + 28,
+                top + 25,
+                anchor="nw",
+                text="尚未生成流程视图",
+                fill=INK,
+                font=self._font(14, bold=True),
+                tags=("role:empty_state",),
+            )
+            self.canvas.create_text(
+                left + 28,
+                top + 59,
+                anchor="nw",
+                width=card_width - 56,
+                text=(
+                    "导入 Aspen 文件并运行后，这里会显示可交互 PFD；"
+                    "手动选型结果请查看“选型结果”。"
+                ),
+                fill=MUTED,
+                font=self._font(9),
+                tags=("role:empty_state",),
+            )
+            steps = ("1  导入 Aspen", "2  运行确定性计算", "3  点设备查看参数")
+            chip_width = (card_width - 72) / 3
+            for index, label in enumerate(steps):
+                chip_left = left + 28 + index * (chip_width + 8)
+                self.canvas.create_rectangle(
+                    chip_left,
+                    top + 113,
+                    chip_left + chip_width,
+                    top + 151,
+                    fill="#EAF2F4",
+                    outline="#D5E3E7",
+                    width=1,
+                    tags=("role:empty_state",),
+                )
+                self.canvas.create_text(
+                    chip_left + chip_width / 2,
+                    top + 132,
+                    text=label,
+                    fill=ACCENT_DARK,
+                    font=self._font(8, bold=True),
+                    tags=("role:empty_state",),
+                )
+            self.canvas.create_text(
+                left + 28,
+                top + 167,
+                anchor="w",
+                text="快捷键：Ctrl+O 导入  ·  Ctrl+Enter 运行",
+                fill=MUTED,
+                font=self._font(8),
+                tags=("role:empty_state",),
+            )
+            self.canvas.configure(scrollregion=(0, 0, width, height))
             return
         self._node_rows = {
             str(item.get("node_id")): dict(item)

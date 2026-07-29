@@ -63,7 +63,45 @@ class EngineeringAdjustmentWorkbenchTests(unittest.TestCase):
         )
         self.assertTrue(plan["algorithmic_selection_warning"])
 
-    def test_axial_pump_split_does_not_fabricate_gbt_model(self) -> None:
+    def test_missing_exchanger_conditions_keep_a_complete_program_unit(
+        self,
+    ) -> None:
+        result = app_core.manual_match(
+            "block:HEATX",
+            {
+                "equipment_tag": "E-MISSING",
+                "phase": "liquid",
+            },
+        )["result"]
+        plan = result["engineering_adjustment_plan"]
+        designation = plan["configuration"][
+            "candidate_model_or_designation"
+        ]
+        self.assertEqual(
+            plan["input_completeness"]["status"],
+            "COMPLETE_PROGRAM_CANDIDATE_WITH_ANNOTATED_FALLBACKS",
+        )
+        self.assertTrue(
+            {
+                "heat_duty_kw",
+                "overall_u_w_m2k",
+                "lmtd_k",
+                "shell_material_grade",
+                "tube_material_grade",
+            }.issubset(
+                set(plan["input_completeness"]["fallback_fields"])
+            )
+        )
+        self.assertIn(
+            "STHE-FT-1S2T-A19.6-D25-L3000-N84-Q345R-10",
+            designation,
+        )
+        self.assertNotIn("厂家型号待定", designation)
+        self.assertNotIn("非标准型", designation)
+
+    def test_high_flow_medium_head_uses_complete_mixed_flow_route(
+        self,
+    ) -> None:
         result = app_core.manual_match(
             "block:PUMP",
             {
@@ -79,7 +117,7 @@ class EngineeringAdjustmentWorkbenchTests(unittest.TestCase):
         ]["configuration"]
         self.assertEqual(
             configuration["candidate_equipment_type"],
-            "轴流泵",
+            "立式混流泵",
         )
         self.assertEqual(
             configuration["parallel_train_count_estimate"],
@@ -95,9 +133,230 @@ class EngineeringAdjustmentWorkbenchTests(unittest.TestCase):
         designation = configuration[
             "candidate_model_or_designation"
         ]
-        self.assertIn("轴流泵系统", designation)
+        self.assertIn("立式导叶式混流泵", designation)
+        self.assertIn(
+            "PMF-VERTICAL-DIFFUSER-1ST-Q2000.000-H60.000-P2S1",
+            designation,
+        )
+        self.assertIn("泵壳", designation)
+        self.assertIn("叶轮", designation)
+        self.assertIn("机械密封", designation)
+        self.assertIn("法兰承压路线=PN16", designation)
         self.assertNotIn("GB/T 5662", designation)
+        self.assertNotIn("厂家型号待定", designation)
         self.assertNotIn("非标准型", designation)
+        curve_action = next(
+            row["action"]
+            for row in result["engineering_adjustment_plan"][
+                "required_actions"
+            ]
+            if row["action_code"] == "VENDOR_CURVE_AND_BEP_REVIEW"
+        )
+        self.assertIn("没有跨泵型借用GB/T 5662", curve_action)
+        options = result["engineering_adjustment_plan"][
+            "equivalent_recommendations"
+        ]
+        self.assertEqual(len(options), 2)
+        self.assertFalse(
+            options[0]["equivalence_basis"][
+                "system_curve_and_vendor_curve_equivalence_proven"
+            ]
+        )
+
+    def test_normal_pump_stays_single_instead_of_artificial_series_split(
+        self,
+    ) -> None:
+        result = app_core.manual_match(
+            "block:PUMP",
+            {
+                "equipment_tag": "P-NORMAL",
+                "phase": "liquid",
+                "main_medium": "water",
+                "flow_m3_h": 120,
+                "head_m": 60,
+                "density_kg_m3": 1000,
+                "inlet_pressure_mpa": 0.2,
+                "pressure_basis": "gauge",
+            },
+        )["result"]
+        plan = result["engineering_adjustment_plan"]
+        configuration = plan["configuration"]
+        self.assertEqual(
+            configuration["arrangement_code"],
+            "SINGLE_PUMP_REFERENCE_POINT",
+        )
+        self.assertEqual(
+            configuration["parallel_train_count_estimate"],
+            1,
+        )
+        self.assertEqual(
+            configuration["series_units_per_train_estimate"],
+            1,
+        )
+        self.assertEqual(
+            configuration["installed_unit_count_estimate"],
+            2,
+        )
+        self.assertIn(
+            "PES-END-SUCTION-1ST-Q120.000-H60.000-P1S1",
+            configuration["candidate_model_or_designation"],
+        )
+
+    def test_missing_pump_conditions_still_yield_complete_warned_candidate(
+        self,
+    ) -> None:
+        result = app_core.manual_match(
+            "block:PUMP",
+            {
+                "equipment_tag": "P-MISSING",
+                "phase": "liquid",
+            },
+        )["result"]
+        plan = result["engineering_adjustment_plan"]
+        selection = result["pump_engineering_selection"]
+        designation = plan["configuration"][
+            "candidate_model_or_designation"
+        ]
+        self.assertEqual(
+            plan["input_completeness"]["status"],
+            "COMPLETE_PROGRAM_CANDIDATE_WITH_ANNOTATED_FALLBACKS",
+        )
+        self.assertTrue(
+            {"flow_m3_h", "head_m", "density_kg_m3"}.issubset(
+                set(plan["input_completeness"]["fallback_fields"])
+            )
+        )
+        self.assertIn("Q10.000-H30.000", designation)
+        self.assertIn("法兰承压路线=PN16", designation)
+        for component in (
+            "pump_casing",
+            "impeller",
+            "shaft",
+            "mechanical_seal",
+            "gasket",
+        ):
+            self.assertIn(
+                component,
+                selection["material_and_seal"][
+                    "selected_components"
+                ],
+            )
+        self.assertEqual(
+            selection["pressure_and_flange"]["status"],
+            "CALCULATED_AND_PRESSURE_CLASS_SELECTED",
+        )
+        pressure_warning_codes = {
+            row["code"]
+            for row in selection["pressure_and_flange"]["warnings"]
+        }
+        self.assertIn(
+            "PUMP_SUCTION_PRESSURE_FALLBACK",
+            pressure_warning_codes,
+        )
+        self.assertIn(
+            "design_temperature_c",
+            plan["input_completeness"]["fallback_fields"],
+        )
+        self.assertNotIn("厂家型号待定", designation)
+
+    def test_very_high_head_pump_has_bb5_program_route_and_pressure_class(
+        self,
+    ) -> None:
+        result = app_core.manual_match(
+            "block:PUMP",
+            {
+                "equipment_tag": "P-HIGH-HEAD",
+                "phase": "liquid",
+                "flow_m3_h": 120,
+                "head_m": 800,
+                "density_kg_m3": 850,
+                "inlet_pressure_mpa": 0.2,
+                "pressure_basis": "gauge",
+            },
+        )["result"]
+        configuration = result["engineering_adjustment_plan"][
+            "configuration"
+        ]
+        designation = configuration["candidate_model_or_designation"]
+        self.assertEqual(
+            configuration["candidate_equipment_type"],
+            "多级离心泵",
+        )
+        self.assertEqual(
+            configuration["hydraulic_stage_count_estimate"],
+            10,
+        )
+        self.assertIn("BB5类工程型式", designation)
+        self.assertIn("PMS-BB5-DOUBLE-CASING-10ST", designation)
+        self.assertIn("法兰承压路线=PN100", designation)
+        self.assertNotIn("厂家型号待定", designation)
+
+    def test_very_large_exchanger_has_conserved_comparison_options(
+        self,
+    ) -> None:
+        result = app_core.manual_match(
+            "block:HEATX",
+            {
+                "equipment_tag": "E-VERY-LARGE",
+                "phase": "liquid",
+                "heat_duty_kw": 50000,
+                "overall_u_w_m2k": 450,
+                "lmtd_k": 20,
+            },
+        )["result"]
+        plan = result["engineering_adjustment_plan"]
+        configuration = plan["configuration"]
+        options = plan["equivalent_recommendations"]
+        self.assertEqual(
+            configuration["parallel_train_count_estimate"],
+            4,
+        )
+        self.assertEqual(
+            configuration["series_units_per_train_estimate"],
+            4,
+        )
+        self.assertEqual(
+            configuration["operating_unit_count_estimate"],
+            16,
+        )
+        self.assertEqual(len(options), 3)
+        self.assertEqual(
+            [
+                (
+                    row["parallel_train_count"],
+                    row["series_units_per_train"],
+                )
+                for row in options
+            ],
+            [(4, 4), (14, 1), (1, 14)],
+        )
+        total_area = result["exchanger_default_parameter_package"][
+            "parameters"
+        ]["heat_transfer_area_m2"]["value"]
+        for option in options:
+            reconstructed_area = (
+                option["operating_unit_count"]
+                * option["per_unit_target"][
+                    "heat_transfer_area_m2"
+                ]
+            )
+            self.assertAlmostEqual(
+                reconstructed_area,
+                total_area,
+                places=3,
+            )
+            self.assertTrue(
+                option["equivalence_basis"]["total_area_conserved"]
+            )
+            self.assertFalse(
+                option["equivalence_basis"][
+                    "thermal_hydraulic_equivalence_proven"
+                ]
+            )
+            self.assertNotIn(
+                "厂家型号待定",
+                option["system_candidate_designation"],
+            )
 
     def test_large_tower_plan_keeps_formal_geometry_open(self) -> None:
         result = app_core.manual_match(
@@ -135,6 +394,61 @@ class EngineeringAdjustmentWorkbenchTests(unittest.TestCase):
             overview["model_or_specification_status"],
             "algorithmic_modification_screening_only",
         )
+
+    def test_constraint_fail_overview_keeps_concrete_program_candidate(
+        self,
+    ) -> None:
+        cases = (
+            (
+                "block:COMPR",
+                {
+                    "equipment_tag": "C-SURGE-BLOCKED",
+                    "phase": "vapor",
+                    "flow_m3_h": 2000,
+                    "suction_pressure_mpa": 0.1,
+                    "discharge_pressure_mpa": 0.5,
+                    "surge_margin_percent": 5,
+                    "required_surge_margin_percent": 10,
+                },
+                "COMP-CENT-1STG-Q2000-PR3.00-P92.6-M110",
+            ),
+            (
+                "family:family_storage_vessel",
+                {
+                    "equipment_tag": "V-STORAGE-BLOCKED",
+                    "equipment_type": "立式储罐",
+                    "flow_m3_h": 10,
+                    "retention_time_min": 60,
+                    "fill_fraction": 0.8,
+                    "volume_m3": 5,
+                    "volume_basis": "nominal_total",
+                },
+                "Vreq=12.5 m3 | V=5 m3",
+            ),
+        )
+        for selection_id, values, expected in cases:
+            with self.subTest(selection_id=selection_id):
+                result = app_core.manual_match(
+                    selection_id,
+                    values,
+                )["result"]
+                overview = result["customer_delivery"][
+                    "equipment_overview_table"
+                ]["rows"][0]
+                designation = overview["model_or_specification"]
+                self.assertIn(expected, designation)
+                self.assertNotIn("厂家型号待定", designation)
+                self.assertEqual(
+                    overview["model_or_specification_status"],
+                    "algorithmic_configuration_review_required",
+                )
+                self.assertEqual(
+                    overview["engineering_adjustment_status"],
+                    "REVIEW_REQUIRED_NO_SAFE_AUTOMATIC_CONFIGURATION",
+                )
+                self.assertTrue(
+                    overview["algorithmic_selection_warning"]
+                )
 
     def test_agent_control_distinguishes_existing_target(self) -> None:
         result = app_core.manual_match(

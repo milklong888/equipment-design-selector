@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -390,8 +391,31 @@ class AppCoreTests(unittest.TestCase):
             stdout=json.dumps(vector_rows, ensure_ascii=False),
             stderr="",
         )
-        with patch.object(app_core.subprocess, "run", return_value=completed) as mocked:
-            result = app_core.knowledge_search("泵 NPSH", limit=3)
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace_root = Path(temporary)
+            vector_script = (
+                workspace_root
+                / "scripts"
+                / "query_workspace_vectors.py"
+            )
+            vector_script.parent.mkdir(parents=True)
+            vector_script.write_text(
+                "# deterministic unit-test placeholder\n",
+                encoding="utf-8",
+            )
+            with (
+                patch.object(
+                    app_core,
+                    "WORKSPACE_ROOT",
+                    workspace_root,
+                ),
+                patch.object(
+                    app_core.subprocess,
+                    "run",
+                    return_value=completed,
+                ) as mocked,
+            ):
+                result = app_core.knowledge_search("泵 NPSH", limit=3)
         self.assertEqual(result["status"], "PASS_VECTOR_INDEX")
         self.assertEqual(result["result_count"], 1)
         self.assertEqual(result["hits"][0]["source_path"], "knowledge_graph/pump.md")
@@ -405,13 +429,56 @@ class AppCoreTests(unittest.TestCase):
             {"source_path": "设备选型一览表_知识图谱重构_20260712/knowledge_graph/model.md", "title": "model", "text": "model"},
         ]
         completed = SimpleNamespace(returncode=0, stdout=json.dumps(vector_rows, ensure_ascii=False), stderr="")
-        with patch.object(app_core.subprocess, "run", return_value=completed):
-            result = app_core.knowledge_search("泵", limit=3, package_ids=["equipment_model_authority"])
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace_root = Path(temporary)
+            vector_script = (
+                workspace_root
+                / "scripts"
+                / "query_workspace_vectors.py"
+            )
+            vector_script.parent.mkdir(parents=True)
+            vector_script.write_text(
+                "# deterministic unit-test placeholder\n",
+                encoding="utf-8",
+            )
+            patches = (
+                patch.object(
+                    app_core,
+                    "WORKSPACE_ROOT",
+                    workspace_root,
+                ),
+                patch.object(
+                    app_core.subprocess,
+                    "run",
+                    return_value=completed,
+                ),
+            )
+            with patches[0], patches[1]:
+                result = app_core.knowledge_search(
+                    "泵",
+                    limit=3,
+                    package_ids=["equipment_model_authority"],
+                )
+            with (
+                patch.object(
+                    app_core,
+                    "WORKSPACE_ROOT",
+                    workspace_root,
+                ),
+                patch.object(
+                    app_core.subprocess,
+                    "run",
+                    return_value=completed,
+                ),
+            ):
+                core_only = app_core.knowledge_search(
+                    "泵",
+                    limit=3,
+                    package_ids=["equipment_core"],
+                )
         self.assertEqual(result["selected_packages"], ["equipment_model_authority"])
         self.assertEqual(result["result_count"], 1)
         self.assertEqual(result["hits"][0]["title"], "model")
-        with patch.object(app_core.subprocess, "run", return_value=completed):
-            core_only = app_core.knowledge_search("泵", limit=3, package_ids=["equipment_core"])
         self.assertEqual([item["title"] for item in core_only["hits"]], ["core"])
         with self.assertRaisesRegex(ValueError, "未知知识包"):
             app_core.knowledge_search("泵", package_ids=["untrusted_external_pack"])

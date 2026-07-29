@@ -68,6 +68,7 @@ CANONICAL_OPERATIONS = (
     "knowledge_search",
     "aspen_derive",
     "aspen_import",
+    "aspen_suite",
     "pfd_build",
     "pfd_override",
     "pfd_recalculate",
@@ -89,6 +90,7 @@ OPERATION_ALIASES = {
     "knowledge.query": "knowledge_search",
     "aspen.export.derive": "aspen_derive",
     "aspen.case.import": "aspen_import",
+    "aspen.case.suite": "aspen_suite",
     "aspen.pfd.build": "pfd_build",
     "aspen.pfd.override": "pfd_override",
     "aspen.pfd.recalculate": "pfd_recalculate",
@@ -114,6 +116,11 @@ STRICT_OPERATION_PAYLOAD_KEYS: dict[str, set[str]] = {
     "render_report": {"input", "format", "output_path"},
     "organize_answer": {"input", "format", "output_path"},
     "customer_export": {"input", "output_path"},
+    "aspen_suite": {
+        "manifest_path", "cases", "case_base_dir", "output_dir",
+        "pressure_basis", "atmospheric_pressure_mpa", "timeout_s",
+        "run", "ensure_stream_transport", "require_clean", "require_all",
+    },
     "pfd_build": {"bundle_path", "overrides", "output_path"},
     "pfd_override": {"bundle_path", "overrides", "block_id", "selection_id", "output_path"},
     "pfd_recalculate": {
@@ -1908,6 +1915,36 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
                 exit_code=5 if dependency else 3,
             )
         return response.get("value"), artifacts
+    if operation == "aspen_suite":
+        suite_payload = dict(payload)
+        require_all = bool(suite_payload.pop("require_all", False))
+        response = api.import_aspen_suite(suite_payload)
+        artifacts = [
+            str(path)
+            for path in (
+                response.get("session_dir"),
+                response.get("report_path"),
+                response.get("markdown_report_path"),
+            )
+            if path
+        ]
+        if not response.get("ok"):
+            raise AgentOperationError(
+                "ASPEN_SUITE_FAILED",
+                str(response.get("error") or "Aspen 批量队列执行失败。"),
+                response,
+                exit_code=3,
+            )
+        report = response.get("value")
+        report = report if isinstance(report, dict) else {}
+        if require_all and report.get("status") != "PASS":
+            raise AgentOperationError(
+                "ASPEN_SUITE_ACCEPTANCE_NOT_MET",
+                "Aspen 批量队列已完成，但没有全部通过所选验收口径。",
+                report,
+                exit_code=4,
+            )
+        return report, artifacts
     if operation == "pfd_build":
         source_path, bundle, source_hash = _pfd_bundle_from_payload(payload)
         overrides = _pfd_overrides(payload)
@@ -2806,7 +2843,7 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
                         "parallel_train_count_estimate"
                     )
                     == 2
-                    and "轴流泵系统"
+                    and "立式导叶式混流泵"
                     in str(
                         large_pump["result"].get(
                             "engineering_adjustment_plan", {}

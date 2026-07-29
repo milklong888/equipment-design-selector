@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
+import os
 import sqlite3
 import sys
 import tempfile
@@ -55,6 +57,52 @@ def _create_minimum_bundle(root: Path) -> None:
 
 
 class RuntimeBundleTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows long-path regression")
+    def test_manifest_supports_runtime_assets_beyond_legacy_max_path(self) -> None:
+        with writable_temp_directory() as root:
+            _create_minimum_bundle(root)
+            directories: list[Path] = []
+            parent = root / "data"
+            while len(str(parent / "long_path_runtime_asset.json")) <= 270:
+                parent = parent / "runtime_evidence_segment_1234567890"
+                directories.append(parent)
+            os.makedirs(runtime_bundle._filesystem_path(parent), exist_ok=True)
+            target = parent / "long_path_runtime_asset.json"
+            payload = b'{"long_path": true}\n'
+            try:
+                with open(runtime_bundle._filesystem_path(target), "wb") as handle:
+                    handle.write(payload)
+                self.assertGreater(len(str(target)), 260)
+
+                manifest = runtime_bundle.create_manifest(root)
+                verification = runtime_bundle.verify_runtime_bundle(
+                    root,
+                    required=True,
+                )
+
+                relative = target.relative_to(root).as_posix()
+                record = next(
+                    item
+                    for item in manifest["files"]
+                    if item["runtime_path"] == relative
+                )
+                self.assertEqual(record["size_bytes"], len(payload))
+                self.assertEqual(
+                    record["sha256"],
+                    hashlib.sha256(payload).hexdigest().upper(),
+                )
+                self.assertEqual(
+                    verification["verification_status"],
+                    "PASS",
+                    verification,
+                )
+            finally:
+                if os.path.exists(runtime_bundle._filesystem_path(target)):
+                    os.remove(runtime_bundle._filesystem_path(target))
+                for directory in reversed(directories):
+                    if os.path.isdir(runtime_bundle._filesystem_path(directory)):
+                        os.rmdir(runtime_bundle._filesystem_path(directory))
+
     def test_manifest_traversal_preserves_caller_visible_root(self) -> None:
         with writable_temp_directory() as root:
             _create_minimum_bundle(root)

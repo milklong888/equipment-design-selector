@@ -66,6 +66,56 @@ class AspenEquipmentDerivationUnitTests(unittest.TestCase):
             derivation.matcher.load_graph(),
         )
 
+    def test_missing_process_state_still_outputs_concrete_dn25_placeholder_with_gate(
+        self,
+    ) -> None:
+        source = Path(__file__).resolve()
+        result = derivation.derive_piping(
+            {
+                "stream_id": "S-NO-STATE",
+                "stream_record_type": "MATERIAL",
+                "_sources": {},
+            },
+            {"from_block_ids": ["B-1"], "to_block_ids": []},
+            {
+                "case_id": "CASE-NO-STATE",
+                "pressure_basis": "absolute",
+                "atmospheric_pressure_mpa": 0.101325,
+            },
+            source,
+            derivation.sha256_file(source),
+            derivation.matcher.load_rules(),
+            derivation.matcher.load_graph(),
+        )
+
+        preselection = result["canonical_match_input"][
+            "pipe_hydraulic_preselection"
+        ]
+        specification = result["programmatic_pipe_specification"]
+        recommendation = result["match_result"]["model_recommendation"]
+        self.assertEqual(
+            preselection["status"],
+            "PROVISIONAL_MINIMUM_COMPLETE_SPEC_PLACEHOLDER_MISSING_PROCESS_STATE",
+        )
+        self.assertEqual(preselection["selected_dn_candidate"], 25)
+        self.assertEqual(
+            specification["status"],
+            "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        )
+        self.assertTrue(
+            specification["minimum_process_state_placeholder_applied"]
+        )
+        self.assertIn("DN25", specification["designation"])
+        self.assertIn("最高级警告", specification["designation"])
+        self.assertTrue(recommendation["leading_candidate"]["designation"])
+        self.assertIn(
+            "replace_minimum_complete_spec_placeholder",
+            specification["formal_readiness"]["open_gates"],
+        )
+        self.assertFalse(
+            recommendation["leading_candidate"]["eligible_for_formal_selection"]
+        )
+
     def test_history_npsha_pressure_margin_is_converted_with_inlet_density(
         self,
     ) -> None:

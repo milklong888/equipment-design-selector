@@ -3633,20 +3633,29 @@ def _model_value(context: Mapping[str, Any]) -> tuple[Any, str]:
         if isinstance(adjustment_plan, Mapping)
         else {}
     )
+    adjustment_designation = (
+        adjustment_configuration.get("candidate_model_or_designation")
+        if isinstance(adjustment_configuration, Mapping)
+        else None
+    )
+    adjustment_designation_folded = str(
+        adjustment_designation or ""
+    ).casefold()
+    adjustment_designation_is_concrete = bool(
+        _present(adjustment_designation)
+        and not any(
+            token.casefold() in adjustment_designation_folded
+            for token in NONCONCRETE_SELECTION_TOKENS
+        )
+    )
     if (
         isinstance(adjustment_plan, Mapping)
         and adjustment_plan.get("triggered") is True
         and isinstance(adjustment_configuration, Mapping)
-        and _present(
-            adjustment_configuration.get(
-                "candidate_model_or_designation"
-            )
-        )
+        and adjustment_designation_is_concrete
     ):
         return (
-            adjustment_configuration.get(
-                "candidate_model_or_designation"
-            ),
+            adjustment_designation,
             "ALGORITHMIC_SYSTEM_MODIFICATION_DESIGNATION",
         )
     pipe_specification = context.get("programmatic_pipe_specification", {})
@@ -3781,6 +3790,34 @@ def _model_value(context: Mapping[str, Any]) -> tuple[Any, str]:
         return (
             turbine_designation,
             "PROGRAMMATIC_TURBINE_ENGINEERING_DESIGNATION",
+        )
+    storage_vessel_specification = context.get(
+        "programmatic_storage_vessel_specification",
+        {},
+    )
+    storage_vessel_fields = (
+        storage_vessel_specification.get("fields", {})
+        if isinstance(storage_vessel_specification, Mapping)
+        else {}
+    )
+    storage_vessel_designation = (
+        storage_vessel_fields.get("model_designation", {}).get("value")
+        if isinstance(storage_vessel_fields, Mapping)
+        and isinstance(
+            storage_vessel_fields.get("model_designation"),
+            Mapping,
+        )
+        else None
+    )
+    if (
+        isinstance(storage_vessel_specification, Mapping)
+        and storage_vessel_specification.get("status")
+        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        and _present(storage_vessel_designation)
+    ):
+        return (
+            storage_vessel_designation,
+            "PROGRAMMATIC_STORAGE_VESSEL_ENGINEERING_DESIGNATION",
         )
     auxiliary_specification = context.get(
         "programmatic_auxiliary_specification",
@@ -6659,6 +6696,34 @@ def _field_cell(
                         "program_specification_sha256"
                     )
                     if isinstance(turbine_specification, Mapping)
+                    else None
+                ),
+                **candidate_source_metadata,
+            }
+        elif (
+            state
+            == "PROGRAMMATIC_STORAGE_VESSEL_ENGINEERING_DESIGNATION"
+        ):
+            storage_vessel_specification = context.get(
+                "programmatic_storage_vessel_specification",
+                {},
+            )
+            model_source = {
+                "kind": (
+                    "deterministic_programmatic_"
+                    "storage_vessel_specification"
+                ),
+                "program_generated": True,
+                "deterministic": True,
+                "llm_used": False,
+                "program_specification_sha256": (
+                    storage_vessel_specification.get(
+                        "program_specification_sha256"
+                    )
+                    if isinstance(
+                        storage_vessel_specification,
+                        Mapping,
+                    )
                     else None
                 ),
                 **candidate_source_metadata,

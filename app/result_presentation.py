@@ -248,6 +248,185 @@ def _predicate_narrative(predicate: dict[str, Any]) -> str:
     return f"{predicate_id}：{_human_branch_state(status)}；{suffix}。"
 
 
+_PROGRAM_SPECIFICATION_LABELS = {
+    "programmatic_tower_specification": "塔器专用选型器",
+    "programmatic_vessel_separator_specification": "容器/分离器专用选型器",
+    "programmatic_reactor_specification": "反应器专用选型器",
+    "programmatic_crystallizer_specification": "结晶器专用选型器",
+    "programmatic_storage_vessel_specification": "储罐专用选型器",
+    "programmatic_auxiliary_specification": "辅助设备专用选型器",
+    "programmatic_membrane_package_specification": "膜与成套设备专用选型器",
+    "programmatic_turbine_specification": "能量回收透平专用选型器",
+}
+
+_PROGRAM_BRANCH_FIELD_LABELS = {
+    "terminal_rule_id": "终选规则",
+    "terminal_status": "终选状态",
+    "terminal_selection_status": "终选状态",
+    "selection_basis": "选型依据",
+    "default_applied": "是否采用登记默认",
+    "recommended_type": "程序选择的具体型式",
+    "aspen_block_type": "Aspen 模块类型",
+    "internals_branch_id": "塔内件结构分支",
+    "packed_tower_branch": "是否进入填料塔分支",
+    "material_route_id": "材料路线",
+    "diameter_branch": "直径确定分支",
+    "height_branch": "高度确定分支",
+    "separator_branch_id": "分离器结构分支",
+    "orientation": "安装方向",
+    "liquid_liquid_branch": "是否进入液液分离分支",
+    "three_phase_branch": "是否进入三相分离分支",
+    "demister_branch_active": "是否配置除沫器",
+    "reactor_branch_id": "反应器结构分支",
+    "tubular_branch": "是否进入管式反应器分支",
+    "stirred_tank_branch": "是否进入搅拌釜分支",
+    "fallback_profile_id": "采用的保底参数包",
+    "crystallizer_branch_id": "结晶器结构分支",
+    "crystallization_route": "结晶工艺路线",
+    "storage_vessel_branch_id": "储罐结构分支",
+    "geometry_ratio_name": "几何比名称",
+    "geometry_ratio": "几何比取值",
+    "auxiliary_branch_id": "辅助设备结构分支",
+    "membrane_package_branch_id": "膜/成套设备结构分支",
+    "turbine_branch_id": "透平结构分支",
+}
+
+_PROGRAM_BRANCH_VALUE_LABELS = {
+    "registered_default": "登记默认规则",
+    "SINGLE_PASS_SIEVE_TRAY_REGISTERED_DEFAULT": "登记默认的单溢流筛板塔盘",
+    "PACKED_TOWER_REGISTERED_250Y_FALLBACK_OR_USER_OVERRIDE": (
+        "250Y 规整填料保底或用户覆盖"
+    ),
+    "Q345R_S30408_GENERAL_TOWER": "Q345R 壳体 + S30408 塔内件通用路线",
+    "Q345R_S30408_GENERAL_VESSEL": "Q345R 壳体 + S30408 内件通用路线",
+    "volume_flow_divided_by_registered_superficial_velocity": (
+        "体积流量÷登记表观气速"
+    ),
+    "registered_minimum_or_supplied_geometry": "登记最小尺寸或用户给定几何尺寸",
+    "stage_count_times_registered_HETP_plus_allowances": (
+        "理论级数×登记 HETP，再加顶部/底部余量"
+    ),
+    "tray_count_times_diameter_conditioned_spacing_plus_allowances": (
+        "塔板数×按直径选取的板间距，再加顶部/底部余量"
+    ),
+    "VERTICAL_GAS_LIQUID_SEPARATOR": "立式气液分离器",
+    "TUBULAR_PFR_MINIMUM_OR_VOLUME_CLOSED": "管式平推流反应器，按最小尺寸或体积闭合",
+    "STIRRED_TANK_GENERAL_LIQUID_MIXING_FALLBACK": (
+        "通用液相混合搅拌釜保底"
+    ),
+    "CONTINUOUS_DTB_EXTERNAL_COOLING_FALLBACK": "连续 DTB 外冷式结晶器保底",
+    "HORIZONTAL_REFLUX_DRUM": "卧式回流罐",
+    "VERTICAL_BUFFER_VESSEL": "立式缓冲罐",
+    "VERTICAL_PROCESS_VESSEL": "立式工艺容器",
+    "VERTICAL_STORAGE_VESSEL": "立式圆筒储罐",
+    "CENTRIFUGAL_COMPRESSOR": "离心式压缩机",
+    "RECIPROCATING_COMPRESSOR": "往复式压缩机",
+    "TOP_ENTRY_PITCHED_BLADE_TURBINE_AGITATOR": "顶入式斜叶涡轮搅拌器",
+    "HELICAL_KENICS_STATIC_MIXER": "螺旋元件 Kenics 静态混合器",
+    "SPIRAL_WOUND_8040_PA_TFC_ARRAY": "8040 聚酰胺复合膜卷式阵列",
+    "AUTOMATIC_RECESSED_CHAMBER_FILTER_PRESS": "自动厢式压滤机",
+    "CONTINUOUS_BELT_HOT_AIR_DRYER": "连续带式热风干燥机",
+    "TWIN_TOWER_TEMPERATURE_SWING_ADSORPTION_PACKAGE": "双塔变温吸附成套装置",
+    "SINGLE_STAGE_RADIAL_PAT_LIQUID_RECOVERY_TURBINE": (
+        "单级径向泵反转式液力回收透平"
+    ),
+    "MULTISTAGE_RADIAL_INFLOW_GAS_EXPANDER": "多级径向流气体膨胀透平",
+    "vertical_cylindrical_storage_vessel_preliminary": "立式圆筒储罐预选参数包",
+    "centrifugal_compressor_motor_drive_preliminary": "电机驱动离心压缩机预选参数包",
+    "reciprocating_compressor_motor_drive_preliminary": "电机驱动往复压缩机预选参数包",
+    "top_entry_pitched_blade_agitator_preliminary": "顶入式斜叶搅拌器预选参数包",
+    "dn_series_helical_static_mixer_preliminary": "DN 系列螺旋静态混合器预选参数包",
+    "spiral_wound_8040_pa_tfc_preliminary": "8040 聚酰胺复合膜卷式组件预选参数包",
+    "twin_tower_temperature_swing_adsorption_preliminary": (
+        "双塔变温吸附预选参数包"
+    ),
+    "single_stage_radial_pat_power_recovery_preliminary": (
+        "单级径向泵反转式液力回收预选参数包"
+    ),
+    "multistage_radial_inflow_gas_expander_preliminary": (
+        "多级径向流气体膨胀透平预选参数包"
+    ),
+}
+
+
+def _program_branch_value_label(value: Any) -> str:
+    if isinstance(value, bool):
+        return "是" if value else "否"
+    if value in (None, ""):
+        return "未提供"
+    text = str(value)
+    if text in _PROGRAM_BRANCH_VALUE_LABELS:
+        return _PROGRAM_BRANCH_VALUE_LABELS[text]
+    if text.upper() in {
+        "PASS", "FAIL", "UNKNOWN", "CALCULATED", "BLOCKED",
+        "DEFAULTED_TERMINAL_TYPE_SELECTED",
+        "EXPLICIT_TERMINAL_TYPE_SELECTED",
+    }:
+        return _code_label(text)
+    return text
+
+
+def _build_programmatic_selection_branches(
+    result: dict[str, Any],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for specification_key, specification in result.items():
+        if (
+            specification_key not in _PROGRAM_SPECIFICATION_LABELS
+            or not isinstance(specification, dict)
+        ):
+            continue
+        selection_branch = specification.get("selection_branch")
+        if not isinstance(selection_branch, dict) or not selection_branch:
+            continue
+        choices = []
+        for field_id, raw_value in selection_branch.items():
+            if raw_value is None:
+                continue
+            choices.append({
+                "field_id": str(field_id),
+                "label": _PROGRAM_BRANCH_FIELD_LABELS.get(
+                    str(field_id), str(field_id)
+                ),
+                "raw_value": raw_value,
+                "value_label": _program_branch_value_label(raw_value),
+            })
+        recommended_type = selection_branch.get("recommended_type")
+        choice_text = "；".join(
+            f"{item['label']}={item['value_label']} [{item['raw_value']}]"
+            if (
+                isinstance(item["raw_value"], str)
+                and str(item["raw_value"]) != item["value_label"]
+            )
+            else f"{item['label']}={item['value_label']}"
+            for item in choices
+            if item["field_id"] != "recommended_type"
+        )
+        narrative = (
+            f"设备专用算法分支：{_PROGRAM_SPECIFICATION_LABELS[specification_key]}"
+            f"执行“{choice_text or '未登记细分条件'}”；"
+            f"据此选择“{recommended_type or '未登记具体型式'}”。"
+            f"原始分支值保留在 {specification_key}.selection_branch，可逐项追溯。"
+        )
+        rows.append({
+            "specification_key": specification_key,
+            "specification_label": _PROGRAM_SPECIFICATION_LABELS[
+                specification_key
+            ],
+            "specification_status": specification.get("status"),
+            "specification_sha256": specification.get(
+                "program_specification_sha256"
+            ),
+            "recommended_type": recommended_type,
+            "choices": choices,
+            "selection_branch": selection_branch,
+            "branch_narrative": narrative,
+            "deterministic": specification.get("deterministic") is True,
+            "llm_used": specification.get("llm_used") is True,
+        })
+    return rows
+
+
 def _build_branch_selection(
     result: dict[str, Any],
     candidates: list[dict[str, Any]],
@@ -279,6 +458,7 @@ def _build_branch_selection(
         if isinstance(result.get("pump_engineering_selection"), dict)
         else {}
     )
+    programmatic_branches = _build_programmatic_selection_branches(result)
     natural_language: list[str] = []
     family_name = match.get("family_name") or match.get("family_id") or "OPEN"
     family_reasons = "、".join(map(str, match.get("reasons", []))) or "未登记理由"
@@ -301,6 +481,9 @@ def _build_branch_selection(
             f"这一步状态为 {_code_label(leading.get('status'))}，"
             f"不是未验证的厂家正式型号。"
         )
+    natural_language.extend(
+        item["branch_narrative"] for item in programmatic_branches
+    )
     if adjustment:
         if adjustment.get("triggered") is True:
             configuration = (
@@ -316,6 +499,23 @@ def _build_branch_selection(
         else:
             natural_language.append(
                 f"非标/多台分支：{adjustment.get('status') or '本次未触发登记阈值'}。"
+            )
+        if adjustment.get("branch_narrative"):
+            natural_language.append(
+                "系统构型分支依据："
+                + str(adjustment["branch_narrative"])
+            )
+        for option in adjustment.get(
+            "equivalent_recommendations", []
+        ):
+            if not isinstance(option, dict):
+                continue
+            natural_language.append(
+                f"等价比较方案 {option.get('rank') or '—'}："
+                f"{option.get('system_candidate_designation') or 'OPEN'}；"
+                f"适用考虑={option.get('suitability') or '未登记'}；"
+                "当前只完成算术/总量守恒，"
+                "未证明系统曲线或热工水力等价。"
             )
     pump_material = (
         pump_selection.get("material_and_seal", {})
@@ -419,6 +619,7 @@ def _build_branch_selection(
             "candidate_families": match.get("candidates", []),
         },
         "terminal_route": terminal,
+        "programmatic_selection_branches": programmatic_branches,
         "leading_candidate_predicate_branches": predicate_steps,
         "candidate_comparison": [
             {

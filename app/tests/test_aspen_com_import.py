@@ -679,6 +679,25 @@ TERMINAL ERRORS      0        0         0
         self.assertFalse(parsed["found"])
         self.assertIsNone(aspen_com_import.verified_run_status(parsed))
 
+    def test_clean_counts_without_raw_history_are_not_formal_run_evidence(self) -> None:
+        parsed = aspen_com_import.parse_aspen_history(
+            "NO ERRORS OR WARNINGS GENERATED\n"
+        )
+        missing = aspen_com_import.classify_run_evidence(
+            parsed,
+            run_requested=True,
+            raw_history_present=False,
+        )
+        clean = aspen_com_import.classify_run_evidence(
+            parsed,
+            run_requested=True,
+            raw_history_present=True,
+        )
+        self.assertEqual(missing["status"], "RUN_EVIDENCE_MISSING")
+        self.assertFalse(missing["clean"])
+        self.assertEqual(clean["status"], "CLEAN_RUN_EVIDENCE")
+        self.assertTrue(clean["clean"])
+
     def test_pump_com_power_cards_are_independent_and_wnet_is_not_brake_power(self) -> None:
         self.assertEqual(
             aspen_com_import.BLOCK_FIELDS["WNET"],

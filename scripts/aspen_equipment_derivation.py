@@ -224,6 +224,19 @@ PIPE_MATERIAL_STANDARD_ROUTES: dict[str, dict[str, Any]] = {
 PIPE_HYDRAULIC_DEFAULT_POLICY_ID = "PIPE-HYDRAULIC-DEFAULTS-2026-01"
 PIPE_HYDRAULIC_DEFAULT_POLICY: dict[str, Any] = {
     "policy_id": PIPE_HYDRAULIC_DEFAULT_POLICY_ID,
+    "missing_process_state_placeholder": {
+        "selected_dn": 25,
+        "provisional_wall_thickness_mm": 4.0,
+        "design_pressure_mpa_gauge": 0.1,
+        "design_temperature_c": 40.0,
+        "material_route": "CS20",
+        "basis": (
+            "project-configurable minimum complete line-spec placeholder; "
+            "DN25 is an internal conservative identity default, not a "
+            "national-code minimum"
+        ),
+        "promotion_cap": "TYPE_SCREENING",
+    },
     "phase_defaults": {
         "liquid": {
             "density_kg_m3": 1000.0,
@@ -252,7 +265,7 @@ PIPE_HYDRAULIC_DEFAULT_POLICY: dict[str, Any] = {
         "默认密度/黏度的结果必须报警并禁止作为正式管径或压降验收。"
     ),
 }
-ENGINE_VERSION = "1.9.4"
+ENGINE_VERSION = "1.9.5"
 SINGLE_INLET_OUTLET_BLOCKS = {"PUMP", "COMPR", "MCOMPR", "VALVE", "HEATER", "PIPE"}
 CLEAN_BLOCK_WORDS = {"0", "ok", "pass", "passed", "converged", "success", "successful", "完成", "正常"}
 SIMULATION_LOGIC_BLOCK_TYPES = frozenset({"FSPLIT", "MIXER", "HIERARCHY"})
@@ -6609,7 +6622,90 @@ def apply_pipe_hydraulic_preselection(
         ),
     }
     if flow_m3_h is None or flow_m3_h <= 0.0:
-        base["status"] = "BLOCKED_MISSING_OR_NONPOSITIVE_FLOW"
+        placeholder = dict(
+            PIPE_HYDRAULIC_DEFAULT_POLICY[
+                "missing_process_state_placeholder"
+            ]
+        )
+        selected_dn = int(placeholder["selected_dn"])
+        catalog = matcher.load_pipe_standard_dn_od()
+        selected_row = next(
+            (
+                row
+                for row in catalog
+                if int(row.get("dn") or 0) == selected_dn
+            ),
+            None,
+        )
+        if selected_row is None:
+            base["status"] = "BLOCKED_PLACEHOLDER_DN_NOT_IN_VERIFIED_CATALOG"
+            base["preselection_sha256"] = _canonical_sha256(base)
+            record["pipe_hydraulic_preselection"] = base
+            return base
+        wall = float(placeholder["provisional_wall_thickness_mm"])
+        outer = float(selected_row["outer_diameter_mm"])
+        inner = outer - 2.0 * wall
+        selected_catalog_record = {
+            key: selected_row.get(key)
+            for key in (
+                "dn",
+                "nps",
+                "outer_diameter_mm",
+                "standard_id",
+                "standard_version",
+                "source_pdf_sha256",
+                "physical_page",
+                "source_table_asset_id",
+                "source_row_1based",
+                "qa_status",
+                "reuse_class",
+                "application_boundary",
+            )
+        }
+        selected_catalog_record["catalog_path"] = str(
+            matcher.PIPE_STANDARD_DN_OD_PATH
+        )
+        selected_catalog_record["catalog_sha256"] = sha256_file(
+            matcher.PIPE_STANDARD_DN_OD_PATH
+        )
+        selected_catalog_record["record_binding_sha256"] = (
+            _canonical_sha256(selected_catalog_record)
+        )
+        base.update({
+            "status": (
+                "PROVISIONAL_MINIMUM_COMPLETE_SPEC_PLACEHOLDER_"
+                "MISSING_PROCESS_STATE"
+            ),
+            "selected_dn_candidate": selected_dn,
+            "selected_catalog_outer_diameter_mm": outer,
+            "provisional_wall_thickness_mm": wall,
+            "selected_provisional_inner_diameter_mm": inner,
+            "placeholder_required_inner_diameter_mm": inner,
+            "placeholder_design_pressure_mpa_gauge": float(
+                placeholder["design_pressure_mpa_gauge"]
+            ),
+            "placeholder_design_temperature_c": float(
+                placeholder["design_temperature_c"]
+            ),
+            "selected_catalog_record": selected_catalog_record,
+            "selection_scope": (
+                "CONCRETE_IDENTITY_PLACEHOLDER_ONLY_NO_HYDRAULIC_SIZING"
+            ),
+            "default_policy": placeholder,
+            "formal_hydraulic_acceptance": False,
+            "open_gates": [
+                "positive_process_flow",
+                "phase_and_state_condition",
+                "aspen_or_project_pressure_and_temperature",
+                "project_line_length_and_fittings",
+                "project_pressure_drop_acceptance",
+            ],
+            "warning": (
+                "Aspen 未给出可用正流量/相态/状态；程序仍按已验证 DN 表生成"
+                "具体 DN25 完整规格占位候选。该分支只保证输出可审查，禁止用于"
+                "正式水力、采购或施工。"
+            ),
+        })
         base["preselection_sha256"] = _canonical_sha256(base)
         record["pipe_hydraulic_preselection"] = base
         return base
@@ -8749,15 +8845,48 @@ def build_programmatic_pipe_specification(
     internal_viscosity_estimate = (
         viscosity_diagnostic.get("internal_correlation_used") is True
     )
-    selected_dn_value = finite_number(_match_value(match_result, "selected_dn"))
-    initial_outer_diameter = finite_number(
-        _match_value(match_result, "selected_outer_diameter_mm")
+    hydraulic_preselection = (
+        dict(record.get("pipe_hydraulic_preselection") or {})
+        if isinstance(record.get("pipe_hydraulic_preselection"), dict)
+        else {}
     )
-    initial_wall = finite_number(
-        _match_value(match_result, "selected_wall_thickness_mm")
+    minimum_placeholder_applied = (
+        hydraulic_preselection.get("status")
+        == "PROVISIONAL_MINIMUM_COMPLETE_SPEC_PLACEHOLDER_MISSING_PROCESS_STATE"
     )
-    required_inner_diameter = finite_number(
-        _match_value(match_result, "required_inner_diameter_mm")
+    selected_dn_value = (
+        finite_number(_match_value(match_result, "selected_dn"))
+        or finite_number(hydraulic_preselection.get("selected_dn_candidate"))
+    )
+    initial_outer_diameter = (
+        finite_number(
+            _match_value(match_result, "selected_outer_diameter_mm")
+        )
+        or finite_number(
+            hydraulic_preselection.get(
+                "selected_catalog_outer_diameter_mm"
+            )
+        )
+    )
+    initial_wall = (
+        finite_number(
+            _match_value(match_result, "selected_wall_thickness_mm")
+        )
+        or finite_number(
+            hydraulic_preselection.get(
+                "provisional_wall_thickness_mm"
+            )
+        )
+    )
+    required_inner_diameter = (
+        finite_number(
+            _match_value(match_result, "required_inner_diameter_mm")
+        )
+        or finite_number(
+            hydraulic_preselection.get(
+                "placeholder_required_inner_diameter_mm"
+            )
+        )
     )
     matcher_design_pressure = finite_number(
         _match_value(match_result, "design_pressure_mpa")
@@ -8818,6 +8947,12 @@ def build_programmatic_pipe_specification(
         if matcher_design_pressure is not None
         else finite_number(record.get("design_pressure_mpa"))
     )
+    if design_pressure is None and minimum_placeholder_applied:
+        design_pressure = finite_number(
+            hydraulic_preselection.get(
+                "placeholder_design_pressure_mpa_gauge"
+            )
+        )
     if (
         (design_pressure is None or design_pressure <= 0.0)
         and pressure_basis == "absolute"
@@ -8828,8 +8963,21 @@ def build_programmatic_pipe_specification(
     design_temperature = finite_number(
         _match_value(match_result, "design_temperature_c")
     )
+    if design_temperature is None and minimum_placeholder_applied:
+        design_temperature = finite_number(
+            hydraulic_preselection.get(
+                "placeholder_design_temperature_c"
+            )
+        )
     preliminary_material = str(_match_value(match_result, "material") or "")
     dn_standard_record = _pipe_dn_standard_catalog_record(match_result)
+    if dn_standard_record is None and isinstance(
+        hydraulic_preselection.get("selected_catalog_record"),
+        dict,
+    ):
+        dn_standard_record = dict(
+            hydraulic_preselection["selected_catalog_record"]
+        )
     required = {
         "selected_dn": selected_dn_value,
         "initial_outer_diameter_mm": initial_outer_diameter,
@@ -9431,6 +9579,13 @@ def build_programmatic_pipe_specification(
         )
     )
 
+    if minimum_placeholder_applied:
+        designation += (
+            "；最高级警告：Aspen 当前流股没有可用正流量、相态、压力或温度，"
+            "本候选使用程序登记的最低完整规格占位分支（DN25、0.1 MPa(g)、"
+            "40 ℃、20钢路线）；仅用于保证设备选型一览表有具体且可追溯的程序"
+            "候选，水力计算未执行，禁止直接采购、施工或报审"
+        )
     if wall_fallback["fallback_inputs"]:
         designation += (
             "；强警告：壁厚使用内置公式保底，退化输入="
@@ -10281,13 +10436,18 @@ def build_programmatic_pipe_specification(
         "version": "1.4.0",
         "status": "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
         "selection_scope": (
-            "PRELIMINARY_LINE_CLASS_GEOMETRY_AND_HYDRAULIC_SCREENING"
+            "CONCRETE_MINIMUM_SPEC_PLACEHOLDER_NO_HYDRAULIC_SIZING"
+            if minimum_placeholder_applied
+            else "PRELIMINARY_LINE_CLASS_GEOMETRY_AND_HYDRAULIC_SCREENING"
         ),
         "deterministic": True,
         "llm_used": False,
         "program_generated": True,
         "stream_id": stream_id,
         "designation": designation,
+        "minimum_process_state_placeholder_applied": (
+            minimum_placeholder_applied
+        ),
         "manufacturing_route": {
             "route_code": material["route_code"],
             "large_bore_welded_route": material[
@@ -10506,6 +10666,9 @@ def build_programmatic_pipe_specification(
                 "pipe_hydraulic_preselection": record.get(
                     "pipe_hydraulic_preselection"
                 ),
+                "minimum_process_state_placeholder_applied": (
+                    minimum_placeholder_applied
+                ),
                 "manufacturing_route": material["route_code"],
                 "design_temperature_c": design_temperature,
                 "line_length_m": record.get("line_length_m"),
@@ -10520,6 +10683,16 @@ def build_programmatic_pipe_specification(
             "status": "BLOCKED_PRELIMINARY_ONLY",
             "open_gates": [
                 "project_authority_piping_class",
+                *(
+                    [
+                        "positive_process_flow",
+                        "phase_and_state_condition",
+                        "aspen_or_project_pressure_and_temperature",
+                        "replace_minimum_complete_spec_placeholder",
+                    ]
+                    if minimum_placeholder_applied
+                    else []
+                ),
                 "coherent_product_standard_dn_od_wall_mapping",
                 "pipe_product_standard_scope_and_manufacturability",
                 *material["manufacturing_open_gates"],
@@ -10837,11 +11010,82 @@ def apply_programmatic_pipe_model_boundary(
         if isinstance(match_result.get("model_recommendation"), dict)
         else {}
     )
+    synthesized_candidate = False
+    if not model:
+        leading_candidate: dict[str, Any] = {
+            "candidate_id": (
+                "PROGRAMMATIC-PIPE-"
+                + (
+                    specification_sha256[:12]
+                    if specification_sha256
+                    else "UNHASHED"
+                )
+            ),
+            "candidate_name": equipment_type,
+            "recommended_type": equipment_type,
+            "designation": designation,
+            "status": "PRELIMINARY_PROGRAMMATIC_PIPE_ROUTE_SELECTED",
+            "candidate_eligibility": (
+                "IDENTITY_AND_PRELIMINARY_GEOMETRY_ONLY"
+            ),
+            "eligible_for_formal_selection": False,
+            "formal_model": False,
+            "specification": {},
+        }
+        model = {
+            "status": "PIPE_ROUTE_SELECTED_FORMAL_DESIGN_BLOCKED",
+            "recommended_type": equipment_type,
+            "candidates": [leading_candidate],
+            "leading_candidate": leading_candidate,
+            "screening_candidate_count": 1,
+            "formal_ready_candidate_count": 0,
+            "selection_execution": {
+                "status": (
+                    "TYPE_AND_GEOMETRY_SELECTED_PIPE_DESIGN_BLOCKED"
+                ),
+                "execution_scope": (
+                    "PIPE_ROUTE_DN_AND_METRIC_GEOMETRY_SCREENING_ONLY"
+                ),
+                "formal_selection_executed": False,
+            },
+        }
+        match_result["model_recommendation"] = model
+        match_result["underlying_match_status"] = match_result.get("status")
+        match_result["status"] = (
+            "PROVISIONAL_PROGRAMMATIC_PIPE_ROUTE_SELECTED"
+        )
+        synthesized_candidate = True
     leading = (
         model.get("leading_candidate")
         if isinstance(model.get("leading_candidate"), dict)
         else None
     )
+    if leading is None:
+        leading = {
+            "candidate_id": (
+                "PROGRAMMATIC-PIPE-"
+                + (
+                    specification_sha256[:12]
+                    if specification_sha256
+                    else "UNHASHED"
+                )
+            ),
+            "candidate_name": equipment_type,
+            "recommended_type": equipment_type,
+            "designation": designation,
+            "status": "PRELIMINARY_PROGRAMMATIC_PIPE_ROUTE_SELECTED",
+            "specification": {},
+        }
+        model.setdefault("candidates", []).insert(0, leading)
+        model["leading_candidate"] = leading
+        model["screening_candidate_count"] = len(
+            [
+                item
+                for item in model.get("candidates", [])
+                if isinstance(item, dict)
+            ]
+        )
+        synthesized_candidate = True
     if isinstance(leading, dict):
         leading["designation"] = designation
         leading["candidate_name"] = equipment_type
@@ -10855,6 +11099,7 @@ def apply_programmatic_pipe_model_boundary(
         )
         leading["eligible_for_formal_selection"] = False
         leading["formal_model"] = False
+        leading["synthesized_after_input_block"] = synthesized_candidate
         leading["missing_gates"] = list(
             pipe_specification.get("formal_readiness", {}).get(
                 "open_gates",
@@ -10887,13 +11132,27 @@ def apply_programmatic_pipe_model_boundary(
         "selection_basis": (
             "deterministic_programmatic_pipe_specification"
         ),
-        "default_applied": False,
+        "default_applied": bool(
+            pipe_specification.get(
+                "minimum_process_state_placeholder_applied"
+            )
+        ),
         "evidence_class": "J",
         "provisional": True,
         "rule_id": "PIPE_HYDRAULIC_AND_MANUFACTURING_SCREEN_V1",
         "assumption": (
-            "管型、制造路线、DN及公制OD×t由程序完成预筛；正式管道"
-            "等级、产品标准适用性、全线压降、应力和项目审批仍未闭合。"
+            (
+                "Aspen 未给出可用正流量/相态/压力/温度；程序采用登记的"
+                "DN25 最低完整规格占位分支。候选是具体的，但水力与正式"
+                "设计全部未闭合。"
+            )
+            if pipe_specification.get(
+                "minimum_process_state_placeholder_applied"
+            )
+            else (
+                "管型、制造路线、DN及公制OD×t由程序完成预筛；正式管道"
+                "等级、产品标准适用性、全线压降、应力和项目审批仍未闭合。"
+            )
         ),
         "terminal_scope": (
             "IDENTITY_AND_PRELIMINARY_GEOMETRY_ONLY"

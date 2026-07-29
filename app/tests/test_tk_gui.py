@@ -138,11 +138,64 @@ class TkGuiTests(unittest.TestCase):
         self.assertEqual(self.app.llm_timeout.get(), "90")
         self.assertEqual(self.app.llm_wire_api.get(), "chat_completions")
         self.assertEqual(self.app.llm_reasoning_effort.get(), "medium")
+
+    def test_header_and_primary_command_bar_fit_the_supported_minimum_width(self) -> None:
+        self.root.geometry("1080x720+0+0")
+        self.root.update_idletasks()
+        right_edge = self.root.winfo_rootx() + self.root.winfo_width()
+        for widget in (
+            self.app.header_status_frame,
+            self.app.workflow_quick_frame,
+        ):
+            with self.subTest(widget=str(widget)):
+                self.assertGreater(widget.winfo_width(), 1)
+                self.assertLessEqual(
+                    widget.winfo_rootx() + widget.winfo_width(),
+                    right_edge,
+                )
+
+    def test_empty_pfd_has_actionable_onboarding_instead_of_a_blank_panel(self) -> None:
+        items = self.app.pfd_view.canvas.find_withtag("role:empty_state")
+        self.assertGreaterEqual(len(items), 8)
+
+    def test_result_tables_offer_keyboard_access_to_complete_row_details(self) -> None:
+        self.app.customer_tree.insert(
+            "",
+            "end",
+            values=("一览表", "型号 / 工程规格", "GB/T 5662 泵规格", "—", "—", "—", "GLOBAL"),
+        )
+        first = self.app.customer_tree.get_children()[0]
+        self.app.customer_tree.selection_set(first)
+        self.assertEqual(
+            self.app._show_tree_row_details(
+                self.app.customer_tree,
+                "客户交付字段",
+            ),
+            "break",
+        )
+        self.assertTrue(self.app.tree_detail_window.winfo_exists())
+        self.assertEqual(
+            self.app.customer_tree.bind("<Return>") != "",
+            True,
+        )
         self.assertTrue(self.app.llm_disable_response_storage.get())
         self.assertTrue(self.app.knowledge_pack_vars)
         self.assertTrue(self.app.llm_enabled.get())
-        self.assertEqual(self.app.llm_injection_point.get(), "audit")
+        self.assertEqual(
+            self.app.llm_injection_point.get(),
+            "engineering_choice",
+        )
         self.assertEqual(self.app.llm_context_scope.get(), "minimum")
+        self.assertEqual(
+            self.app.aspen_suite_button.cget("text"),
+            "按队列顺序批量处理",
+        )
+        self.assertTrue(self.app.aspen_ensure_transport.get())
+        self.assertFalse(self.app.aspen_suite_require_clean.get())
+        self.assertEqual(
+            tuple(self.app.aspen_suite_tree["columns"]),
+            ("index", "file", "group", "status"),
+        )
 
     def test_dropdowns_show_chinese_but_keep_canonical_values(self) -> None:
         self.assertEqual(
@@ -195,7 +248,7 @@ class TkGuiTests(unittest.TestCase):
         self.app.llm_wire_api.set("responses")
         self.app.llm_reasoning_effort.set("xhigh")
 
-        def immediate(_button, _label, work, done):
+        def immediate(_button, _label, work, done, **_kwargs):
             done(work())
 
         connected = {
@@ -237,7 +290,7 @@ class TkGuiTests(unittest.TestCase):
         self.app.llm_model.set("bad-model-id")
         self.app.llm_key.set("TEST-SECRET")
 
-        def immediate(_button, _label, work, done):
+        def immediate(_button, _label, work, done, **_kwargs):
             done(work())
 
         failed = {
@@ -281,6 +334,80 @@ class TkGuiTests(unittest.TestCase):
             if isinstance(child, tk.Label) and child.cget("text") == "ⓘ"
         ]
         self.assertEqual(len(help_controls), len(self.app.field_vars))
+
+    def test_result_navigation_is_grouped_into_four_task_oriented_levels(self) -> None:
+        top_labels = [
+            self.app.result_tabs.tab(tab_id, "text")
+            for tab_id in self.app.result_tabs.tabs()
+        ]
+        self.assertEqual(
+            top_labels,
+            ["1  流程", "2  选型结果", "3  计算与校核", "4  Agent 与数据"],
+        )
+        self.assertEqual(
+            [
+                self.app.selection_tabs.tab(tab_id, "text")
+                for tab_id in self.app.selection_tabs.tabs()
+            ],
+            ["客户交付", "分支选择", "参数卡", "候选型号"],
+        )
+        self.assertEqual(
+            [
+                self.app.calculation_tabs.tab(tab_id, "text")
+                for tab_id in self.app.calculation_tabs.tabs()
+            ],
+            ["推导与调整", "校核与缺口", "公式链"],
+        )
+        self.app._select_result_panel(self.app.parameter_panel)
+        self.assertEqual(
+            self.app.selection_tabs.select(),
+            str(self.app.parameter_panel),
+        )
+
+    def test_manual_field_filter_supports_required_missing_and_search_views(self) -> None:
+        selection = self.app._selection()
+        required_names = {
+            str(field["name"])
+            for field in selection["fields"]
+            if field.get("primary_calculation_required")
+        }
+        self.app.manual_view_filter.set("required")
+        self.app._render_manual_fields()
+        self.assertEqual(set(self.app.field_vars), required_names)
+        self.assertIn("当前显示", self.app.manual_field_count_var.get())
+
+        self.app.manual_filter_query.set("流量")
+        self.app._render_manual_fields()
+        self.assertIn("flow_m3_h", self.app.field_vars)
+        self.assertTrue(
+            all(
+                "流量" in str(field.get("label") or "")
+                or "流量" in str(field.get("manual_group_title") or "")
+                for field in selection["fields"]
+                if field.get("name") in self.app.field_vars
+            )
+        )
+
+        self.app._clear_manual_filter()
+        self.assertEqual(self.app.manual_view_filter.get(), "all")
+        self.assertEqual(self.app.manual_filter_query.get(), "")
+
+    def test_shortcuts_and_workflow_state_make_primary_actions_discoverable(self) -> None:
+        for sequence in (
+            "<Control-o>",
+            "<Control-Return>",
+            "<Control-s>",
+            "<Control-Shift-S>",
+            "<Control-f>",
+            "<Control-r>",
+        ):
+            self.assertTrue(self.root.bind(sequence))
+        self.assertEqual(
+            self.app.workflow_step_labels[1].cget("style"),
+            "WorkflowStep.Active.TLabel",
+        )
+        self.assertTrue(self.app.quick_save_button.instate(["disabled"]))
+        self.assertTrue(self.app.quick_export_button.instate(["disabled"]))
 
     def test_knowledge_tab_exposes_browsable_fields_before_free_text_query(self) -> None:
         self.assertEqual(self.app.kg_search_button.cget("text"), "开始查询")
@@ -515,6 +642,16 @@ class TkGuiTests(unittest.TestCase):
         self.assertIn("内置公式生成", self.app.formula_notice_var.get())
         self.assertIn("压差折算压头", self.app._formula_help_text)
         self.assertIn("不能证明", self.app._formula_help_text)
+        self.assertEqual(
+            self.app.workflow_step_labels[3].cget("style"),
+            "WorkflowStep.Active.TLabel",
+        )
+        self.assertFalse(self.app.quick_save_button.instate(["disabled"]))
+        self.assertFalse(self.app.quick_export_button.instate(["disabled"]))
+        self.assertEqual(
+            self.app.result_tabs.select(),
+            str(self.app._result_panel_locations[str(self.app.customer_panel)][0]),
+        )
 
     def test_gui_agent_run_calls_only_the_protocol_17_bridge(self) -> None:
         values = {
@@ -545,7 +682,7 @@ class TkGuiTests(unittest.TestCase):
                 "prepared": {
                     "context_pack": {
                         "context_sha256": "A" * 64,
-                        "injection_point": "audit",
+                        "injection_point": "engineering_choice",
                         "context_scope": "minimum",
                     },
                 },
@@ -554,7 +691,7 @@ class TkGuiTests(unittest.TestCase):
             },
         }
 
-        def immediate(_button, _label, work, done):
+        def immediate(_button, _label, work, done, **_kwargs):
             done(work())
 
         with patch.object(self.app, "_background", side_effect=immediate), patch.object(
@@ -565,7 +702,7 @@ class TkGuiTests(unittest.TestCase):
             self.app._run_llm()
         staged.assert_called_once()
         args = staged.call_args.args
-        self.assertEqual(args[3], "audit")
+        self.assertEqual(args[3], "engineering_choice")
         self.assertEqual(args[4], "minimum")
         self.assertIn("COMPLETED_DETERMINISTIC_ONLY", self.app.hybrid_state.get())
 
