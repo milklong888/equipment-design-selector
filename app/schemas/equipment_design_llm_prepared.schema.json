@@ -12,7 +12,7 @@
     "schema": {"const": "equipment-design-llm-prepared-v1"},
     "injection_point": {
       "enum": [
-        "semantic_extraction", "textual_condition_judgment", "ambiguity_resolution",
+        "semantic_extraction", "textual_condition_judgment", "engineering_choice", "ambiguity_resolution",
         "kg_retrieval_planning", "audit"
       ]
     },

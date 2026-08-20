@@ -20,6 +20,8 @@ venv/
 /knowledge_graph/*
 !/knowledge_graph/aspen_equipment_derivation_chain.md
 !/knowledge_graph/aspen_equipment_export.schema.json
+!/knowledge_graph/aspen_extraction_coverage.schema.json
+!/knowledge_graph/ai_engineering_choice_registry.json
 !/knowledge_graph/equipment_connection_selection_package.schema.json
 !/knowledge_graph/equipment_customer_output_profiles.json
 !/knowledge_graph/equipment_design_parameter_package.schema.json
@@ -56,6 +58,10 @@ venv/
 !/docs/STAGE1_2_4_0_RELEASE_VERIFICATION_20260724.md
 !/docs/DATABASE_STRUCTURE.md
 !/docs/ALGORITHM_GUIDE.md
+!/docs/GUI_DESIGN_NOTES.md
+!/docs/ASPEN_SMOKE_SUITE_VERIFICATION_20260728.md
+!/docs/PUMP_EXCHANGER_EQUIVALENCE_VERIFICATION_20260728.md
+!/docs/RELEASE_2_4_1_20260729.md
 /DELIVERY_STATUS_20260720_PROMPT_AUDIT.md
 /RECOVERED_RUNTIME_ASSET_REPORT.json
 

@@ -6,7 +6,8 @@
   "additionalProperties": false,
   "required": [
     "schema", "machine_state", "deterministic_result", "deterministic_recalculation",
-    "calculation_assist_application", "terminal_selection_application", "selection_completeness", "prepared",
+    "calculation_assist_application", "terminal_selection_application",
+    "engineering_choice_application", "selection_completeness", "prepared",
     "knowledge_context", "orchestration", "execution_timeline", "llm_review", "fallback",
     "application_boundary"
   ],
@@ -20,6 +21,7 @@
     "deterministic_recalculation": {"type": ["object", "null"]},
     "calculation_assist_application": {"type": ["object", "null"]},
     "terminal_selection_application": {"type": ["object", "null"]},
+    "engineering_choice_application": {"type": ["object", "null"]},
     "selection_completeness": {
       "type": "object",
       "required": [

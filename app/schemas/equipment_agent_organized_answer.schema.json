@@ -10,6 +10,7 @@
     "equipment_count",
     "equipment",
     "authority",
+    "llm_control_result",
     "source_presentation_sha256",
     "organized_answer_sha256"
   ],
@@ -19,8 +20,9 @@
     },
     "section_order": {
       "const": [
-        "结论",
-        "计算",
+        "基本信息",
+        "分支选择与大模型调控",
+        "详细计算链条",
         "候选与系统修改方案",
         "强制警告",
         "待补证据",
@@ -38,6 +40,11 @@
         "additionalProperties": false,
         "required": [
           "equipment_id",
+          "basic_information",
+          "branch_selection",
+          "llm_control_result",
+          "detailed_calculation_chain",
+          "component_selections",
           "conclusion",
           "calculations",
           "candidates_and_system_plan",
@@ -50,6 +57,21 @@
         "properties": {
           "equipment_id": {
             "type": ["string", "null"]
+          },
+          "basic_information": {
+            "type": "object"
+          },
+          "branch_selection": {
+            "type": "object"
+          },
+          "llm_control_result": {
+            "type": "object"
+          },
+          "detailed_calculation_chain": {
+            "type": "array"
+          },
+          "component_selections": {
+            "type": "array"
           },
           "conclusion": {
             "type": "object"
@@ -92,7 +114,8 @@
         "llm_may_organize_language_only",
         "llm_may_change_counts_models_or_open_gates",
         "program_generated",
-        "llm_used"
+        "llm_used",
+        "llm_result_visible"
       ],
       "properties": {
         "deterministic_facts_immutable": {
@@ -108,9 +131,15 @@
           "const": true
         },
         "llm_used": {
-          "const": false
+          "type": "boolean"
+        },
+        "llm_result_visible": {
+          "const": true
         }
       }
+    },
+    "llm_control_result": {
+      "type": "object"
     },
     "source_presentation_sha256": {
       "type": "string",

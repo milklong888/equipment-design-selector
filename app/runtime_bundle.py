@@ -20,6 +20,7 @@ RUNTIME_ROOTS = (
     "equipment_selection_graph",
     "data",
     "app/schemas",
+    "app/fixtures",
 )
 STANDARDS_SQLITE_PATH = (
     "knowledge_graph/standards_graph/source_layer/indexes/standards_knowledge.sqlite"
@@ -37,6 +38,7 @@ REQUIRED_RUNTIME_PATHS = {
     "knowledge_graph/README.md",
     "knowledge_graph/equipment_match_rules.json",
     "knowledge_graph/equipment_model_recommendation_rules.json",
+    "knowledge_graph/ai_engineering_choice_registry.json",
     "knowledge_graph/equipment_parameter_chain_templates.json",
     "knowledge_graph/equipment_customer_output_profiles.json",
     "knowledge_graph/equipment_design_parameter_package.schema.json",
@@ -44,6 +46,7 @@ REQUIRED_RUNTIME_PATHS = {
     "knowledge_graph/equipment_service_label_derivation_contract.md",
     "knowledge_graph/equipment_service_profile.schema.json",
     "knowledge_graph/aspen_equipment_export.schema.json",
+    "knowledge_graph/aspen_extraction_coverage.schema.json",
     "knowledge_graph/equipment_type_applicability_contract.md",
     "knowledge_graph/equipment_type_applicability_graph.schema.json",
     "knowledge_graph/equipment_type_applicability_label_catalog.json",
@@ -86,6 +89,8 @@ REQUIRED_RUNTIME_PATHS = {
     "app/schemas/equipment_family_datasheet.schema.json",
     "app/schemas/equipment_evidence_index.schema.json",
     "app/schemas/equipment_database_authority_registry.schema.json",
+    "app/fixtures/agent_selftest_request.json",
+    "app/fixtures/all_family_minimum_meaningful_inputs.json",
 }
 SQLITE_COUNT_TABLES = (
     "documents",
@@ -100,12 +105,27 @@ class RuntimeBundleError(RuntimeError):
     pass
 
 
+def _filesystem_path(path: Path) -> str:
+    """Return an OS path that remains usable beyond legacy Windows MAX_PATH."""
+
+    value = os.path.abspath(os.fspath(path))
+    if os.name != "nt" or value.startswith("\\\\?\\"):
+        return value
+    if value.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + value[2:]
+    return "\\\\?\\" + value
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    with open(_filesystem_path(path), "rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest().upper()
+
+
+def _file_size(path: Path) -> int:
+    return int(os.stat(_filesystem_path(path)).st_size)
 
 
 def _canonical_sha256(value: Any) -> str:
@@ -132,21 +152,33 @@ def _absolute_without_resolving_links(path: Path) -> Path:
 
 
 def _is_link_or_junction(path: Path) -> bool:
-    if path.is_symlink():
+    filesystem_path = _filesystem_path(path)
+    if os.path.islink(filesystem_path):
         return True
-    is_junction = getattr(path, "is_junction", None)
-    return bool(is_junction and is_junction())
+    if os.name != "nt":
+        return False
+    try:
+        attributes = int(
+            getattr(
+                os.stat(filesystem_path, follow_symlinks=False),
+                "st_file_attributes",
+                0,
+            )
+        )
+    except OSError:
+        return False
+    return bool(attributes & 0x400)
 
 
 def _walk_regular_files(root: Path) -> Iterable[Path]:
     pending = [root]
     while pending:
         directory = pending.pop()
-        with os.scandir(directory) as entries:
+        with os.scandir(_filesystem_path(directory)) as entries:
             ordered = sorted(entries, key=lambda entry: entry.name.casefold())
         child_directories: list[Path] = []
         for entry in ordered:
-            path = Path(entry.path)
+            path = directory / entry.name
             if _is_link_or_junction(path):
                 continue
             if entry.is_dir(follow_symlinks=False):
@@ -180,6 +212,8 @@ def _asset_class(relative: str) -> str:
         return "equipment_model_authority"
     if relative.startswith("app/schemas/"):
         return "protocol_schemas"
+    if relative.startswith("app/fixtures/"):
+        return "acceptance_fixtures"
     if relative.startswith("data/"):
         return "deterministic_data"
     return "unclassified"
@@ -215,7 +249,7 @@ def _records(root: Path) -> list[dict[str, Any]]:
         {
             "runtime_path": relative,
             "asset_class": _asset_class(relative),
-            "size_bytes": int(path.stat().st_size),
+            "size_bytes": _file_size(path),
             "sha256": sha256_file(path),
         }
         for relative, path in _runtime_files(root)
@@ -274,6 +308,7 @@ def create_manifest(root: Path, output: Path | None = None) -> dict[str, Any]:
                 "standards SQLite full-text authority carrier",
                 "standards Markdown/JSON and all canonical CSV audit/table assets",
                 "deterministic pump data and all Agent/LLM/presentation schemas",
+                "frozen all-family minimum-meaningful-input acceptance fixture",
             ],
             "excluded_with_reason": {
                 "png": "rendering duplicates; figure captions, page/bbox metadata and source hashes remain queryable in SQLite",
@@ -369,7 +404,7 @@ def verify_runtime_bundle(root: Path, *, required: bool = False) -> dict[str, An
     for relative in sorted(expected_paths & actual_paths):
         expected = expected_by_path[relative]
         path = actual_by_path[relative]
-        actual_size = int(path.stat().st_size)
+        actual_size = _file_size(path)
         expected_size = expected.get("size_bytes")
         if not isinstance(expected_size, int) or isinstance(expected_size, bool):
             continue

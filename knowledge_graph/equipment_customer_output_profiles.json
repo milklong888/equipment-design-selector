@@ -1,7 +1,7 @@
 {
   "schema": "equipment-customer-output-profiles-v1",
-  "version": "1.2.0",
-  "scope": "The authoritative minimum customer output is the complete per-equipment row defined by 3-2 设备选型一览表.docx T01-T14. Every equipment result keeps that row together. X01-X05 and extended evidence fields are additive and may not replace or shrink the 3-2 row. No reference-project values, models, materials, dimensions, or quantities may transfer.",
+  "version": "1.5.0",
+  "scope": "The authoritative minimum customer output is the complete per-equipment row defined by 3-2 设备选型一览表.docx T01-T14. Programmatic T15 is an additive crystallizer-specific extension derived from the T12 vessel/reactor authority fields and may not replace or shrink any source-authority row. X01-X05 and extended evidence fields are likewise additive. No reference-project values, models, materials, dimensions, or quantities may transfer.",
   "minimum_output_authority": {
     "schema": "3-2-equipment-selection-overview-v1",
     "name": "3-2 设备选型一览表.docx",
@@ -3006,7 +3006,8 @@
     "family_reactor_vessel_separator": {
       "profile_ids": [
         "T12",
-        "T13"
+        "T13",
+        "T15"
       ],
       "delivery_status": "mapped_to_authority_profiles"
     },
@@ -3032,8 +3033,10 @@
       "delivery_status": "mapped_to_authority_profiles"
     },
     "family_agitator": {
-      "profile_ids": [],
-      "delivery_status": "no_dedicated_T01_T14_or_X01_X05_authority_profile"
+      "profile_ids": [
+        "T16"
+      ],
+      "delivery_status": "programmatic_additive_profile_without_original_T01_T14_authority_section"
     },
     "family_static_mixer": {
       "profile_ids": [
@@ -3042,12 +3045,18 @@
       "delivery_status": "mapped_to_authority_profiles"
     },
     "family_membrane": {
-      "profile_ids": [],
-      "delivery_status": "no_dedicated_T01_T14_or_X01_X05_authority_profile"
+      "profile_ids": [
+        "T17"
+      ],
+      "delivery_status": "programmatic_additive_profile_without_original_T01_T14_authority_section"
     },
     "family_package_equipment": {
-      "profile_ids": [],
-      "delivery_status": "no_dedicated_T01_T14_or_X01_X05_authority_profile"
+      "profile_ids": [
+        "T18",
+        "T19",
+        "T20"
+      ],
+      "delivery_status": "programmatic_subtype_profiles_without_original_T01_T14_authority_section"
     },
     "family_liquid_power_recovery_turbine": {
       "profile_ids": [
@@ -7347,17 +7356,20 @@
         "压力等级"
       ],
       "authority_sources": [
+        "SRC_T01",
         "SRC_X03",
         "SRC_X04",
         "SRC_X05"
       ],
       "evidence_gates": [
+        "deterministic_derivation",
         "standard_evidence"
       ],
       "selection_impacts": [
         "candidate_selection"
       ],
       "profile_ids": [
+        "T01",
         "X03",
         "X04",
         "X05"
@@ -9495,11 +9507,12 @@
     },
     {
       "canonical_id": "vendor_curve_ref",
-      "label": "Q-H-效率/BEP厂家曲线证据",
+      "label": "厂家完整Q-H、效率、功率和NPSHr曲线证据包",
       "unit": null,
       "data_type": "string",
       "aliases": [
         "Q-H-效率/BEP厂家曲线证据",
+        "厂家完整Q-H、效率、功率和NPSHr曲线证据包",
         "vendor_curve_ref"
       ],
       "authority_sources": [
@@ -9516,6 +9529,201 @@
       ],
       "output_only": false,
       "input_allowed": true
+    },
+    {
+      "canonical_id": "pump_casing_material",
+      "label": "泵体/泵壳材料牌号",
+      "unit": null,
+      "data_type": "string",
+      "aliases": [
+        "pump_casing_material",
+        "泵体材料",
+        "泵壳材料"
+      ],
+      "authority_sources": [
+        "SRC_T01"
+      ],
+      "evidence_gates": [
+        "engineering_decision"
+      ],
+      "selection_impacts": [
+        "candidate_selection"
+      ],
+      "profile_ids": [
+        "T01"
+      ],
+      "output_only": true,
+      "input_allowed": false
+    },
+    {
+      "canonical_id": "impeller_material",
+      "label": "叶轮材料牌号",
+      "unit": null,
+      "data_type": "string",
+      "aliases": [
+        "impeller_material",
+        "叶轮材料"
+      ],
+      "authority_sources": [
+        "SRC_T01"
+      ],
+      "evidence_gates": [
+        "engineering_decision"
+      ],
+      "selection_impacts": [
+        "candidate_selection"
+      ],
+      "profile_ids": [
+        "T01"
+      ],
+      "output_only": true,
+      "input_allowed": false
+    },
+    {
+      "canonical_id": "shaft_material",
+      "label": "泵轴材料牌号",
+      "unit": null,
+      "data_type": "string",
+      "aliases": [
+        "shaft_material",
+        "泵轴材料"
+      ],
+      "authority_sources": [
+        "SRC_T01"
+      ],
+      "evidence_gates": [
+        "engineering_decision"
+      ],
+      "selection_impacts": [
+        "candidate_selection"
+      ],
+      "profile_ids": [
+        "T01"
+      ],
+      "output_only": true,
+      "input_allowed": false
+    },
+    {
+      "canonical_id": "shaft_sleeve_material",
+      "label": "轴套材料牌号",
+      "unit": null,
+      "data_type": "string",
+      "aliases": [
+        "shaft_sleeve_material",
+        "轴套材料"
+      ],
+      "authority_sources": [
+        "SRC_T01"
+      ],
+      "evidence_gates": [
+        "engineering_decision"
+      ],
+      "selection_impacts": [
+        "candidate_selection"
+      ],
+      "profile_ids": [
+        "T01"
+      ],
+      "output_only": true,
+      "input_allowed": false
+    },
+    {
+      "canonical_id": "secondary_seal_material",
+      "label": "机械密封辅助密封材料",
+      "unit": null,
+      "data_type": "string",
+      "aliases": [
+        "secondary_seal_material",
+        "辅助密封材料"
+      ],
+      "authority_sources": [
+        "SRC_T01"
+      ],
+      "evidence_gates": [
+        "engineering_decision"
+      ],
+      "selection_impacts": [
+        "candidate_selection"
+      ],
+      "profile_ids": [
+        "T01"
+      ],
+      "output_only": true,
+      "input_allowed": false
+    },
+    {
+      "canonical_id": "gasket_material",
+      "label": "泵用垫片材料",
+      "unit": null,
+      "data_type": "string",
+      "aliases": [
+        "gasket_material",
+        "垫片材料"
+      ],
+      "authority_sources": [
+        "SRC_T01"
+      ],
+      "evidence_gates": [
+        "engineering_decision"
+      ],
+      "selection_impacts": [
+        "candidate_selection"
+      ],
+      "profile_ids": [
+        "T01"
+      ],
+      "output_only": true,
+      "input_allowed": false
+    },
+    {
+      "canonical_id": "maximum_final_discharge_pressure_mpa_gauge",
+      "label": "末级泵最大出口压力",
+      "unit": "MPa(g)",
+      "data_type": "number",
+      "aliases": [
+        "maximum_final_discharge_pressure_mpa_gauge",
+        "末级泵最大出口压力"
+      ],
+      "authority_sources": [
+        "SRC_T01"
+      ],
+      "evidence_gates": [
+        "deterministic_derivation"
+      ],
+      "selection_impacts": [
+        "candidate_selection",
+        "safety_and_operability"
+      ],
+      "profile_ids": [
+        "T01"
+      ],
+      "output_only": true,
+      "input_allowed": false
+    },
+    {
+      "canonical_id": "pump_16bar_scope_check",
+      "label": "GB/T 5662 16 bar承压范围校核",
+      "unit": null,
+      "data_type": "string",
+      "aliases": [
+        "pump_16bar_scope_check",
+        "泵16bar范围校核"
+      ],
+      "authority_sources": [
+        "SRC_T01"
+      ],
+      "evidence_gates": [
+        "deterministic_derivation"
+      ],
+      "selection_impacts": [
+        "formal_model_gate",
+        "safety_and_operability"
+      ],
+      "profile_ids": [
+        "T01"
+      ],
+      "output_only": true,
+      "input_allowed": false
     },
     {
       "canonical_id": "vendor_datasheet_ref",
@@ -9727,6 +9935,230 @@
     }
   ],
   "profiles": [
+    {
+      "authority_section_id": "T17",
+      "title": "膜组件/膜装置（程序补充交付）",
+      "authority_overview_columns": [
+        {"field_id": "equipment_tag", "label": "设备位号"},
+        {"field_id": "equipment_name", "label": "设备名称"},
+        {"field_id": "equipment_type", "label": "膜装置具体型式"},
+        {"field_id": "model_designation", "label": "程序候选规格代号"},
+        {"field_id": "technical_specification", "label": "程序具体预选规格"},
+        {"field_id": "membrane_area_m2", "label": "总膜面积", "unit": "m2"},
+        {"field_id": "permeate_flow_m3_h", "label": "程序产水量", "unit": "m3/h"},
+        {"field_id": "quantity_count", "label": "数量", "unit": "count"}
+      ],
+      "family_id": "family_membrane",
+      "conditional_subtype_tokens": ["membrane", "膜", "卷式", "8040"],
+      "authority_sources": [],
+      "required_fields": [
+        {"canonical_id": "equipment_tag", "label": "设备位号"},
+        {"canonical_id": "equipment_name", "label": "设备名称"},
+        {"canonical_id": "equipment_type", "label": "膜装置具体型式"},
+        {"canonical_id": "model_designation", "label": "程序候选规格代号"},
+        {"canonical_id": "technical_specification", "label": "程序具体预选规格"},
+        {"canonical_id": "membrane_area_m2", "label": "总膜面积", "unit": "m2"},
+        {"canonical_id": "flux", "label": "设计通量", "unit": "L/(m2.h)"},
+        {"canonical_id": "recovery_percent", "label": "回收率", "unit": "%"},
+        {"canonical_id": "material", "label": "膜/膜壳/中心管材料"},
+        {"canonical_id": "quantity_count", "label": "数量", "unit": "count"},
+        {"canonical_id": "pending_evidence", "label": "待补资料"}
+      ],
+      "claim_boundary": "程序补充交付模板；不冒充原始权威模板，正式膜元件型号须由同水质厂家计算和性能保证确认。"
+    },
+    {
+      "authority_section_id": "T18",
+      "title": "压滤设备（程序补充交付）",
+      "authority_overview_columns": [
+        {"field_id": "equipment_tag", "label": "设备位号"},
+        {"field_id": "equipment_name", "label": "设备名称"},
+        {"field_id": "equipment_type", "label": "过滤设备具体型式"},
+        {"field_id": "model_designation", "label": "程序候选规格代号"},
+        {"field_id": "selected_filter_area_m2", "label": "实际过滤面积", "unit": "m2"},
+        {"field_id": "quantity_count", "label": "数量", "unit": "count"}
+      ],
+      "family_id": "family_package_equipment",
+      "conditional_subtype_tokens": ["FILTER", "压滤", "自动厢式压滤机"],
+      "authority_sources": [],
+      "required_fields": [
+        {"canonical_id": "equipment_tag", "label": "设备位号"},
+        {"canonical_id": "equipment_name", "label": "设备名称"},
+        {"canonical_id": "equipment_type", "label": "过滤设备具体型式"},
+        {"canonical_id": "model_designation", "label": "程序候选规格代号"},
+        {"canonical_id": "technical_specification", "label": "程序具体预选规格"},
+        {"canonical_id": "selected_filter_area_m2", "label": "实际过滤面积", "unit": "m2"},
+        {"canonical_id": "material", "label": "滤板/滤布/机架材料"},
+        {"canonical_id": "quantity_count", "label": "数量", "unit": "count"},
+        {"canonical_id": "pending_evidence", "label": "待补资料"}
+      ],
+      "claim_boundary": "程序补充交付模板；正式压滤机须由同浆料过滤试验、周期和厂家保证确认。"
+    },
+    {
+      "authority_section_id": "T19",
+      "title": "干燥设备（程序补充交付）",
+      "authority_overview_columns": [
+        {"field_id": "equipment_tag", "label": "设备位号"},
+        {"field_id": "equipment_name", "label": "设备名称"},
+        {"field_id": "equipment_type", "label": "干燥器具体型式"},
+        {"field_id": "model_designation", "label": "程序候选规格代号"},
+        {"field_id": "evaporation_rate_kg_h", "label": "蒸发量", "unit": "kg/h"},
+        {"field_id": "heat_duty_kw", "label": "热负荷", "unit": "kW"},
+        {"field_id": "quantity_count", "label": "数量", "unit": "count"}
+      ],
+      "family_id": "family_package_equipment",
+      "conditional_subtype_tokens": ["DRYER", "干燥", "连续带式热风干燥器"],
+      "authority_sources": [],
+      "required_fields": [
+        {"canonical_id": "equipment_tag", "label": "设备位号"},
+        {"canonical_id": "equipment_name", "label": "设备名称"},
+        {"canonical_id": "equipment_type", "label": "干燥器具体型式"},
+        {"canonical_id": "model_designation", "label": "程序候选规格代号"},
+        {"canonical_id": "technical_specification", "label": "程序具体预选规格"},
+        {"canonical_id": "evaporation_rate_kg_h", "label": "蒸发量", "unit": "kg/h"},
+        {"canonical_id": "heat_duty_kw", "label": "热负荷", "unit": "kW"},
+        {"canonical_id": "material", "label": "接触表面/外壳材料"},
+        {"canonical_id": "quantity_count", "label": "数量", "unit": "count"},
+        {"canonical_id": "pending_evidence", "label": "待补资料"}
+      ],
+      "claim_boundary": "程序补充交付模板；正式干燥器须由同物料干燥曲线、粉尘/溶剂安全和厂家试验确认。"
+    },
+    {
+      "authority_section_id": "T20",
+      "title": "双塔吸附成套装置（程序补充交付）",
+      "authority_overview_columns": [
+        {"field_id": "equipment_tag", "label": "设备位号"},
+        {"field_id": "equipment_name", "label": "设备名称"},
+        {"field_id": "equipment_type", "label": "成套设备具体型式"},
+        {"field_id": "model_designation", "label": "程序候选规格代号"},
+        {"field_id": "bed_volume_m3_per_tower", "label": "单塔床层容积", "unit": "m3"},
+        {"field_id": "quantity_count", "label": "数量", "unit": "count"}
+      ],
+      "family_id": "family_package_equipment",
+      "conditional_subtype_tokens": ["TSA", "吸附", "双塔变温吸附"],
+      "authority_sources": [],
+      "required_fields": [
+        {"canonical_id": "equipment_tag", "label": "设备位号"},
+        {"canonical_id": "equipment_name", "label": "设备名称"},
+        {"canonical_id": "equipment_type", "label": "成套设备具体型式"},
+        {"canonical_id": "model_designation", "label": "程序候选规格代号"},
+        {"canonical_id": "technical_specification", "label": "程序具体预选规格"},
+        {"canonical_id": "bed_volume_m3_per_tower", "label": "单塔床层容积", "unit": "m3"},
+        {"canonical_id": "adsorbent_type", "label": "吸附剂类型"},
+        {"canonical_id": "material", "label": "吸附塔壳体/内件材料"},
+        {"canonical_id": "quantity_count", "label": "数量", "unit": "count"},
+        {"canonical_id": "pending_evidence", "label": "待补资料"}
+      ],
+      "claim_boundary": "程序补充交付模板；正式成套装置须由吸附等温线/穿透曲线、再生衡算和厂家保证确认。"
+    },
+    {
+      "authority_section_id": "T16",
+      "title": "搅拌器（程序补充交付）",
+      "authority_overview_columns": [
+        {"field_id": "equipment_tag", "label": "设备位号"},
+        {"field_id": "equipment_name", "label": "设备名称"},
+        {"field_id": "equipment_type", "label": "搅拌器具体型式"},
+        {"field_id": "model_designation", "label": "程序候选规格代号"},
+        {"field_id": "technical_specification", "label": "程序具体预选规格"},
+        {"field_id": "impeller_diameter_mm", "label": "桨径", "unit": "mm"},
+        {"field_id": "rotational_speed_rpm", "label": "转速", "unit": "r/min"},
+        {"field_id": "shaft_power_kw", "label": "轴功率", "unit": "kW"},
+        {"field_id": "motor_power_kw", "label": "电机候选", "unit": "kW"},
+        {"field_id": "shaft_diameter_mm", "label": "轴径候选", "unit": "mm"},
+        {"field_id": "quantity_count", "label": "数量", "unit": "count"}
+      ],
+      "family_id": "family_agitator",
+      "conditional_subtype_tokens": [
+        "agitator",
+        "搅拌器",
+        "搅拌设备"
+      ],
+      "authority_sources": [],
+      "required_fields": [
+        {"canonical_id": "equipment_tag", "label": "设备位号", "unit": null},
+        {"canonical_id": "equipment_name", "label": "设备名称", "unit": null},
+        {"canonical_id": "equipment_type", "label": "搅拌器具体型式", "unit": null},
+        {"canonical_id": "model_designation", "label": "程序候选规格代号", "unit": null},
+        {"canonical_id": "technical_specification", "label": "程序具体预选规格", "unit": null},
+        {"canonical_id": "volume_m3", "label": "适配工作容积", "unit": "m3"},
+        {"canonical_id": "inner_diameter_mm", "label": "适配容器内径", "unit": "mm"},
+        {"canonical_id": "agitator_type", "label": "搅拌器具体型式", "unit": null},
+        {"canonical_id": "impeller_diameter_ratio", "label": "桨径/容器直径比", "unit": "-"},
+        {"canonical_id": "impeller_diameter_mm", "label": "桨径候选", "unit": "mm"},
+        {"canonical_id": "baffle_count", "label": "挡板数量", "unit": "count"},
+        {"canonical_id": "rotational_speed_rpm", "label": "转速", "unit": "r/min"},
+        {"canonical_id": "shaft_power_kw", "label": "轴功率", "unit": "kW"},
+        {"canonical_id": "motor_power_kw", "label": "电机功率候选", "unit": "kW"},
+        {"canonical_id": "torque_nm", "label": "轴扭矩", "unit": "N.m"},
+        {"canonical_id": "shaft_diameter_mm", "label": "轴径候选", "unit": "mm"},
+        {"canonical_id": "gearbox_ratio", "label": "减速比候选", "unit": "-"},
+        {"canonical_id": "agitator_material_grade", "label": "桨叶材料", "unit": null},
+        {"canonical_id": "shaft_material_grade", "label": "轴材料", "unit": null},
+        {"canonical_id": "seal_type", "label": "轴封型式", "unit": null},
+        {"canonical_id": "quantity_count", "label": "数量", "unit": "count"},
+        {"canonical_id": "standard_identity", "label": "采用标准及版本", "unit": null},
+        {"canonical_id": "evidence_grade", "label": "证据等级", "unit": null},
+        {"canonical_id": "pending_evidence", "label": "待补资料", "unit": null}
+      ],
+      "claim_boundary": "本节是程序补充交付模板，不冒充原始T01-T14权威模板；正式型号仍须厂家数据表和轴系、密封、临界转速证据。"
+    },
+    {
+      "authority_section_id": "T15",
+      "title": "结晶器",
+      "authority_overview_columns": [
+        {"field_id": "equipment_tag", "label": "设备位号"},
+        {"field_id": "equipment_name", "label": "设备名称"},
+        {"field_id": "equipment_type", "label": "结晶器型式"},
+        {"field_id": "technical_specification", "label": "程序具体预选规格"},
+        {"field_id": "working_volume_m3", "label": "工作容积", "unit": "m3"},
+        {"field_id": "diameter_mm", "label": "直径", "unit": "mm"},
+        {"field_id": "height_mm", "label": "筒体高度", "unit": "mm"},
+        {"field_id": "heat_transfer_area_m2", "label": "外循环冷却面积候选", "unit": "m2"},
+        {"field_id": "shaft_power_kw", "label": "搅拌轴功率", "unit": "kW"},
+        {"field_id": "motor_power_kw", "label": "电机功率候选", "unit": "kW"},
+        {"field_id": "shell_material_grade", "label": "壳体材料"},
+        {"field_id": "wetted_surface_material_grade", "label": "湿接触表面材料"},
+        {"field_id": "quantity_count", "label": "数量", "unit": "count"}
+      ],
+      "family_id": "family_reactor_vessel_separator",
+      "conditional_subtype_tokens": [
+        "crystallizer",
+        "结晶器",
+        "结晶",
+        "CRYSTALLIZER",
+        "DTB"
+      ],
+      "authority_sources": ["SRC_T12"],
+      "required_fields": [
+        {"canonical_id": "equipment_tag", "label": "设备位号", "unit": null},
+        {"canonical_id": "equipment_name", "label": "设备名称", "unit": null},
+        {"canonical_id": "equipment_type", "label": "结晶器型式", "unit": null},
+        {"canonical_id": "technical_specification", "label": "程序具体预选规格", "unit": null},
+        {"canonical_id": "crystallization_mode", "label": "结晶操作路线", "unit": null},
+        {"canonical_id": "slurry_flow_m3_h", "label": "浆液体积流量", "unit": "m3/h"},
+        {"canonical_id": "retention_time_min", "label": "停留时间", "unit": "min"},
+        {"canonical_id": "working_volume_m3", "label": "工作容积", "unit": "m3"},
+        {"canonical_id": "volume_m3", "label": "名义总容积", "unit": "m3"},
+        {"canonical_id": "diameter_mm", "label": "直径", "unit": "mm"},
+        {"canonical_id": "height_mm", "label": "筒体高度", "unit": "mm"},
+        {"canonical_id": "heat_duty_kw", "label": "结晶冷却负荷", "unit": "kW"},
+        {"canonical_id": "heat_transfer_area_m2", "label": "外循环冷却面积候选", "unit": "m2"},
+        {"canonical_id": "agitator_type", "label": "循环搅拌器型式", "unit": null},
+        {"canonical_id": "draft_tube_specification", "label": "导流筒/挡板规格", "unit": null},
+        {"canonical_id": "external_circulation_exchanger_specification", "label": "外循环换热器规格", "unit": null},
+        {"canonical_id": "shaft_power_kw", "label": "搅拌轴功率", "unit": "kW"},
+        {"canonical_id": "motor_power_kw", "label": "电机功率候选", "unit": "kW"},
+        {"canonical_id": "shell_material_grade", "label": "壳体材料", "unit": null},
+        {"canonical_id": "wetted_surface_material_grade", "label": "湿接触表面材料", "unit": null},
+        {"canonical_id": "internals_material_grade", "label": "内件材料", "unit": null},
+        {"canonical_id": "design_temperature_c", "label": "设计温度", "unit": "degC"},
+        {"canonical_id": "design_pressure_mpa", "label": "设计压力", "unit": "MPa"},
+        {"canonical_id": "selected_wall_thickness_mm", "label": "正式壁厚/程序候选", "unit": "mm"},
+        {"canonical_id": "quantity_count", "label": "数量", "unit": "count"},
+        {"canonical_id": "standard_identity", "label": "采用标准及版本", "unit": null},
+        {"canonical_id": "evidence_grade", "label": "证据等级", "unit": null},
+        {"canonical_id": "pending_evidence", "label": "待补资料", "unit": null}
+      ]
+    },
     {
       "authority_section_id": "T01",
       "title": "泵",
@@ -10046,6 +10478,115 @@
           "input_allowed": true
         },
         {
+          "canonical_id": "pump_casing_material",
+          "label": "泵体/泵壳材料牌号",
+          "unit": null,
+          "source_gate": "engineering_decision",
+          "selection_impact": "candidate_selection",
+          "authority_sources": [
+            "SRC_T01"
+          ],
+          "data_type": "string",
+          "aliases": [
+            "pump_casing_material",
+            "泵体材料",
+            "泵壳材料"
+          ],
+          "evidence_gate": "engineering_decision",
+          "output_only": true,
+          "input_allowed": false
+        },
+        {
+          "canonical_id": "impeller_material",
+          "label": "叶轮材料牌号",
+          "unit": null,
+          "source_gate": "engineering_decision",
+          "selection_impact": "candidate_selection",
+          "authority_sources": [
+            "SRC_T01"
+          ],
+          "data_type": "string",
+          "aliases": [
+            "impeller_material",
+            "叶轮材料"
+          ],
+          "evidence_gate": "engineering_decision",
+          "output_only": true,
+          "input_allowed": false
+        },
+        {
+          "canonical_id": "shaft_material",
+          "label": "泵轴材料牌号",
+          "unit": null,
+          "source_gate": "engineering_decision",
+          "selection_impact": "candidate_selection",
+          "authority_sources": [
+            "SRC_T01"
+          ],
+          "data_type": "string",
+          "aliases": [
+            "shaft_material",
+            "泵轴材料"
+          ],
+          "evidence_gate": "engineering_decision",
+          "output_only": true,
+          "input_allowed": false
+        },
+        {
+          "canonical_id": "shaft_sleeve_material",
+          "label": "轴套材料牌号",
+          "unit": null,
+          "source_gate": "engineering_decision",
+          "selection_impact": "candidate_selection",
+          "authority_sources": [
+            "SRC_T01"
+          ],
+          "data_type": "string",
+          "aliases": [
+            "shaft_sleeve_material",
+            "轴套材料"
+          ],
+          "evidence_gate": "engineering_decision",
+          "output_only": true,
+          "input_allowed": false
+        },
+        {
+          "canonical_id": "secondary_seal_material",
+          "label": "机械密封辅助密封材料",
+          "unit": null,
+          "source_gate": "engineering_decision",
+          "selection_impact": "candidate_selection",
+          "authority_sources": [
+            "SRC_T01"
+          ],
+          "data_type": "string",
+          "aliases": [
+            "secondary_seal_material",
+            "辅助密封材料"
+          ],
+          "evidence_gate": "engineering_decision",
+          "output_only": true,
+          "input_allowed": false
+        },
+        {
+          "canonical_id": "gasket_material",
+          "label": "泵用垫片材料",
+          "unit": null,
+          "source_gate": "engineering_decision",
+          "selection_impact": "candidate_selection",
+          "authority_sources": [
+            "SRC_T01"
+          ],
+          "data_type": "string",
+          "aliases": [
+            "gasket_material",
+            "垫片材料"
+          ],
+          "evidence_gate": "engineering_decision",
+          "output_only": true,
+          "input_allowed": false
+        },
+        {
           "canonical_id": "operating_mode",
           "label": "运行方式",
           "unit": null,
@@ -10191,7 +10732,7 @@
         },
         {
           "canonical_id": "vendor_curve_ref",
-          "label": "Q-H-效率/BEP厂家曲线证据",
+          "label": "厂家完整Q-H、效率、功率和NPSHr曲线证据包",
           "unit": null,
           "source_gate": "vendor_evidence",
           "selection_impact": "formal_model_gate",
@@ -10201,11 +10742,67 @@
           "data_type": "string",
           "aliases": [
             "vendor_curve_ref",
-            "Q-H-效率/BEP厂家曲线证据"
+            "Q-H-效率/BEP厂家曲线证据",
+            "厂家完整Q-H、效率、功率和NPSHr曲线证据包"
           ],
           "evidence_gate": "vendor_evidence",
           "output_only": false,
           "input_allowed": true
+        },
+        {
+          "canonical_id": "maximum_final_discharge_pressure_mpa_gauge",
+          "label": "末级泵最大出口压力",
+          "unit": "MPa(g)",
+          "source_gate": "deterministic_derivation",
+          "selection_impact": "safety_and_operability",
+          "authority_sources": [
+            "SRC_T01"
+          ],
+          "data_type": "number",
+          "aliases": [
+            "maximum_final_discharge_pressure_mpa_gauge",
+            "末级泵最大出口压力"
+          ],
+          "evidence_gate": "deterministic_derivation",
+          "output_only": true,
+          "input_allowed": false
+        },
+        {
+          "canonical_id": "pressure_class",
+          "label": "泵出口法兰压力等级",
+          "unit": null,
+          "source_gate": "deterministic_derivation",
+          "selection_impact": "safety_and_operability",
+          "authority_sources": [
+            "SRC_T01"
+          ],
+          "data_type": "string",
+          "aliases": [
+            "pressure_class",
+            "泵出口法兰压力等级",
+            "PN/Class"
+          ],
+          "evidence_gate": "deterministic_derivation",
+          "output_only": true,
+          "input_allowed": false
+        },
+        {
+          "canonical_id": "pump_16bar_scope_check",
+          "label": "GB/T 5662 16 bar承压范围校核",
+          "unit": null,
+          "source_gate": "deterministic_derivation",
+          "selection_impact": "formal_model_gate",
+          "authority_sources": [
+            "SRC_T01"
+          ],
+          "data_type": "string",
+          "aliases": [
+            "pump_16bar_scope_check",
+            "泵16bar范围校核"
+          ],
+          "evidence_gate": "deterministic_derivation",
+          "output_only": true,
+          "input_allowed": false
         },
         {
           "canonical_id": "standard_identity",
@@ -15901,7 +16498,11 @@
         "反应器",
         "RPLUG",
         "RCSTR",
-        "RBATCH"
+        "RBATCH",
+        "RSTOIC",
+        "RYIELD",
+        "REQUIL",
+        "RGIBBS"
       ],
       "required_fields": [
         {
@@ -16487,9 +17088,9 @@
         {"field_id": "equipment_type", "label": "分离器类型", "source_fields": ["equipment_type", "separator_type", "orientation"]},
         {"field_id": "design_temperature_c", "label": "设计温度 / ℃", "unit": "degC"},
         {"field_id": "design_pressure_mpa", "label": "设计压力 / MPa", "unit": "MPa"},
-        {"field_id": "technical_specification", "label": "尺寸", "source_fields": ["technical_specification", "diameter_mm", "height_or_length_mm"]},
-        {"field_id": "material", "label": "材质"},
-        {"field_id": "selected_wall_thickness_mm", "label": "壁厚 / mm", "unit": "mm"},
+        {"field_id": "technical_specification", "label": "尺寸/程序预选规格", "source_fields": ["technical_specification", "vessel_diameter_screening_mm", "vessel_height_or_length_screening_mm", "diameter_mm", "height_or_length_mm"]},
+        {"field_id": "material", "label": "材质", "source_fields": ["shell_material_grade", "material"]},
+        {"field_id": "selected_wall_thickness_mm", "label": "正式壁厚/程序候选 / mm", "unit": "mm", "source_fields": ["selected_wall_thickness_mm", "preliminary_nominal_shell_thickness_mm"]},
         {"field_id": "inlet_nozzle_dn", "label": "进口接管直径 / mm", "unit": "mm"},
         {"field_id": "gas_outlet_nozzle_dn", "label": "气体出口管直径 / mm", "unit": "mm"},
         {"field_id": "liquid_outlet_nozzle_dn", "label": "液体出口管直径 / mm", "unit": "mm"},
@@ -16500,7 +17101,16 @@
         "gas_liquid_separator",
         "separator",
         "气液分离器",
-        "FLASH2"
+        "工艺分离罐",
+        "分离罐",
+        "闪蒸罐",
+        "三相分离器",
+        "液液分离器",
+        "FLASH2",
+        "FLASH3",
+        "DECANTER",
+        "SEP",
+        "SEP2"
       ],
       "required_fields": [
         {

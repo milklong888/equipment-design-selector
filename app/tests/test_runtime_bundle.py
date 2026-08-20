@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
+import os
 import sqlite3
 import sys
 import tempfile
@@ -12,6 +14,7 @@ from unittest import mock
 
 
 APP_DIR = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
@@ -55,6 +58,52 @@ def _create_minimum_bundle(root: Path) -> None:
 
 
 class RuntimeBundleTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows long-path regression")
+    def test_manifest_supports_runtime_assets_beyond_legacy_max_path(self) -> None:
+        with writable_temp_directory() as root:
+            _create_minimum_bundle(root)
+            directories: list[Path] = []
+            parent = root / "data"
+            while len(str(parent / "long_path_runtime_asset.json")) <= 270:
+                parent = parent / "runtime_evidence_segment_1234567890"
+                directories.append(parent)
+            os.makedirs(runtime_bundle._filesystem_path(parent), exist_ok=True)
+            target = parent / "long_path_runtime_asset.json"
+            payload = b'{"long_path": true}\n'
+            try:
+                with open(runtime_bundle._filesystem_path(target), "wb") as handle:
+                    handle.write(payload)
+                self.assertGreater(len(str(target)), 260)
+
+                manifest = runtime_bundle.create_manifest(root)
+                verification = runtime_bundle.verify_runtime_bundle(
+                    root,
+                    required=True,
+                )
+
+                relative = target.relative_to(root).as_posix()
+                record = next(
+                    item
+                    for item in manifest["files"]
+                    if item["runtime_path"] == relative
+                )
+                self.assertEqual(record["size_bytes"], len(payload))
+                self.assertEqual(
+                    record["sha256"],
+                    hashlib.sha256(payload).hexdigest().upper(),
+                )
+                self.assertEqual(
+                    verification["verification_status"],
+                    "PASS",
+                    verification,
+                )
+            finally:
+                if os.path.exists(runtime_bundle._filesystem_path(target)):
+                    os.remove(runtime_bundle._filesystem_path(target))
+                for directory in reversed(directories):
+                    if os.path.isdir(runtime_bundle._filesystem_path(directory)):
+                        os.rmdir(runtime_bundle._filesystem_path(directory))
+
     def test_manifest_traversal_preserves_caller_visible_root(self) -> None:
         with writable_temp_directory() as root:
             _create_minimum_bundle(root)
@@ -98,6 +147,49 @@ class RuntimeBundleTests(unittest.TestCase):
             "RUNTIME_ASSET_HASH_MISMATCH",
             {item["code"] for item in verification["issues"]},
         )
+
+    def test_all_family_acceptance_fixture_is_manifested_and_tamper_fails_closed(self) -> None:
+        fixture_path = "app/fixtures/all_family_minimum_meaningful_inputs.json"
+        self.assertIn(fixture_path, runtime_bundle.REQUIRED_RUNTIME_PATHS)
+        self.assertIn(
+            "app/fixtures/agent_selftest_request.json",
+            runtime_bundle.REQUIRED_RUNTIME_PATHS,
+        )
+        self.assertIn(
+            "knowledge_graph/aspen_extraction_coverage.schema.json",
+            runtime_bundle.REQUIRED_RUNTIME_PATHS,
+        )
+        with writable_temp_directory() as root:
+            _create_minimum_bundle(root)
+            manifest = runtime_bundle.create_manifest(root)
+            record = next(
+                item for item in manifest["files"]
+                if item["runtime_path"] == fixture_path
+            )
+            self.assertEqual(record["asset_class"], "acceptance_fixtures")
+
+            target = root / Path(fixture_path)
+            original = target.read_bytes()
+            target.write_bytes(b"X" * len(original))
+            verification = runtime_bundle.verify_runtime_bundle(root, required=True)
+
+        self.assertFalse(verification["verified"])
+        self.assertIn(
+            "RUNTIME_ASSET_HASH_MISMATCH",
+            {item["code"] for item in verification["issues"]},
+        )
+
+    def test_release_build_defaults_to_new_version_and_runs_packaged_cli_selftest(self) -> None:
+        script = (PROJECT_ROOT / "build_equipment_design_app.ps1").read_text(
+            encoding="utf-8-sig"
+        )
+        self.assertIn('[string]$AppVersion = "2.4.3"', script)
+        self.assertIn("function Invoke-PackagedAgentSelftest", script)
+        self.assertIn("agent_selftest_request.json", script)
+        self.assertIn("PACKAGED_AGENT_SELFTEST_EXIT_NONZERO", script)
+        self.assertIn("PACKAGED_AGENT_SELFTEST_RESPONSE_NOT_OK", script)
+        self.assertIn("$response.result.status -ne 'PASS'", script)
+        self.assertIn("Invoke-PackagedAgentSelftest `", script)
 
     def test_unmanifested_asset_and_manifest_record_removal_fail(self) -> None:
         with writable_temp_directory() as root:

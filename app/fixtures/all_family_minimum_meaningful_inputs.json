@@ -2,7 +2,7 @@
   "schema": "equipment-design-all-family-acceptance-fixture-v1",
   "purpose": "Deterministic minimum-meaningful calculate-then-select coverage; values are synthetic test inputs, not project defaults.",
   "expected_family_count": 17,
-  "expected_total_calculation_count": 57,
+  "expected_total_calculation_count": 62,
   "cases": [
     {
       "family_id": "family_fixed_tubesheet_exchanger",
@@ -60,29 +60,29 @@
     },
     {
       "family_id": "family_agitator",
-      "values": {"process_function": "liquid mixing", "volume_m3": 6.0, "volume_basis": "effective_working", "diameter_mm": 1800, "height_mm": 2500, "inner_diameter_mm": 1700, "straight_shell_length_mm": 2200, "rotational_speed_rpm": 120, "shaft_power_kw": 15, "mixing_metric": "homogeneity target supplied", "operating_pressure_mpa": 0.4, "pressure_basis": "gauge", "design_pressure_factor": 1.1},
-      "expected_calculation_ids": ["cylinder_volume", "design_pressure"],
+      "values": {"process_function": "liquid mixing", "volume_m3": 6.0, "volume_basis": "effective_working", "diameter_mm": 1800, "height_mm": 2500, "inner_diameter_mm": 1700, "straight_shell_length_mm": 2200, "rotational_speed_rpm": 120, "shaft_power_kw": 15, "density_kg_m3": 1000, "dynamic_viscosity_mpa_s": 1.0, "mixing_metric": "homogeneity target supplied", "operating_pressure_mpa": 0.4, "pressure_basis": "gauge", "design_pressure_factor": 1.1},
+      "expected_calculation_ids": ["cylinder_volume", "design_pressure", "agitator_re_np_power_screening"],
       "expected_candidate_kind": "engineered_designation",
-      "expected_recommended_type": "顶入式斜叶涡轮搅拌器"
+      "expected_recommended_type": "顶入式六叶45°折叶开启涡轮搅拌器"
     },
     {
       "family_id": "family_static_mixer",
-      "values": {"flow_m3_h": 100, "target_velocity_m_s": 2.0, "allowable_pressure_drop_kpa": 20, "mixing_metric": "CoV <= 0.05", "element_count": 6, "material": "S31603", "operating_pressure_mpa": 1.0, "pressure_basis": "gauge", "design_pressure_factor": 1.1},
-      "expected_calculation_ids": ["pipe_required_diameter", "design_pressure"],
+      "values": {"flow_m3_h": 100, "target_velocity_m_s": 2.0, "allowable_pressure_drop_kpa": 20, "density_kg_m3": 1000, "dynamic_viscosity_mpa_s": 1.0, "mixing_metric": "CoV <= 0.05", "element_count": 6, "material": "S31603", "operating_pressure_mpa": 1.0, "pressure_basis": "gauge", "design_pressure_factor": 1.1},
+      "expected_calculation_ids": ["pipe_required_diameter", "design_pressure", "static_mixer_hydraulic_train_screening"],
       "expected_candidate_kind": "engineered_designation",
       "expected_recommended_type": "螺旋元件静态混合器"
     },
     {
       "family_id": "family_membrane",
-      "values": {"process_function": "membrane separation", "membrane_geometry_type": "cylindrical_channels", "element_count": 10, "channel_count": 1000, "channel_inner_diameter_mm": 1.0, "element_length_m": 1.0, "flux": 20, "selectivity": 25, "recovery_percent": 80, "operating_pressure_mpa": 1.5, "pressure_basis": "gauge", "design_pressure_factor": 1.1, "design_temperature_c": 60},
-      "expected_calculation_ids": ["membrane_area", "design_pressure"],
+      "values": {"process_function": "membrane separation", "membrane_geometry_type": "cylindrical_channels", "element_count": 10, "channel_count": 1000, "channel_inner_diameter_mm": 1.0, "element_length_m": 1.0, "flux": 20, "selectivity": 25, "recovery_percent": 80, "permeate_flow_m3_h": 0.5, "design_margin_percent": 10, "operating_pressure_mpa": 1.5, "pressure_basis": "gauge", "design_pressure_factor": 1.1, "design_temperature_c": 60},
+      "expected_calculation_ids": ["membrane_area", "design_pressure", "membrane_flux_recovery_array_screening"],
       "expected_candidate_kind": "engineered_designation",
-      "expected_recommended_type": "卷式膜组件"
+      "expected_recommended_type": "管式圆柱通道膜组件阵列"
     },
     {
       "family_id": "family_package_equipment",
-      "values": {"process_function": "cyclic package service", "capacity": 100, "cycle_time_h": 8, "allowable_pressure_drop_kpa": 30, "operating_pressure_mpa": 1.0, "pressure_basis": "gauge", "design_pressure_factor": 1.1, "design_temperature_c": 120},
-      "expected_calculation_ids": ["design_pressure"],
+      "values": {"process_function": "TSA变温吸附脱水", "capacity": 100, "capacity_basis": "100 Nm3/h feed; H2O load 1 kg/h", "cycle_time_h": 8, "adsorption_time_h": 4, "contaminant_load_kg_h": 1.0, "adsorbent_working_capacity_kg_kg": 0.08, "allowable_pressure_drop_kpa": 30, "operating_pressure_mpa": 1.0, "pressure_basis": "gauge", "design_pressure_factor": 1.1, "design_temperature_c": 120},
+      "expected_calculation_ids": ["design_pressure", "tsa_cycle_bed_capacity_screening"],
       "expected_candidate_kind": "engineered_designation",
       "expected_recommended_type": "双塔变温吸附成套装置"
     },
@@ -95,10 +95,10 @@
     },
     {
       "family_id": "family_gas_expander_turbine",
-      "values": {"phase": "gas", "pressure_basis": "absolute", "atmospheric_pressure_mpa": 0.101325, "flow_m3_h": 2000, "inlet_pressure_mpa": 2.0, "outlet_pressure_mpa": 0.5, "inlet_temperature_c": 100, "efficiency_percent": 80, "shaft_power_kw": 150, "operating_pressure_mpa": 2.0, "design_pressure_factor": 1.1},
-      "expected_calculation_ids": ["pressure_ratio", "design_pressure"],
+      "values": {"phase": "gas", "pressure_basis": "absolute", "atmospheric_pressure_mpa": 0.101325, "flow_m3_h": 2000, "inlet_pressure_mpa": 2.0, "outlet_pressure_mpa": 0.5, "inlet_temperature_c": 100, "gas_molecular_weight": 28.97, "compressibility_factor": 0.98, "heat_capacity_ratio_k": 1.3, "efficiency_percent": 80, "shaft_power_kw": 150, "operating_pressure_mpa": 2.0, "design_pressure_factor": 1.1},
+      "expected_calculation_ids": ["pressure_ratio", "design_pressure", "gas_expander_stage_power_bypass_screening"],
       "expected_candidate_kind": "engineered_designation",
-      "expected_recommended_type": "径向膨胀透平"
+      "expected_recommended_type": "多级径向流气体膨胀透平发电机组"
     },
     {
       "family_id": "family_process_piping",

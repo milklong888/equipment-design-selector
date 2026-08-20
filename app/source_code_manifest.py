@@ -19,6 +19,7 @@ SHA256_PATTERN = re.compile(r"^[A-F0-9]{64}$")
 CORE_SOURCE_PATHS = (
     "app/app_core.py",
     "app/aspen_com_import.py",
+    "app/aspen_suite.py",
     "app/aspen_pfd.py",
     "app/authority_revision.py",
     "app/customer_delivery.py",

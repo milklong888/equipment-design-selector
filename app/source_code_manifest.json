@@ -1,14 +1,19 @@
 {
   "files": [
     {
-      "sha256": "271A8A79742AF09E31C3CC194C7692601BC396D2D3CB5DAFCB3C45C29E12D32F",
-      "size_bytes": 84581,
+      "sha256": "2ADA59609A88603B2D23C056F1C10A87DBA30972CFB3B267688C526785D8D322",
+      "size_bytes": 88064,
       "source_path": "app/app_core.py"
     },
     {
-      "sha256": "2E309F0DD6ED8343FE053A0BAE70E014ACB76F217EA3F5131527C0855F5A0B9E",
-      "size_bytes": 93259,
+      "sha256": "9858C998CFA5CAC2CB7F56C79DA8C0F5E8FFC97FE21C20BAFC8E0556E2FC35CD",
+      "size_bytes": 187310,
       "source_path": "app/aspen_com_import.py"
+    },
+    {
+      "sha256": "FF91EBBCC0E81C2E3FE9853659FA354E3D517585117A474B8FB16509B5B25C45",
+      "size_bytes": 28346,
+      "source_path": "app/aspen_suite.py"
     },
     {
       "sha256": "16DF0752D9FB07F0A59C27B5EF75D9D735443234CECC19DCCCEA834AF4E22FDD",
@@ -16,13 +21,13 @@
       "source_path": "app/aspen_pfd.py"
     },
     {
-      "sha256": "A1E40C39970BD8837A05217CF520C561F178E4874BC99D5F48B41873FDDFC995",
-      "size_bytes": 14609,
+      "sha256": "4A4746BDCCDE6C518E9480F224CDF537B8A2DABCFAE1D69EC32AB28D7485C20A",
+      "size_bytes": 18818,
       "source_path": "app/authority_revision.py"
     },
     {
-      "sha256": "5073C8F171FD58370E4A0B27CA38B18FE2DE4939F070FCEE95E6F31DDF5E4517",
-      "size_bytes": 292182,
+      "sha256": "22B6EB220D0EADD712E183FF653A955C8AF157B5FE4827BD1294E79E00616A4F",
+      "size_bytes": 414601,
       "source_path": "app/customer_delivery.py"
     },
     {
@@ -36,48 +41,48 @@
       "source_path": "app/derivation_workbench.py"
     },
     {
-      "sha256": "CF463F0B919D3E11864ACA6FBC3B60564C6B14F6481557BC41A85E49390CD2A4",
-      "size_bytes": 139852,
+      "sha256": "BD3762032207279E27247D3DB769C59BE1136C105A5929082289534CDDEE77F2",
+      "size_bytes": 150045,
       "source_path": "app/equipment_design_agent.py"
     },
     {
-      "sha256": "9503C2887D154449B7897F1BC73270699FB5E164CBD2B67772F87A749D2B38F7",
-      "size_bytes": 41147,
+      "sha256": "4C7BC6F6C998BEB41FB26D56B50929B34D4D36FAB1E5B20B824F90008A1B16A0",
+      "size_bytes": 45966,
       "source_path": "app/equipment_design_app.py"
     },
     {
-      "sha256": "FC19C467D7B5A9EF0620ACAA40E2AF7E34037999EEE4B592E924D16C98468ABE",
-      "size_bytes": 144004,
+      "sha256": "4BDB192A2D2C39961C9C8479F09D5C8ECCB505C4518D7DC62BB685D61166B1B2",
+      "size_bytes": 172685,
       "source_path": "app/llm_bridge.py"
     },
     {
-      "sha256": "969E8F1BAFDA725D753CC45908E4E55DD96A329F4267396D3257148E8831A32E",
-      "size_bytes": 51063,
+      "sha256": "CD749DB17BC6BC93814E0383A140182607F740B750471FBEF86177ECC7C2A808",
+      "size_bytes": 54392,
       "source_path": "app/pfd_canvas.py"
     },
     {
-      "sha256": "F34ABBE553490B0D805E56D7F2BDAD7B831449DF24020981AD315D26611B0BBB",
-      "size_bytes": 55598,
+      "sha256": "AA0C82CB1FE188C75CE7E1626A254D30C99C1BC36E081BA31CBA9D54C7E02D39",
+      "size_bytes": 120497,
       "source_path": "app/result_presentation.py"
     },
     {
-      "sha256": "9A9A8F3B5A4162AF4E5D94ED6CE392B1C0D178435BBB52D09951F212C04B3A3B",
-      "size_bytes": 22357,
+      "sha256": "7A67CC64D1DB3187F3ED869F631C123E21A0928AB1FE0C7A3FEE04C9518D4102",
+      "size_bytes": 23522,
       "source_path": "app/runtime_bundle.py"
     },
     {
-      "sha256": "A7D00CB03CA687DE053ACC4FDDB032BEB7C1B536C538D5678ED3DBB1D581C9A4",
-      "size_bytes": 14466,
+      "sha256": "0FAFB3D712C415EC398CA4D3836C4A5EF749E5B4562C296C6051028AE6FDE489",
+      "size_bytes": 14492,
       "source_path": "app/source_code_manifest.py"
     },
     {
-      "sha256": "005BAE4CE89E808B0052463E5B7DA18320BD4C133A6274C5E06ED4D37AD00BA8",
-      "size_bytes": 190047,
+      "sha256": "05458CEA0B2DCAF05EA0CA8F9395A46E50C50A87FB42C56E0F690BD6419F2934",
+      "size_bytes": 270769,
       "source_path": "app/tk_gui.py"
     },
     {
-      "sha256": "0717FCDBAF3A9C7C6D909FB68479064BF2D49E8D01365A2845806D2D9C693D60",
-      "size_bytes": 10141,
+      "sha256": "8BC1DD3B7461B5318E1D97F6890D39A3D03AA5FB6419DA8EFCB1BDF5E812AC3B",
+      "size_bytes": 13852,
       "source_path": "app/user_guide.py"
     },
     {
@@ -86,13 +91,13 @@
       "source_path": "app/viscosity_fallback.py"
     },
     {
-      "sha256": "928DACCCE93CE4DF7FC34099C6C711D563726EE96CB6F5B612F72B1CC64577A2",
-      "size_bytes": 459389,
+      "sha256": "3D38A15CD79DFDF3DDBBB45F5DA647030C2D4ACEE9DD9C5D291C791F6E7236CC",
+      "size_bytes": 554695,
       "source_path": "scripts/aspen_equipment_derivation.py"
     },
     {
-      "sha256": "D1EE01F26CCA48C5B8B13A5539815CAE10A4EF27BDDC16ACED58189BFF78CB25",
-      "size_bytes": 50266,
+      "sha256": "7BE1A38C6ACD38785F1C3A69A65AD2FB01C0FBDBC2197F07BF1D1758D5F393DE",
+      "size_bytes": 58807,
       "source_path": "scripts/connection_component_selection.py"
     },
     {
@@ -101,8 +106,8 @@
       "source_path": "scripts/equipment_calc.py"
     },
     {
-      "sha256": "2A55B5CDB0074E3460FBD09D07240C7919384AB68A300D0096852BA7C3BACF9F",
-      "size_bytes": 404569,
+      "sha256": "13AC7157A38A899353ECFF0EC299DBF46FFE37F96C4A4B303B20F1CC6DA78CA4",
+      "size_bytes": 947842,
       "source_path": "scripts/equipment_design_match.py"
     },
     {
@@ -111,13 +116,14 @@
       "source_path": "scripts/equipment_service_profile.py"
     }
   ],
-  "manifest_payload_sha256": "1951DAC58648CD249B905B6DDB063FF7CFFB94833CC7D3CC37BBFAF8FBBE3FB4",
-  "path_set_sha256": "BDB4F9CA0034972DCF2E02A4550ACE06F8E55B95C782C537678AB281386ABE4A",
+  "manifest_payload_sha256": "A776184F569ACD7F2119B0990C1FA9BC4E04418807970C7FB80007ECB9186AF1",
+  "path_set_sha256": "E069DC540C721AD17E97BF97FAE9507EAB278FD2CAB135C0013B284AAD9554A0",
   "schema": "equipment-design-source-code-manifest-v1",
-  "source_code_set_sha256": "9329F792B621B63765C5EE1E38B50D7C71C7365373E58F2D7C83B7AD92E0F6E9",
+  "source_code_set_sha256": "DCC20B5788CF89106BB964BD38C6A05B1AAC13BA253A3FF6519545D006C793ED",
   "source_paths": [
     "app/app_core.py",
     "app/aspen_com_import.py",
+    "app/aspen_suite.py",
     "app/aspen_pfd.py",
     "app/authority_revision.py",
     "app/customer_delivery.py",

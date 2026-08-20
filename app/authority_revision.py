@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
@@ -19,9 +19,15 @@ import source_code_manifest  # noqa: E402
 AGENT_PROTOCOL_VERSION = "1.9.0"
 AUTHORITY_REVISION_SCHEMA = "equipment-design-authority-revision-v1"
 HASH_PATTERN = re.compile(r"^[A-F0-9]{64}$")
+APP_SCHEMA_PATH_PATTERN = re.compile(r"^app/schemas/[^/\\]+\.json$")
+REQUIRED_KNOWLEDGE_SCHEMA_PATHS = frozenset({
+    "knowledge_graph/aspen_equipment_export.schema.json",
+    "knowledge_graph/aspen_extraction_coverage.schema.json",
+})
 CORE_ASSET_KEYS = (
     "rules",
     "model_rules",
+    "ai_engineering_choice_registry",
     "parameter_templates",
     "customer_output_profiles",
     "pump_standard_points",
@@ -85,10 +91,46 @@ def _required_file_sha256(path: Any, asset_id: str) -> str:
     return _sha256_file(resolved)
 
 
+def _is_authority_schema_path(relative_path: Any) -> bool:
+    """Accept only flat app schemas and the two registered Aspen schemas."""
+
+    if not isinstance(relative_path, str) or not relative_path:
+        return False
+    if "\\" in relative_path:
+        return False
+    parsed = PurePosixPath(relative_path)
+    if parsed.is_absolute() or any(part in {"", ".", ".."} for part in parsed.parts):
+        return False
+    return bool(APP_SCHEMA_PATH_PATTERN.fullmatch(relative_path)) or (
+        relative_path in REQUIRED_KNOWLEDGE_SCHEMA_PATHS
+    )
+
+
+def _authority_schema_file(package_root: Path, relative_path: str) -> Path:
+    if not _is_authority_schema_path(relative_path):
+        raise AuthorityRevisionError(
+            f"authority schema path is not registered: {relative_path!r}"
+        )
+    resolved_root = package_root.expanduser().resolve()
+    candidate = (
+        resolved_root / Path(*PurePosixPath(relative_path).parts)
+    ).resolve()
+    try:
+        candidate.relative_to(resolved_root)
+    except ValueError as exc:
+        raise AuthorityRevisionError(
+            f"authority schema escapes the package root: {relative_path}"
+        ) from exc
+    return candidate
+
+
 def _current_core_asset_hashes() -> dict[str, str]:
     paths = {
         "rules": app_core.matcher.RULES_PATH,
         "model_rules": app_core.matcher.MODEL_RULES_PATH,
+        "ai_engineering_choice_registry": (
+            app_core.matcher.AI_ENGINEERING_CHOICE_REGISTRY_PATH
+        ),
         "parameter_templates": app_core.matcher.PARAMETER_TEMPLATES_PATH,
         "customer_output_profiles": app_core.matcher.CUSTOMER_OUTPUT_PROFILES_PATH,
         "pump_standard_points": app_core.matcher.PUMP_STANDARD_POINTS_PATH,
@@ -102,18 +144,27 @@ def _current_core_asset_hashes() -> dict[str, str]:
 
 
 def _current_schema_asset_hashes() -> dict[str, str]:
-    schema_root = Path(app_core.APP_DIR) / "schemas"
+    package_root = Path(app_core.PACKAGE_ROOT).expanduser().resolve()
+    schema_root = (package_root / "app" / "schemas").resolve()
+    try:
+        schema_root.relative_to(package_root)
+    except ValueError as exc:
+        raise AuthorityRevisionError(
+            "schema asset directory escapes the package root"
+        ) from exc
     if not schema_root.is_dir():
         raise AuthorityRevisionError("schema asset directory is missing")
     schema_paths = sorted(schema_root.glob("*.json"), key=lambda item: item.name)
     if not schema_paths:
         raise AuthorityRevisionError("schema asset directory is empty")
+    relative_paths = [f"app/schemas/{path.name}" for path in schema_paths]
+    relative_paths.extend(sorted(REQUIRED_KNOWLEDGE_SCHEMA_PATHS))
     return {
-        f"app/schemas/{path.name}": _required_file_sha256(
-            path,
-            f"app/schemas/{path.name}",
+        relative_path: _required_file_sha256(
+            _authority_schema_file(package_root, relative_path),
+            relative_path,
         )
-        for path in schema_paths
+        for relative_path in relative_paths
     }
 
 
@@ -156,7 +207,10 @@ def _current_source_code_binding() -> tuple[dict[str, str], str, dict[str, Any]]
     return dict(source_hashes), source_code_set_sha256, binding
 
 
-def _runtime_manifest_binding(source_runtime_revision: str) -> dict[str, Any]:
+def _runtime_manifest_binding(
+    source_runtime_revision: str,
+    schema_assets: dict[str, str],
+) -> dict[str, Any]:
     manifest_path = Path(app_core.PACKAGE_ROOT) / runtime_bundle.MANIFEST_NAME
     packaged = bool(getattr(sys, "_MEIPASS", None))
     if not packaged:
@@ -176,6 +230,46 @@ def _runtime_manifest_binding(source_runtime_revision: str) -> dict[str, Any]:
     bundle_revision = str(manifest.get("bundle_revision", "")).strip().upper()
     if not HASH_PATTERN.fullmatch(bundle_revision):
         raise AuthorityRevisionError("packaged runtime bundle revision is invalid")
+    files = manifest.get("files")
+    if not isinstance(files, list):
+        raise AuthorityRevisionError("packaged runtime manifest files are invalid")
+    manifested_schema_hashes: dict[str, str] = {}
+    for record in files:
+        if not isinstance(record, dict):
+            raise AuthorityRevisionError("packaged runtime manifest file record is invalid")
+        relative_path = record.get("runtime_path")
+        if not isinstance(relative_path, str):
+            raise AuthorityRevisionError(
+                "packaged runtime manifest file path is invalid"
+            )
+        if relative_path not in schema_assets:
+            continue
+        if relative_path in manifested_schema_hashes:
+            raise AuthorityRevisionError(
+                f"packaged runtime manifest duplicates schema asset: {relative_path}"
+            )
+        digest = str(record.get("sha256", "")).strip().upper()
+        if not HASH_PATTERN.fullmatch(digest):
+            raise AuthorityRevisionError(
+                f"packaged runtime manifest schema hash is invalid: {relative_path}"
+            )
+        manifested_schema_hashes[str(relative_path)] = digest
+    missing_schema_assets = sorted(set(schema_assets) - set(manifested_schema_hashes))
+    if missing_schema_assets:
+        raise AuthorityRevisionError(
+            "packaged runtime manifest omits authority schema assets: "
+            f"{missing_schema_assets}"
+        )
+    mismatched_schema_assets = sorted(
+        relative_path
+        for relative_path, digest in schema_assets.items()
+        if manifested_schema_hashes.get(relative_path) != digest
+    )
+    if mismatched_schema_assets:
+        raise AuthorityRevisionError(
+            "packaged runtime manifest authority schema hash mismatch: "
+            f"{mismatched_schema_assets}"
+        )
     return {
         "status": "PACKAGED",
         "manifest_sha256": _sha256_file(manifest_path),
@@ -209,7 +303,10 @@ def current_authority_revision() -> dict[str, Any]:
         "source_code_sha256": source_code_assets,
         "source_code_set_sha256": source_code_set_sha256,
         "source_code_manifest": source_code_binding,
-        "runtime_manifest": _runtime_manifest_binding(source_runtime_revision),
+        "runtime_manifest": _runtime_manifest_binding(
+            source_runtime_revision,
+            schema_assets,
+        ),
     }
     revision["authority_revision_sha256"] = canonical_sha256(revision)
     return revision
@@ -247,11 +344,16 @@ def validate_authority_revision(value: Any) -> dict[str, Any]:
     schema_assets = value.get("schema_asset_sha256")
     if not isinstance(schema_assets, dict) or not schema_assets:
         raise AuthorityRevisionError("schema_asset_sha256 must be a nonempty object")
+    missing_required_schema_paths = sorted(
+        REQUIRED_KNOWLEDGE_SCHEMA_PATHS - set(schema_assets)
+    )
+    if missing_required_schema_paths:
+        raise AuthorityRevisionError(
+            "schema_asset_sha256 omits required Aspen schema assets: "
+            f"{missing_required_schema_paths}"
+        )
     for relative_path, digest in schema_assets.items():
-        if (
-            not isinstance(relative_path, str)
-            or not re.fullmatch(r"app/schemas/[^/\\]+\.json", relative_path)
-        ):
+        if not _is_authority_schema_path(relative_path):
             raise AuthorityRevisionError("schema_asset_sha256 contains an invalid relative path")
         if not isinstance(digest, str) or not HASH_PATTERN.fullmatch(digest):
             raise AuthorityRevisionError("schema_asset_sha256 contains an invalid hash")

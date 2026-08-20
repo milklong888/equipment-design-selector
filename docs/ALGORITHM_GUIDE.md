@@ -139,6 +139,18 @@ Aspen 层不自行发明另一套设备选型算法。它负责把 Aspen 的流�
 
 每次执行都生成 `equipment-formula-trace-v1`，包括表达式、代入式、输入值、单位、来源、代码位置、适用范围和双 SHA-256。
 
+### 5.3 塔器和换热器缺项怎样退化
+
+退化不是在输出层填一段说明，而是在主算法中装载登记档案、计算并形成可编辑参数包：
+
+| 场景 | 运行入口 | 登记保底 | 程序计算与输出 |
+| --- | --- | --- | --- |
+| 填料塔缺少水力学内件数据 | `build_programmatic_tower_specification` | `tower_packing_fallback_profile`，默认 S30408 250Y 金属孔板波纹规整填料 | 床层高度、分段数、再分布器数量、床层总压降、材料和具体塔器工程标识 |
+| 固定管板管壳式换热器缺少结构参数 | `build_exchanger_default_parameter_package` | 管壳式登记结构和 `_exchanger_material_route` 材料分支 | 管长、管径、管程、折流板、排列、管数初筛和 `STHE-...` 工程标识 |
+| 可拆式板式换热器缺少结构参数 | `build_exchanger_default_parameter_package` | `gasketed_chevron_plate` 档案 | 板型、板材、垫片、框架、板厚、间隙、流程、板片数和 `PHE-...` 工程标识 |
+
+`_is_plate_exchanger_branch` 先锁定换热器结构路线；两类结构字段互斥，避免固定管板换热器因为中文名称含“板式”字样而误入板式分支。用户值逐字段覆盖登记值，重算后工程标识和追溯哈希随之刷新。所有保底档案都标为 `J/provisional/TYPE_SCREENING`，不会提升为厂家型号或正式设计证据。
+
 ## 6. 管线算法单独说明
 
 管线不是简单“有流股就给一个 DN”。主链在 `scripts/aspen_equipment_derivation.py`：
@@ -161,11 +173,29 @@ Python 负责执行逻辑，以下 JSON/图谱负责声明“有哪些设备族�
 | --- | --- |
 | `knowledge_graph/equipment_match_rules.json` | 设备族别名、输入字段、计算规则和基础匹配条件 |
 | `knowledge_graph/equipment_model_recommendation_rules.json` | 17 个设备族的具体终端型式、谓词、约束和受控默认策略 |
+| `knowledge_graph/ai_engineering_choice_registry.json` | 17 个设备族的 AI 可选具体型式、材料/零部件组合、触发条件、选择依据、来源和固定字段值 |
 | `knowledge_graph/equipment_parameter_chain_templates.json` | 各设备族参数链模板和字段职责 |
 | `knowledge_graph/equipment_customer_output_profiles.json` | 客户一览表/数据表对每个设备族的字段投影 |
 | `equipment_selection_graph/equipment_selection_graph_v2.json` | 设备族、标准路线、型号来源、证据门和图谱关系 |
 
 代码和规则必须同时存在。只改 Python、不更新规则哈希，或只改规则、不更新测试和源码/运行时清单，都不能视为有效算法版本。
+
+### 7.1 受控 AI 怎样选择型式、材料和零部件
+
+这条链不是把检索到的资料全文交给模型自由回答，而是由程序先冻结一个当前设备专用选择表：
+
+1. `equipment_design_match.py::build_model_recommendation` 完成设备族、已有输入和确定性候选计算；
+2. `_build_ai_engineering_choice_context` 从登记表中只取当前设备族的型式规则与材料/零部件组合；
+3. 每个候选都附带背景、触发条件、选择依据、来源、会写入的精确字段、当前冲突和两个上下文哈希；
+4. `llm_bridge.py` 要求模型只返回登记的规则/选择 ID、原上下文哈希、理由和所引用的登记来源；
+5. `validate_engineering_choice_assists` 对照冻结表验证 ID、轴、上下文和可用状态，虚构或冲突选择只记录为拒绝；
+6. `equipment_design_agent.py::_auto_apply_verified_hybrid_updates` 仅将通过验证的登记字段补到空缺位置；
+7. `app_core` 带着 `engineering_choice_lineage` 调用确定性匹配器单设备重算；
+8. `customer_delivery.py` 只接受 `J + provisional + TYPE_SCREENING + overwrite=false` 的这类记录进入交付投影。
+
+因此 AI 负责“依据文字工况在已审定选项中判断”，程序负责“限制选择范围、验证、应用、重算和留痕”。
+用户/Aspen 已有值不会被 AI 覆盖；自由文字型式、登记表外材料、错误哈希和一个轴上的重复选择都不会应用。
+当前登记表覆盖 17 个设备族、34 个终端型式和 36 个材料/零部件组合。
 
 ## 8. 哪些文件不是算法
 

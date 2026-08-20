@@ -1,12 +1,43 @@
 param(
     [string]$OutputDir = "dist",
     [string]$PythonExe = "",
+    [string]$BuildDir = "",
+    [string]$KnowledgeArchiveDir = "",
+    [string]$AppVersion = "2.4.3",
     [switch]$Console,
+    [switch]$OneDir,
     [switch]$PrepareOnly
 )
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$OutputRoot = if ([IO.Path]::IsPathRooted($OutputDir)) {
+    [IO.Path]::GetFullPath($OutputDir)
+}
+else {
+    [IO.Path]::GetFullPath((Join-Path $Root $OutputDir))
+}
+$BuildRoot = if ([string]::IsNullOrWhiteSpace($BuildDir)) {
+    Join-Path $Root 'build'
+}
+else {
+    [IO.Path]::GetFullPath($BuildDir)
+}
+$PackageMode = if ($OneDir) { '--onedir' } else { '--onefile' }
+$GuiWorkPath = Join-Path $BuildRoot 'equipment_design_app'
+$AgentWorkPath = Join-Path $BuildRoot 'equipment_design_agent'
+if ($AppVersion -notmatch '^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$') {
+    throw "AppVersion must contain three or four numeric components: $AppVersion"
+}
+$VersionParts = @(
+    [int]$Matches[1],
+    [int]$Matches[2],
+    [int]$Matches[3],
+    $(if ($Matches[4]) { [int]$Matches[4] } else { 0 })
+)
+$NormalizedVersion = $VersionParts -join '.'
+$GuiVersionFile = Join-Path $BuildRoot 'EquipmentDesignGraphApp.version.txt'
+$AgentVersionFile = Join-Path $BuildRoot 'EquipmentDesignAgentCLI.version.txt'
 $Python = if ([string]::IsNullOrWhiteSpace($PythonExe)) {
     (Get-Command python -ErrorAction Stop).Source
 }
@@ -16,6 +47,7 @@ else {
 $GuideName = -join ([char[]]@(0x4F7F, 0x7528, 0x8BF4, 0x660E, 0x002E, 0x006D, 0x0064))
 $DeliverySidecars = @($GuideName, 'THIRD_PARTY_NOTICES.md')
 $DeliveryScripts = @(
+    'audit_llm_multiflow_bridge.py',
     'audit_multi_bkp_model_gate.py',
     'audit_multi_bkp_overview_gate.py',
     'audit_stage1_detailed_reliability.py'
@@ -45,21 +77,37 @@ if ($LASTEXITCODE -ne 0 -or $TkinterDndVersion -ne '0.6.2') {
 }
 $WindowMode = if ($Console) { '--console' } else { '--windowed' }
 $Workspace = Split-Path -Parent $Root
+$RepositoryGraph = Join-Path $Root 'equipment_selection_graph\equipment_selection_graph_v2.json'
 $GraphCandidates = @(
-    Get-ChildItem -LiteralPath $Workspace -Directory -ErrorAction Stop |
-        ForEach-Object { Join-Path $_.FullName 'knowledge_graph\equipment_selection_graph_v2.json' } |
-        Where-Object { Test-Path -LiteralPath $_ }
+    if (Test-Path -LiteralPath $RepositoryGraph -PathType Leaf) {
+        $RepositoryGraph
+    }
+    else {
+        Get-ChildItem -LiteralPath $Workspace -Directory -ErrorAction Stop |
+            ForEach-Object { Join-Path $_.FullName 'knowledge_graph\equipment_selection_graph_v2.json' } |
+            Where-Object { Test-Path -LiteralPath $_ }
+    }
 )
 if ($GraphCandidates.Count -ne 1) {
     throw "Expected exactly one authoritative equipment_selection_graph_v2.json, found $($GraphCandidates.Count)."
 }
 $Graph = $GraphCandidates[0]
 $GraphDir = Split-Path -Parent $Graph
-$BundleRoot = Join-Path $Root 'build\bundle_assets'
+$KnowledgeArchive = if ([string]::IsNullOrWhiteSpace($KnowledgeArchiveDir)) {
+    $null
+}
+else {
+    [IO.Path]::GetFullPath($KnowledgeArchiveDir)
+}
+if ($KnowledgeArchive -and -not (Test-Path -LiteralPath $KnowledgeArchive -PathType Container)) {
+    throw "Knowledge archive directory is missing: $KnowledgeArchive"
+}
+$BundleRoot = Join-Path $BuildRoot 'bundle_assets'
 $BundledKnowledge = Join-Path $BundleRoot 'knowledge_graph'
 $BundledModelGraph = Join-Path $BundleRoot 'equipment_selection_graph'
 $BundledData = Join-Path $BundleRoot 'data'
 $BundledSchemas = Join-Path $BundleRoot 'app\schemas'
+$BundledFixtures = Join-Path $BundleRoot 'app\fixtures'
 $BundleManifest = Join-Path $BundleRoot 'runtime_asset_manifest.json'
 $SourceCodeManifest = Join-Path $Root 'app\source_code_manifest.json'
 $BundledSourceCodeManifest = Join-Path $BundleRoot 'app\source_code_manifest.json'
@@ -109,11 +157,54 @@ function Copy-LongPathFile {
 
 function Reset-BundleDirectory {
     param([Parameter(Mandatory = $true)][string]$Path)
-    Assert-ChildPath -ChildPath $Path -ParentPath (Join-Path $Root 'build')
+    Assert-ChildPath -ChildPath $Path -ParentPath $BuildRoot
     if (Test-Path -LiteralPath $Path) {
         [IO.Directory]::Delete((ConvertTo-LongPath -Path $Path), $true)
     }
     New-LongPathDirectory -Path $Path
+}
+
+function New-PyInstallerVersionFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$InternalName,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+    Assert-ChildPath -ChildPath $Path -ParentPath $BuildRoot
+    New-LongPathDirectory -Path (Split-Path -Parent $Path)
+    $tuple = $VersionParts -join ', '
+    $content = @"
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=($tuple),
+    prodvers=($tuple),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        '080404b0',
+        [
+          StringStruct('CompanyName', 'Equipment Design Selector'),
+          StringStruct('FileDescription', '$Description'),
+          StringStruct('FileVersion', '$NormalizedVersion'),
+          StringStruct('InternalName', '$InternalName'),
+          StringStruct('OriginalFilename', '$InternalName.exe'),
+          StringStruct('ProductName', 'Equipment Design Selector'),
+          StringStruct('ProductVersion', '$NormalizedVersion')
+        ]
+      )
+    ]),
+    VarFileInfo([VarStruct('Translation', [2052, 1200])])
+  ]
+)
+"@
+    Set-Content -LiteralPath $Path -Value $content -Encoding UTF8
 }
 
 function Copy-RuntimeKnowledgeAssets {
@@ -217,10 +308,99 @@ function Assert-SourceCodeAuthorityCurrent {
     }
 }
 
+function Invoke-PackagedAgentSelftest {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExecutablePath,
+        [Parameter(Mandatory = $true)][string]$RequestPath,
+        [Parameter(Mandatory = $true)][string]$ResponsePath,
+        [int]$TimeoutMilliseconds = 600000
+    )
+    if (-not (Test-Path -LiteralPath $ExecutablePath -PathType Leaf)) {
+        throw "Packaged Agent CLI is missing: $ExecutablePath"
+    }
+    if (-not (Test-Path -LiteralPath $RequestPath -PathType Leaf)) {
+        throw "Packaged Agent selftest request is missing: $RequestPath"
+    }
+    Assert-ChildPath -ChildPath $ResponsePath -ParentPath $BuildRoot
+    if ($ExecutablePath.Contains('"') -or $RequestPath.Contains('"') -or $ResponsePath.Contains('"')) {
+        throw 'Packaged Agent selftest paths must not contain a double quote.'
+    }
+    if (Test-Path -LiteralPath $ResponsePath -PathType Leaf) {
+        [IO.File]::Delete((ConvertTo-LongPath -Path $ResponsePath))
+    }
+
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $ExecutablePath
+    $startInfo.Arguments = '--request "{0}" --output "{1}" --pretty' -f $RequestPath, $ResponsePath
+    $startInfo.WorkingDirectory = Split-Path -Parent $ExecutablePath
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    foreach ($name in @(
+        'EQUIPMENT_DESIGN_LLM_API_KEY',
+        'EQUIPMENT_DESIGN_LLM_BASE_URL',
+        'EQUIPMENT_DESIGN_LLM_MODEL_ID'
+    )) {
+        if ($startInfo.EnvironmentVariables.ContainsKey($name)) {
+            $startInfo.EnvironmentVariables.Remove($name)
+        }
+    }
+
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) {
+            throw 'Packaged Agent CLI selftest process did not start.'
+        }
+        if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+            $process.Kill()
+            throw "Packaged Agent CLI selftest timed out after $TimeoutMilliseconds ms."
+        }
+        $processExitCode = $process.ExitCode
+    }
+    finally {
+        $process.Dispose()
+    }
+    if ($processExitCode -ne 0) {
+        throw "PACKAGED_AGENT_SELFTEST_EXIT_NONZERO: $processExitCode"
+    }
+    if (-not (Test-Path -LiteralPath $ResponsePath -PathType Leaf)) {
+        throw "PACKAGED_AGENT_SELFTEST_RESPONSE_MISSING: $ResponsePath"
+    }
+    try {
+        $response = Get-Content -LiteralPath $ResponsePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch {
+        throw "PACKAGED_AGENT_SELFTEST_RESPONSE_INVALID_JSON: $($_.Exception.Message)"
+    }
+    if (
+        $response.ok -ne $true -or
+        [int]$response.exit_code -ne 0 -or
+        [string]$response.result.status -ne 'PASS'
+    ) {
+        throw "PACKAGED_AGENT_SELFTEST_RESPONSE_NOT_OK: $($response | ConvertTo-Json -Depth 8 -Compress)"
+    }
+    Write-Host "Packaged Agent CLI selftest: PASS ($($response.result.check_count) checks)"
+}
+
 Reset-BundleDirectory -Path $BundleRoot
-$knowledgeFileCount = Copy-RuntimeKnowledgeAssets `
+New-PyInstallerVersionFile `
+    -Path $GuiVersionFile `
+    -InternalName 'EquipmentDesignGraphApp' `
+    -Description 'Equipment Design Selector Graphical Application'
+New-PyInstallerVersionFile `
+    -Path $AgentVersionFile `
+    -InternalName 'EquipmentDesignAgentCLI' `
+    -Description 'Equipment Design Selector Agent CLI'
+$archiveKnowledgeFileCount = 0
+if ($KnowledgeArchive) {
+    $archiveKnowledgeFileCount = Copy-RuntimeKnowledgeAssets `
+        -SourceRoot $KnowledgeArchive `
+        -DestinationRoot $BundledKnowledge
+}
+$repositoryKnowledgeFileCount = Copy-RuntimeKnowledgeAssets `
     -SourceRoot (Join-Path $Root 'knowledge_graph') `
     -DestinationRoot $BundledKnowledge
+$knowledgeFileCount = $archiveKnowledgeFileCount + $repositoryKnowledgeFileCount
 $SelectorRuntimeSource = Join-Path $Root 'knowledge_graph\type_selection\hgt20592_20635'
 $SelectorRuntimeDestination = Join-Path $BundledKnowledge 'type_selection\hgt20592_20635'
 $selectorFileCount = Copy-HashManifestPackage `
@@ -244,6 +424,14 @@ Get-ChildItem -LiteralPath (Join-Path $Root 'data\database_contracts') -Filter '
 New-Item -ItemType Directory -Path $BundledSchemas -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $Root 'app\schemas') -Filter '*.json' -File |
     Copy-Item -Destination $BundledSchemas -Force
+New-Item -ItemType Directory -Path $BundledFixtures -Force | Out-Null
+$fixtureFiles = @(
+    Get-ChildItem -LiteralPath $AppFixtures -File |
+        Where-Object { $_.Extension.ToLowerInvariant() -in @('.json', '.md') }
+)
+foreach ($fixtureFile in $fixtureFiles) {
+    Copy-Item -LiteralPath $fixtureFile.FullName -Destination $BundledFixtures -Force
+}
 
 & $Python (Join-Path $Root 'app\source_code_manifest.py') create `
     --root $Root `
@@ -275,7 +463,9 @@ $requiredBundleAssets = @(
     (Join-Path $BundledModelGraph '20-model-determination-card.md'),
     (Join-Path $BundledData 'database_authority_registry.json'),
     (Join-Path $BundledDatabaseContracts 'standards_knowledge_public_schema.sql'),
-    (Join-Path $BundledDatabaseContracts 'executable_standard_data_public_schema.sql')
+    (Join-Path $BundledDatabaseContracts 'executable_standard_data_public_schema.sql'),
+    (Join-Path $BundledFixtures 'agent_selftest_request.json'),
+    (Join-Path $BundledFixtures 'all_family_minimum_meaningful_inputs.json')
 )
 $missingBundleAssets = @($requiredBundleAssets | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
 if ($missingBundleAssets.Count -gt 0) {
@@ -289,9 +479,12 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $manifest = Get-Content -LiteralPath $BundleManifest -Raw -Encoding UTF8 | ConvertFrom-Json
 
 Write-Host "Runtime knowledge snapshot prepared: $($manifest.total_files) files, $([math]::Round($manifest.total_size_bytes / 1MB, 2)) MiB"
-Write-Host "  copied equipment tree files: $knowledgeFileCount"
+Write-Host "  copied archived knowledge files: $archiveKnowledgeFileCount"
+Write-Host "  overlaid repository files:       $repositoryKnowledgeFileCount"
+Write-Host "  copied knowledge files total:    $knowledgeFileCount"
 Write-Host "  copied selector package files: $selectorFileCount"
 Write-Host "  copied model graph files:     $modelFileCount"
+Write-Host "  copied acceptance fixtures:  $($fixtureFiles.Count)"
 Write-Host "  bundle revision:              $($manifest.bundle_revision)"
 Write-Host "  manifest: $BundleManifest"
 Write-Host "  source code manifest: $BundledSourceCodeManifest"
@@ -302,15 +495,16 @@ if ($PrepareOnly) {
 Push-Location $Root
 try {
     Assert-SourceCodeAuthorityCurrent
-    & $Python -m PyInstaller --noconfirm --clean $WindowMode --onefile `
+    & $Python -m PyInstaller --noconfirm --clean $WindowMode $PackageMode `
         --name 'EquipmentDesignGraphApp' `
         --icon $AppIcon `
+        --version-file $GuiVersionFile `
         --distpath $OutputDir `
-        --workpath 'build\equipment_design_app' `
-        --specpath 'build' `
+        --workpath $GuiWorkPath `
+        --specpath $BuildRoot `
         --paths (Join-Path $Root 'app') --paths (Join-Path $Root 'scripts') `
         --hidden-import 'pythoncom' --hidden-import 'win32com.client' `
-        --hidden-import 'app_core' --hidden-import 'llm_bridge' --hidden-import 'runtime_bundle' --hidden-import 'source_code_manifest' --hidden-import 'aspen_com_import' --hidden-import 'aspen_pfd' --hidden-import 'pfd_canvas' --hidden-import 'tk_gui' --hidden-import 'derivation_workbench' --hidden-import 'user_guide' --hidden-import 'viscosity_fallback' --hidden-import 'tkinterdnd2' --hidden-import 'tkinterdnd2.TkinterDnD' --hidden-import 'equipment_design_agent' --hidden-import 'result_presentation' --hidden-import 'customer_delivery' `
+        --hidden-import 'app_core' --hidden-import 'llm_bridge' --hidden-import 'runtime_bundle' --hidden-import 'source_code_manifest' --hidden-import 'aspen_com_import' --hidden-import 'aspen_suite' --hidden-import 'aspen_pfd' --hidden-import 'pfd_canvas' --hidden-import 'tk_gui' --hidden-import 'derivation_workbench' --hidden-import 'user_guide' --hidden-import 'viscosity_fallback' --hidden-import 'tkinterdnd2' --hidden-import 'tkinterdnd2.TkinterDnD' --hidden-import 'equipment_design_agent' --hidden-import 'result_presentation' --hidden-import 'customer_delivery' `
         --hidden-import 'equipment_calc' --hidden-import 'equipment_design_match' --hidden-import 'aspen_equipment_derivation' `
         --add-data "$BundledKnowledge;knowledge_graph" `
         --add-data "$BundledModelGraph;equipment_selection_graph" `
@@ -320,19 +514,20 @@ try {
         --add-data "$BundledData;data" `
         --add-data "$BundledSchemas;app\schemas" `
         --add-data "$AppAssets;assets" `
-        --add-data "$AppFixtures;app\fixtures" `
+        --add-data "$BundledFixtures;app\fixtures" `
         (Join-Path $Root 'app\equipment_design_app.py')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Assert-SourceCodeAuthorityCurrent
-    & $Python -m PyInstaller --noconfirm --clean --console --onefile `
+    & $Python -m PyInstaller --noconfirm --clean --console $PackageMode `
         --name 'EquipmentDesignAgentCLI' `
         --icon $AppIcon `
+        --version-file $AgentVersionFile `
         --distpath $OutputDir `
-        --workpath 'build\equipment_design_agent' `
-        --specpath 'build' `
+        --workpath $AgentWorkPath `
+        --specpath $BuildRoot `
         --paths (Join-Path $Root 'app') --paths (Join-Path $Root 'scripts') `
         --hidden-import 'pythoncom' --hidden-import 'win32com.client' `
-        --hidden-import 'equipment_design_app' --hidden-import 'app_core' --hidden-import 'llm_bridge' --hidden-import 'runtime_bundle' --hidden-import 'source_code_manifest' --hidden-import 'aspen_com_import' --hidden-import 'aspen_pfd' --hidden-import 'result_presentation' --hidden-import 'customer_delivery' --hidden-import 'viscosity_fallback' `
+        --hidden-import 'equipment_design_app' --hidden-import 'app_core' --hidden-import 'llm_bridge' --hidden-import 'runtime_bundle' --hidden-import 'source_code_manifest' --hidden-import 'aspen_com_import' --hidden-import 'aspen_suite' --hidden-import 'aspen_pfd' --hidden-import 'result_presentation' --hidden-import 'customer_delivery' --hidden-import 'viscosity_fallback' `
         --hidden-import 'equipment_calc' --hidden-import 'equipment_design_match' --hidden-import 'aspen_equipment_derivation' `
         --add-data "$BundledKnowledge;knowledge_graph" `
         --add-data "$BundledModelGraph;equipment_selection_graph" `
@@ -342,10 +537,20 @@ try {
         --add-data "$BundledData;data" `
         --add-data "$BundledSchemas;app\schemas" `
         --add-data "$AppAssets;assets" `
-        --add-data "$AppFixtures;app\fixtures" `
+        --add-data "$BundledFixtures;app\fixtures" `
         (Join-Path $Root 'app\equipment_design_agent.py')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Assert-SourceCodeAuthorityCurrent
+    $PackagedAgentExecutable = if ($OneDir) {
+        Join-Path (Join-Path $OutputRoot 'EquipmentDesignAgentCLI') 'EquipmentDesignAgentCLI.exe'
+    }
+    else {
+        Join-Path $OutputRoot 'EquipmentDesignAgentCLI.exe'
+    }
+    Invoke-PackagedAgentSelftest `
+        -ExecutablePath $PackagedAgentExecutable `
+        -RequestPath (Join-Path $BundledFixtures 'agent_selftest_request.json') `
+        -ResponsePath (Join-Path $BuildRoot 'EquipmentDesignAgentCLI.selftest.response.json')
     foreach ($SidecarName in $DeliverySidecars) {
         $SidecarPath = Join-Path $Root $SidecarName
         Copy-Item -LiteralPath $SidecarPath -Destination $OutputDir -Force

@@ -19,12 +19,14 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "rules", "model_rules", "parameter_templates", "customer_output_profiles",
+        "rules", "model_rules", "ai_engineering_choice_registry",
+        "parameter_templates", "customer_output_profiles",
         "pump_standard_points", "pipe_standard_dn_od", "equipment_selection_graph"
       ],
       "properties": {
         "rules": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "model_rules": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
+        "ai_engineering_choice_registry": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "parameter_templates": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "customer_output_profiles": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "pump_standard_points": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
@@ -36,7 +38,21 @@
     "schema_asset_sha256": {
       "type": "object",
       "minProperties": 1,
-      "propertyNames": {"pattern": "^app/schemas/[^/\\\\]+\\.json$"},
+      "required": [
+        "knowledge_graph/aspen_equipment_export.schema.json",
+        "knowledge_graph/aspen_extraction_coverage.schema.json"
+      ],
+      "propertyNames": {
+        "anyOf": [
+          {"pattern": "^app/schemas/[^/\\\\]+\\.json$"},
+          {
+            "enum": [
+              "knowledge_graph/aspen_equipment_export.schema.json",
+              "knowledge_graph/aspen_extraction_coverage.schema.json"
+            ]
+          }
+        ]
+      },
       "additionalProperties": {"type": "string", "pattern": "^[A-F0-9]{64}$"}
     },
     "schema_asset_set_sha256": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
@@ -46,9 +62,12 @@
       "required": [
         "app/app_core.py",
         "app/aspen_com_import.py",
+        "app/aspen_suite.py",
         "app/aspen_pfd.py",
         "app/authority_revision.py",
         "app/customer_delivery.py",
+        "app/database_authority.py",
+        "app/derivation_workbench.py",
         "app/equipment_design_agent.py",
         "app/equipment_design_app.py",
         "app/llm_bridge.py",
@@ -58,6 +77,7 @@
         "app/source_code_manifest.py",
         "app/tk_gui.py",
         "app/user_guide.py",
+        "app/viscosity_fallback.py",
         "scripts/aspen_equipment_derivation.py",
         "scripts/connection_component_selection.py",
         "scripts/equipment_calc.py",
@@ -67,9 +87,12 @@
       "properties": {
         "app/app_core.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "app/aspen_com_import.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
+        "app/aspen_suite.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "app/aspen_pfd.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "app/authority_revision.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "app/customer_delivery.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
+        "app/database_authority.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
+        "app/derivation_workbench.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "app/equipment_design_agent.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "app/equipment_design_app.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "app/llm_bridge.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
@@ -79,6 +102,7 @@
         "app/source_code_manifest.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "app/tk_gui.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "app/user_guide.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
+        "app/viscosity_fallback.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "scripts/aspen_equipment_derivation.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "scripts/connection_component_selection.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "scripts/equipment_calc.py": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
@@ -99,7 +123,7 @@
         "manifest_sha256": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "manifest_payload_sha256": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
         "path_set_sha256": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
-        "file_count": {"const": 19}
+        "file_count": {"const": 23}
       }
     },
     "runtime_manifest": {

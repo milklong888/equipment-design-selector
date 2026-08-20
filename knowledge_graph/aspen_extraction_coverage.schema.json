@@ -1,0 +1,418 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aspen-com-extraction-coverage-v1",
+  "title": "Aspen COM extraction coverage sidecar",
+  "type": "object",
+  "required": [
+    "schema",
+    "registry_revision",
+    "registry_audit",
+    "source_contract",
+    "counts",
+    "registry_field_hit_rate",
+    "registry_completeness_status",
+    "registry_completeness_rate",
+    "requested_status_invariant",
+    "objects",
+    "unmapped_modules",
+    "unmapped_stream_record_types",
+    "unmapped_nodes",
+    "unmapped_fields",
+    "composition_extraction",
+    "discovery_errors",
+    "case_discovery_budget"
+  ],
+  "properties": {
+    "schema": {"const": "aspen-com-extraction-coverage-v1"},
+    "registry_revision": {"type": "string", "minLength": 1},
+    "registry_audit": {"type": "object"},
+    "source_contract": {
+      "type": "object",
+      "required": [
+        "read_only_extraction",
+        "source_bkp_mutated",
+        "unmapped_value_mode",
+        "raw_unmapped_values_persisted",
+        "discovery_bounds"
+      ],
+      "properties": {
+        "read_only_extraction": {"const": true},
+        "source_bkp_mutated": {"const": false},
+        "unmapped_value_mode": {"const": "METADATA_ONLY_NO_RAW_VALUES"},
+        "raw_unmapped_values_persisted": {"const": false},
+        "discovery_bounds": {
+          "type": "object",
+          "required": [
+            "max_nodes_per_object",
+            "max_depth",
+            "max_nodes_per_case",
+            "max_metadata_bytes_per_case"
+          ],
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        }
+      },
+      "additionalProperties": true
+    },
+    "counts": {"$ref": "#/$defs/coverageCounts"},
+    "recovered_error_count": {"type": "integer", "minimum": 0},
+    "registry_field_hit_rate": {"$ref": "#/$defs/rateOrNull"},
+    "registry_field_hit_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+    "coverage_rate": {"$ref": "#/$defs/rateOrNull"},
+    "coverage_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+    "registry_completeness_status": {
+      "enum": [
+        "SCORED_REGISTERED_OBJECTS",
+        "REVIEW_OBJECT_DISCOVERY_GAPS",
+        "NOT_SCORABLE_REGISTRY_AUDIT_FAILED",
+        "NOT_SCORABLE_UNSUPPORTED_REGISTRY_IDENTITIES",
+        "NOT_SCORABLE_COM_TREE_ROOT_DIAGNOSTICS",
+        "NOT_SCORABLE_DISCOVERY_TRUNCATED",
+        "NOT_SCORABLE_REGISTERED_FIELD_ERRORS"
+      ]
+    },
+    "global_review_required": {"type": "boolean"},
+    "global_review_reasons": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "REGISTRY_AUDIT_FAILED",
+          "UNSUPPORTED_REGISTRY_IDENTITIES",
+          "COM_TREE_ROOT_DIAGNOSTICS",
+          "DISCOVERY_TRUNCATED",
+          "REGISTERED_FIELD_ERRORS",
+          "OBJECT_DISCOVERY_GAPS"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "registry_completeness_rate": {"$ref": "#/$defs/rateOrNull"},
+    "requested_status_invariant": {"type": "boolean"},
+    "object_count": {"type": "integer", "minimum": 0},
+    "object_review_count": {"type": "integer", "minimum": 0},
+    "objects": {"type": "array", "items": {"$ref": "#/$defs/coverageObject"}},
+    "unmapped_modules": {"type": "array", "items": {"$ref": "#/$defs/unmappedModule"}},
+    "unmapped_stream_record_types": {"type": "array", "items": {"$ref": "#/$defs/unmappedStreamRecordType"}},
+    "unmapped_nodes": {"type": "array", "items": {"$ref": "#/$defs/unmappedNode"}},
+    "unmapped_fields": {"type": "array", "items": {"$ref": "#/$defs/unmappedField"}},
+    "composition_extraction": {"$ref": "#/$defs/compositionCoverage"},
+    "discovery_errors": {"type": "array", "items": {"$ref": "#/$defs/discoveryError"}},
+    "discovery_error_count": {"type": "integer", "minimum": 0},
+    "root_diagnostics": {"type": "array", "items": {"type": "object"}},
+    "root_diagnostic_count": {"type": "integer", "minimum": 0},
+    "tree_discovery_truncated_object_count": {"type": "integer", "minimum": 0},
+    "case_discovery_budget_exhausted": {"type": "boolean"},
+    "case_discovery_budget": {"$ref": "#/$defs/caseBudget"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "registry_completeness_status": {"pattern": "^NOT_SCORABLE_"}
+        },
+        "required": ["registry_completeness_status"]
+      },
+      "then": {
+        "required": ["global_review_required", "global_review_reasons"],
+        "properties": {
+          "global_review_required": {"const": true},
+          "global_review_reasons": {"minItems": 1},
+          "registry_completeness_rate": {"type": "null"}
+        }
+      }
+    }
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "boundedIdentifier": {"type": "string", "minLength": 1, "maxLength": 256},
+    "boundedPath": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "boundedUnitOrNull": {"type": ["string", "null"], "maxLength": 128},
+    "boundedMetadataScalar": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "boolean"},
+        {"type": "number"},
+        {"type": "string", "maxLength": 128}
+      ]
+    },
+    "rateOrNull": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "coverageCounts": {
+      "type": "object",
+      "required": ["requested", "found", "missing", "error", "unsupported"],
+      "properties": {
+        "requested": {"type": "integer", "minimum": 0},
+        "found": {"type": "integer", "minimum": 0},
+        "missing": {"type": "integer", "minimum": 0},
+        "error": {"type": "integer", "minimum": 0},
+        "unsupported": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source"],
+      "properties": {"source": {"type": "string", "minLength": 1}},
+      "additionalProperties": true
+    },
+    "fieldObservation": {
+      "type": "object",
+      "required": [
+        "field",
+        "path",
+        "candidate_paths",
+        "unit",
+        "status",
+        "provenance",
+        "recovered_error_count"
+      ],
+      "properties": {
+        "field": {"$ref": "#/$defs/boundedIdentifier"},
+        "path": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/boundedPath"}]},
+        "candidate_paths": {"type": "array", "items": {"$ref": "#/$defs/boundedPath"}},
+        "unit": {"$ref": "#/$defs/boundedUnitOrNull"},
+        "value_type": {"$ref": "#/$defs/boundedMetadataScalar"},
+        "status": {"enum": ["found", "missing", "error"]},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "recovered_error_count": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "coverageObject": {
+      "type": "object",
+      "required": [
+        "scope",
+        "object_id",
+        "registry_status",
+        "fields",
+        "counts",
+        "registry_field_hit_rate",
+        "registry_completeness_status",
+        "registry_completeness_rate",
+        "requested_status_invariant",
+        "tree_discovery_truncated",
+        "unmapped_field_count",
+        "discovery_error_count"
+      ],
+      "properties": {
+        "scope": {"enum": ["stream", "block"]},
+        "object_id": {"$ref": "#/$defs/boundedIdentifier"},
+        "module_type": {"type": ["string", "null"], "maxLength": 256},
+        "record_type": {"type": "string", "maxLength": 256},
+        "registry_status": {"type": "string", "minLength": 1},
+        "fields": {"type": "object", "additionalProperties": {"$ref": "#/$defs/fieldObservation"}},
+        "counts": {"$ref": "#/$defs/coverageCounts"},
+        "registry_field_hit_rate": {"$ref": "#/$defs/rateOrNull"},
+        "registry_completeness_status": {"type": "string", "minLength": 1, "maxLength": 128},
+        "registry_completeness_rate": {"$ref": "#/$defs/rateOrNull"},
+        "requested_status_invariant": {"type": "boolean"},
+        "tree_discovery_truncated": {"type": "boolean"},
+        "unmapped_field_count": {"type": "integer", "minimum": 0},
+        "discovery_error_count": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "unmappedNode": {
+      "type": "object",
+      "required": ["scope", "object_id", "path", "node_kind", "unit", "status", "provenance"],
+      "properties": {
+        "scope": {"enum": ["stream", "block"]},
+        "object_id": {"$ref": "#/$defs/boundedIdentifier"},
+        "path": {"$ref": "#/$defs/boundedPath"},
+        "relative_path": {"$ref": "#/$defs/boundedPath"},
+        "node_name": {"$ref": "#/$defs/boundedIdentifier"},
+        "node_kind": {"const": "container"},
+        "unit": {"$ref": "#/$defs/boundedUnitOrNull"},
+        "status": {"const": "unsupported"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      },
+      "allOf": [{"not": {"required": ["value"]}}],
+      "additionalProperties": true
+    },
+    "unmappedField": {
+      "type": "object",
+      "required": [
+        "scope",
+        "object_id",
+        "path",
+        "node_kind",
+        "unit",
+        "status",
+        "provenance",
+        "field",
+        "value_type",
+        "value_size",
+        "value_sha256"
+      ],
+      "properties": {
+        "scope": {"enum": ["stream", "block"]},
+        "object_id": {"$ref": "#/$defs/boundedIdentifier"},
+        "path": {"$ref": "#/$defs/boundedPath"},
+        "relative_path": {"$ref": "#/$defs/boundedPath"},
+        "node_name": {"$ref": "#/$defs/boundedIdentifier"},
+        "node_kind": {"const": "leaf"},
+        "unit": {"$ref": "#/$defs/boundedUnitOrNull"},
+        "status": {"const": "unsupported"},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "field": {"$ref": "#/$defs/boundedIdentifier"},
+        "value_type": {"$ref": "#/$defs/boundedMetadataScalar"},
+        "value_size": {"type": ["integer", "null"], "minimum": 0},
+        "value_size_lower_bound": {"type": "integer", "minimum": 0},
+        "value_sha256": {"type": ["string", "null"], "pattern": "^[0-9A-F]{64}$"},
+        "value_metadata_status": {"type": "string", "minLength": 1},
+        "hash_basis": {"type": "string", "minLength": 1}
+      },
+      "allOf": [{"not": {"required": ["value"]}}],
+      "additionalProperties": true
+    },
+    "unmappedModule": {
+      "type": "object",
+      "required": ["block_id", "module_type", "status", "process_function", "provenance"],
+      "properties": {
+        "block_id": {"$ref": "#/$defs/boundedIdentifier"},
+        "module_type": {"type": "string", "minLength": 1, "maxLength": 256},
+        "icon_token": {"type": "string", "maxLength": 256},
+        "block_type_source": {"type": "string", "maxLength": 512},
+        "status": {"const": "unsupported"},
+        "process_function": {"type": "null"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      },
+      "additionalProperties": true
+    },
+    "unmappedStreamRecordType": {
+      "type": "object",
+      "required": ["stream_id", "record_type", "status", "provenance"],
+      "properties": {
+        "stream_id": {"$ref": "#/$defs/boundedIdentifier"},
+        "record_type": {"type": "string", "minLength": 1, "maxLength": 256},
+        "status": {"const": "unsupported"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      },
+      "additionalProperties": true
+    },
+    "discoveryError": {
+      "type": "object",
+      "required": ["scope", "path", "status", "provenance"],
+      "properties": {
+        "scope": {"enum": ["stream", "block"]},
+        "object_id": {
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/boundedIdentifier"}]
+        },
+        "module_type": {"type": ["string", "null"], "maxLength": 256},
+        "path": {"$ref": "#/$defs/boundedPath"},
+        "unit": {"$ref": "#/$defs/boundedUnitOrNull"},
+        "status": {"const": "error"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      },
+      "additionalProperties": true
+    },
+    "componentObservation": {
+      "type": "object",
+      "required": ["component_id", "path", "unit", "status", "provenance"],
+      "properties": {
+        "component_id": {"$ref": "#/$defs/boundedIdentifier"},
+        "path": {"$ref": "#/$defs/boundedPath"},
+        "unit": {"const": "-"},
+        "status": {"const": "found"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      },
+      "additionalProperties": false
+    },
+    "compositionRow": {
+      "type": "object",
+      "required": [
+        "stream_id",
+        "stream_record_type",
+        "status",
+        "requested_vector_count",
+        "found_vector_count",
+        "component_count",
+        "invalid_component_count",
+        "enumeration_error_count",
+        "candidate_attempts",
+        "component_observations"
+      ],
+      "properties": {
+        "stream_id": {"$ref": "#/$defs/boundedIdentifier"},
+        "stream_record_type": {"type": "string", "minLength": 1, "maxLength": 256},
+        "status": {
+          "enum": [
+            "FOUND_COMPLETE_VECTOR",
+            "NOT_APPLICABLE_NON_MATERIAL_STREAM",
+            "MISSING_OWNER_HAS_NO_RESULTS",
+            "MISSING_NO_COMPOSITION_VECTOR",
+            "MISSING_EMPTY_COMPOSITION_VECTOR",
+            "INVALID_COMPONENT_VALUES",
+            "INVALID_VECTOR_NOT_CLOSED",
+            "ERROR_COMPOSITION_ENUMERATION"
+          ]
+        },
+        "requested_vector_count": {"type": "integer", "minimum": 0, "maximum": 1},
+        "found_vector_count": {"type": "integer", "minimum": 0, "maximum": 1},
+        "component_count": {"type": "integer", "minimum": 0},
+        "invalid_component_count": {"type": "integer", "minimum": 0},
+        "enumeration_error_count": {"type": "integer", "minimum": 0},
+        "candidate_attempts": {"type": "array", "items": {"type": "object"}},
+        "component_observations": {"type": "array", "items": {"$ref": "#/$defs/componentObservation"}}
+      },
+      "additionalProperties": true
+    },
+    "compositionCoverage": {
+      "type": "object",
+      "required": [
+        "schema",
+        "status",
+        "independent_of_registry_field_hit_rate",
+        "material_stream_count",
+        "non_material_stream_count",
+        "requested_vector_count",
+        "found_vector_count",
+        "missing_vector_count",
+        "invalid_or_error_vector_count",
+        "component_count",
+        "rows"
+      ],
+      "properties": {
+        "schema": {"const": "aspen-stream-composition-extraction-coverage-v1"},
+        "status": {"enum": ["PASS", "NOT_APPLICABLE_NO_MATERIAL_STREAMS", "BLOCKED_INCOMPLETE_MATERIAL_STREAM_COMPOSITION"]},
+        "independent_of_registry_field_hit_rate": {"const": true},
+        "material_stream_count": {"type": "integer", "minimum": 0},
+        "non_material_stream_count": {"type": "integer", "minimum": 0},
+        "requested_vector_count": {"type": "integer", "minimum": 0},
+        "found_vector_count": {"type": "integer", "minimum": 0},
+        "missing_vector_count": {"type": "integer", "minimum": 0},
+        "invalid_or_error_vector_count": {"type": "integer", "minimum": 0},
+        "component_count": {"type": "integer", "minimum": 0},
+        "rows": {"type": "array", "items": {"$ref": "#/$defs/compositionRow"}}
+      },
+      "additionalProperties": true
+    },
+    "caseBudget": {
+      "type": "object",
+      "required": [
+        "max_nodes",
+        "nodes_visited",
+        "node_budget_exhausted",
+        "max_metadata_bytes",
+        "metadata_bytes_hashed",
+        "metadata_budget_exhausted",
+        "metadata_values_truncated"
+      ],
+      "properties": {
+        "max_nodes": {"type": "integer", "minimum": 0},
+        "nodes_visited": {"type": "integer", "minimum": 0},
+        "node_budget_exhausted": {"type": "boolean"},
+        "max_metadata_bytes": {"type": "integer", "minimum": 0},
+        "metadata_bytes_hashed": {"type": "integer", "minimum": 0},
+        "metadata_bytes_output": {"type": "integer", "minimum": 0},
+        "metadata_bytes_consumed": {"type": "integer", "minimum": 0},
+        "metadata_budget_exhausted": {"type": "boolean"},
+        "metadata_values_truncated": {"type": "integer", "minimum": 0},
+        "metadata_text_values_truncated": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  }
+}

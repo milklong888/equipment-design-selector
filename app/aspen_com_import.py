@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import shlex
@@ -13,6 +14,8 @@ import time
 import traceback
 from pathlib import Path
 from typing import Any
+
+from jsonschema import Draft202012Validator
 
 
 FROZEN_ROOT = getattr(sys, "_MEIPASS", None)
@@ -54,90 +57,331 @@ HAP_NORESULTS = 2
 HAP_NOT_RUN = 2097152
 
 
-STREAM_FIELDS: dict[str, list[str]] = {
-    "TEMP_OUT": [r"Output\TEMP_OUT\MIXED", r"Output\TEMP_OUT"],
-    "PRES_OUT": [r"Output\PRES_OUT\MIXED", r"Output\PRES_OUT"],
-    "MASSFLMX": [r"Output\MASSFLMX\MIXED", r"Output\MASSFLMX"],
-    "VOLFLMX": [r"Output\VOLFLMX\MIXED", r"Output\VOLFLMX"],
+ASPEN_EXTRACTION_REGISTRY_REVISION = "2026-08-20.1"
+
+
+def _field_spec(
+    *paths: str,
+    value_kind: str = "continuous",
+    requirement: str = "when_available",
+    description: str,
+) -> dict[str, Any]:
+    """Build one immutable-by-convention COM extraction registry entry."""
+
+    return {
+        "paths": list(paths),
+        "value_kind": value_kind,
+        "requirement": requirement,
+        "description": description,
+    }
+
+
+STREAM_FIELD_REGISTRY: dict[str, dict[str, Any]] = {
+    "TEMP_OUT": _field_spec(
+        r"Output\TEMP_OUT\MIXED",
+        r"Output\TEMP_OUT",
+        description="mixed-stream temperature",
+    ),
+    "PRES_OUT": _field_spec(
+        r"Output\PRES_OUT\MIXED",
+        r"Output\PRES_OUT",
+        description="mixed-stream pressure",
+    ),
+    "MASSFLMX": _field_spec(
+        r"Output\MASSFLMX\MIXED",
+        r"Output\MASSFLMX",
+        description="mixed-stream mass flow",
+    ),
+    "VOLFLMX": _field_spec(
+        r"Output\VOLFLMX\MIXED",
+        r"Output\VOLFLMX",
+        description="mixed-stream volumetric flow",
+    ),
     # Aspen V14 exposes transport-property results below STRM_UPP and keeps
     # phase values as separate real-valued leaves.  The MUMX and MIXED parent
     # nodes are integer tree-card placeholders and must not be used as the
     # physical viscosity.
-    "MUMX_LIQUID": [
+    "MUMX_LIQUID": _field_spec(
         r"Output\STRM_UPP\MUMX\MIXED\LIQUID",
-    ],
-    "MUMX_VAPOR": [
+        description="liquid-phase dynamic viscosity",
+    ),
+    "MUMX_VAPOR": _field_spec(
         r"Output\STRM_UPP\MUMX\MIXED\VAPOR",
-    ],
-    "VFRAC_OUT": [r"Output\VFRAC_OUT\MIXED", r"Output\VFRAC_OUT"],
-    "SFRAC_OUT": [r"Output\SFRAC_OUT\MIXED", r"Output\SFRAC_OUT", r"Output\SOLIDFRAC_OUT"],
-    "SOLID_MASSFLMX": [r"Output\MASSFLMX\CISOLID", r"Output\MASSFLMX\SOLID"],
-    "molecular_weight": [r"Output\MW_OUT\MIXED", r"Output\MW\MIXED", r"Output\MW"],
-    "density_kg_m3": [r"Output\RHOMX_MASS\MIXED", r"Output\RHO_MASS\MIXED"],
-    "compressibility_factor": [r"Output\ZMX\MIXED", r"Output\Z_FACTOR\MIXED"],
+        description="vapor-phase dynamic viscosity",
+    ),
+    "VFRAC_OUT": _field_spec(
+        r"Output\VFRAC_OUT\MIXED",
+        r"Output\VFRAC_OUT",
+        description="mixed-stream vapor fraction",
+    ),
+    "SFRAC_OUT": _field_spec(
+        r"Output\SFRAC_OUT\MIXED",
+        r"Output\SFRAC_OUT",
+        r"Output\SOLIDFRAC_OUT",
+        description="mixed-stream solid fraction",
+    ),
+    "SOLID_MASSFLMX": _field_spec(
+        r"Output\MASSFLMX\CISOLID",
+        r"Output\MASSFLMX\SOLID",
+        description="solid-substream mass flow",
+    ),
+    "molecular_weight": _field_spec(
+        r"Output\MW_OUT\MIXED",
+        r"Output\MW\MIXED",
+        r"Output\MW",
+        description="mixed-stream molecular weight",
+    ),
+    "density_kg_m3": _field_spec(
+        r"Output\RHOMX_MASS\MIXED",
+        r"Output\RHO_MASS\MIXED",
+        description="mixed-stream mass density",
+    ),
+    "compressibility_factor": _field_spec(
+        r"Output\ZMX\MIXED",
+        r"Output\Z_FACTOR\MIXED",
+        description="mixed-stream compressibility factor",
+    ),
 }
 
 
-BLOCK_FIELDS: dict[str, list[str]] = {
-    "QCALC": [r"Output\QCALC", r"Output\B_QCALC"],
+BLOCK_FIELD_REGISTRY: dict[str, dict[str, Any]] = {
+    "BLKSTAT": _field_spec(
+        r"Output\BLKSTAT",
+        value_kind="scalar",
+        description="Aspen block calculation status card",
+    ),
+    "QCALC": _field_spec(
+        r"Output\QCALC",
+        r"Output\B_QCALC",
+        description="block heat duty",
+    ),
     # Keep Aspen's generic net-work card separate from the three PUMP power
     # channels.  In particular, a PUMP WNET observation can be the electrical
     # utility demand; it must never inherit BRAKE_POWER and be relabelled as
     # shaft power.
-    "WNET": [r"Output\WNET", r"Output\B_WNET"],
-    "FLUID_POWER": [r"Output\FLUID_POWER"],
-    "BRAKE_POWER": [r"Output\BRAKE_POWER"],
-    "ELEC_POWER": [r"Output\ELEC_POWER"],
-    "DEFF": [r"Input\DEFF"],
-    "AREA": [r"Output\AREA", r"Output\HX_AREAP"],
-    "HEAD_CAL": [r"Output\HEAD_CAL", r"Output\HEAD"],
-    "NPSHA": [
+    "WNET": _field_spec(
+        r"Output\WNET",
+        r"Output\B_WNET",
+        description="Aspen net work or electrical utility rate; not pump shaft power",
+    ),
+    "FLUID_POWER": _field_spec(
+        r"Output\FLUID_POWER",
+        description="pump hydraulic fluid power",
+    ),
+    "BRAKE_POWER": _field_spec(
+        r"Output\BRAKE_POWER",
+        description="pump brake or shaft power",
+    ),
+    "ELEC_POWER": _field_spec(
+        r"Output\ELEC_POWER",
+        description="pump electrical input power",
+    ),
+    "DEFF": _field_spec(
+        r"Input\DEFF",
+        description="pump driver efficiency",
+    ),
+    "AREA": _field_spec(
+        r"Output\AREA",
+        r"Output\HX_AREAP",
+        description="reported heat-transfer or filtration area",
+    ),
+    "HEAD_CAL": _field_spec(
+        r"Output\HEAD_CAL",
+        r"Output\HEAD",
+        description="calculated pump head",
+    ),
+    "NPSHA": _field_spec(
         r"Output\NPSHA",
         r"Output\NPSH_AVAIL",
         r"Output\NPSH-A",
         r"Output\NPSHAVAIL",
-    ],
-    "CEFF": [r"Output\CEFF", r"Input\CEFF", r"Input\SEFF"],
-    "DELP_CAL": [r"Output\DELP_CAL", r"Output\PDRP"],
-    "PRES_RATIO": [r"Output\PRES_RATIO", r"Output\PRATIO"],
-    "NSTAGE": [r"Input\NSTAGE", r"Output\NSTAGE"],
-    "VOLUME": [r"Input\VOLUME", r"Output\VOLUME"],
-    "DIAMETER": [r"Input\DIAMETER", r"Output\DIAMETER"],
-    "HEIGHT": [r"Input\HEIGHT", r"Output\HEIGHT"],
+        description="available suction head or pressure margin; unit defines quantity kind",
+    ),
+    "CEFF": _field_spec(
+        r"Output\CEFF",
+        r"Input\CEFF",
+        r"Input\SEFF",
+        description="compressor, pump, or rotating-equipment efficiency",
+    ),
+    "DELP_CAL": _field_spec(
+        r"Output\DELP_CAL",
+        r"Output\PDRP",
+        description="calculated pressure change or drop",
+    ),
+    "PRES_RATIO": _field_spec(
+        r"Output\PRES_RATIO",
+        r"Output\PRATIO",
+        description="pressure ratio",
+    ),
+    "NSTAGE": _field_spec(
+        r"Input\NSTAGE",
+        r"Output\NSTAGE",
+        value_kind="integer",
+        description="declared or calculated stage count",
+    ),
+    "VOLUME": _field_spec(
+        r"Input\VOLUME",
+        r"Output\VOLUME",
+        description="declared or calculated active volume",
+    ),
+    "DIAMETER": _field_spec(
+        r"Input\DIAMETER",
+        r"Output\DIAMETER",
+        description="declared or calculated characteristic diameter",
+    ),
+    "HEIGHT": _field_spec(
+        r"Input\HEIGHT",
+        r"Output\HEIGHT",
+        description="declared or calculated characteristic height",
+    ),
 }
 
 
+def _module_spec(process_function: str, *fields: str) -> dict[str, Any]:
+    return {
+        "process_function": process_function,
+        "fields": list(fields),
+        "equipment_mapping_status": "REGISTERED_PROCESS_MODULE",
+    }
+
+
+BLOCK_MODULE_REGISTRY: dict[str, dict[str, Any]] = {
+    "PUMP": _module_spec(
+        "liquid pressure boosting",
+        "WNET", "FLUID_POWER", "BRAKE_POWER", "ELEC_POWER", "DEFF",
+        "HEAD_CAL", "NPSHA", "CEFF", "DELP_CAL", "PRES_RATIO",
+    ),
+    "COMPR": _module_spec(
+        "gas compression", "WNET", "CEFF", "DELP_CAL", "PRES_RATIO",
+    ),
+    "MCOMPR": _module_spec(
+        "multistage gas compression",
+        "WNET", "CEFF", "DELP_CAL", "PRES_RATIO", "NSTAGE",
+    ),
+    "MIXER": _module_spec("stream mixing", "DELP_CAL"),
+    "HEATER": _module_spec("process heating or cooling", "QCALC", "DELP_CAL"),
+    "HEATX": _module_spec("two-stream heat exchange", "QCALC", "AREA", "DELP_CAL"),
+    "RADFRAC": _module_spec(
+        "rigorous staged separation", "QCALC", "NSTAGE", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "RATEFRAC": _module_spec(
+        "rate-based staged separation", "QCALC", "NSTAGE", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "ABSBR": _module_spec(
+        "staged absorption or stripping", "NSTAGE", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "EXTRACT": _module_spec(
+        "staged liquid-liquid extraction", "NSTAGE", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "DSTWU": _module_spec(
+        "shortcut distillation", "QCALC", "NSTAGE", "DIAMETER", "HEIGHT",
+    ),
+    "FLASH2": _module_spec(
+        "vapor-liquid flash separation", "QCALC", "VOLUME", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "FLASH3": _module_spec(
+        "three-phase flash separation", "QCALC", "VOLUME", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "DECANTER": _module_spec(
+        "liquid-liquid separation", "VOLUME", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "SEP": _module_spec(
+        "general separation; construction subtype requires confirmation",
+        "QCALC", "VOLUME", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "SEP2": _module_spec(
+        "general separation; construction subtype requires confirmation",
+        "QCALC", "VOLUME", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "BATCHSEP": _module_spec(
+        "batch separation; construction subtype requires confirmation",
+        "QCALC", "VOLUME", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "CRYSTALLIZER": _module_spec(
+        "solid crystallization; operating mode and heat-removal route require confirmation",
+        "QCALC", "AREA", "VOLUME", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "FILTER": _module_spec(
+        "solid-liquid filtration; area and cycle require confirmation",
+        "AREA", "VOLUME", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "DRYER": _module_spec(
+        "solids drying; evaporation duty and drying route require confirmation",
+        "QCALC", "AREA", "VOLUME", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "RPLUG": _module_spec(
+        "plug-flow reaction", "QCALC", "VOLUME", "DIAMETER", "DELP_CAL",
+    ),
+    "RCSTR": _module_spec(
+        "continuous stirred-tank reaction", "QCALC", "VOLUME", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "RSTOIC": _module_spec(
+        "specified-conversion reaction", "QCALC", "VOLUME", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "RYIELD": _module_spec(
+        "specified-yield reaction", "QCALC", "VOLUME", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "RGIBBS": _module_spec(
+        "equilibrium reaction", "QCALC", "VOLUME", "DIAMETER", "HEIGHT", "DELP_CAL",
+    ),
+    "VALVE": _module_spec("pressure reduction", "DELP_CAL", "PRES_RATIO"),
+    "PIPE": _module_spec(
+        "process fluid transport through Aspen PIPE hydraulic block",
+        "DELP_CAL", "DIAMETER", "HEIGHT",
+    ),
+}
+
+
+# Compatibility views retained for callers/tests that imported the historical
+# path-only dictionaries.  Extraction itself consumes the richer registries.
+STREAM_FIELDS: dict[str, list[str]] = {
+    field: list(spec["paths"])
+    for field, spec in STREAM_FIELD_REGISTRY.items()
+}
+BLOCK_COMMON_FIELDS = ("BLKSTAT",)
+BLOCK_FIELDS: dict[str, list[str]] = {
+    field: list(spec["paths"])
+    for field, spec in BLOCK_FIELD_REGISTRY.items()
+    if field not in BLOCK_COMMON_FIELDS
+}
 PROCESS_FUNCTIONS = {
-    "PUMP": "liquid pressure boosting",
-    "COMPR": "gas compression",
-    "MCOMPR": "multistage gas compression",
-    "MIXER": "stream mixing",
-    "HEATER": "process heating or cooling",
-    "HEATX": "two-stream heat exchange",
-    "RADFRAC": "rigorous staged separation",
-    "DSTWU": "shortcut distillation",
-    "FLASH2": "vapor-liquid flash separation",
-    "FLASH3": "three-phase flash separation",
-    "DECANTER": "liquid-liquid separation",
-    "SEP": "general separation; construction subtype requires confirmation",
-    "SEP2": "general separation; construction subtype requires confirmation",
-    "BATCHSEP": "batch separation; construction subtype requires confirmation",
-    "CRYSTALLIZER": "solid crystallization; operating mode and heat-removal route require confirmation",
-    "FILTER": "solid-liquid filtration; area and cycle require confirmation",
-    "DRYER": "solids drying; evaporation duty and drying route require confirmation",
-    "RPLUG": "plug-flow reaction",
-    "RCSTR": "continuous stirred-tank reaction",
-    "RSTOIC": "specified-conversion reaction",
-    "RYIELD": "specified-yield reaction",
-    "RGIBBS": "equilibrium reaction",
-    "VALVE": "pressure reduction",
+    module: str(spec["process_function"])
+    for module, spec in BLOCK_MODULE_REGISTRY.items()
 }
+
+
+# Composition is a dynamic vector, so its component leaves cannot be enumerated
+# as fixed field IDs.  These prefixes are still registered and therefore do not
+# appear as false-positive unmapped COM leaves.
+STREAM_DYNAMIC_MAPPED_PREFIXES = (
+    r"Output\MOLEFRAC\MIXED",
+    r"Output\MASSFRAC\MIXED",
+)
+TREE_DISCOVERY_MAX_NODES_PER_OBJECT = 5000
+TREE_DISCOVERY_MAX_DEPTH = 24
+ROOT_COLLECTION_MAX_OBJECTS = 10000
+TREE_DISCOVERY_MAX_NODES_PER_CASE = 25000
+TREE_DISCOVERY_MAX_METADATA_BYTES_PER_CASE = 16 * 1024 * 1024
+TREE_DISCOVERY_HASH_CHUNK_CHARS = 4096
+TREE_DISCOVERY_MAX_NAME_CHARS = 256
+TREE_DISCOVERY_MAX_PATH_CHARS = 4096
+TREE_DISCOVERY_MAX_UNIT_CHARS = 128
+TREE_DISCOVERY_MAX_TYPE_CHARS = 128
+
+WORKER_SELECTION_ALLOWED_STATUSES = frozenset({
+    "PASS",
+    # A transport-property gap may retain a preliminary result for review; it
+    # is never formal Aspen evidence. COM/registry coverage gaps are different
+    # and are always blocked below.
+    "BLOCKED_TRANSPORT_PROPERTY_VERIFICATION",
+})
 
 
 # Aspen leaves UnitString empty for a narrow set of named, dimensionless (or
 # definition-fixed) cards. These defaults come from the field definition, not
 # from the numeric magnitude. Every other missing unit remains explicit.
 SEMANTIC_UNIT_DEFAULTS = {
+    "BLKSTAT": "-",
     "VFRAC_OUT": "-",
     "SFRAC_OUT": "-",
     "molecular_weight": "kg/kmol",
@@ -547,7 +791,7 @@ def prepare_transport_property_augmentation(
         reload_path = None
     manifest_path = out_dir / "transport_property_augmentation_manifest.json"
     manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n",
         encoding="utf-8",
     )
     return reload_path, manifest, manifest_path
@@ -568,7 +812,7 @@ def verify_stream_transport_properties(bundle: dict[str, Any]) -> dict[str, Any]
             required = ["MUMX"]
         elif phase == "two_phase":
             required = ["MUMX_LIQUID", "MUMX_VAPOR"]
-        elif phase == "solid":
+        elif phase in {"solid", "solid_bearing"}:
             required = []
         else:
             required = ["PHASE", "MUMX"]
@@ -604,7 +848,7 @@ def verify_stream_transport_properties(bundle: dict[str, Any]) -> dict[str, Any]
             "vapor_mumx_path": (stream.get("aspen_raw_paths") or {}).get("MUMX_VAPOR"),
             "verification_state": (
                 "NOT_APPLICABLE_SOLID_STREAM"
-                if phase == "solid"
+                if phase in {"solid", "solid_bearing"}
                 else (
                     "BLOCKED_UNVERIFIABLE_PHASE"
                     if "PHASE" in absent
@@ -621,7 +865,9 @@ def verify_stream_transport_properties(bundle: dict[str, Any]) -> dict[str, Any]
             missing.append(row)
         if "PHASE" in absent:
             unverifiable_phase.append(row)
-    if unverifiable_phase:
+    if not rows:
+        status = "BLOCKED_NO_MATERIAL_STREAMS_FOR_TRANSPORT_VERIFICATION"
+    elif unverifiable_phase:
         status = "BLOCKED_UNVERIFIABLE_ASPEN_PHASE_AND_VISCOSITY"
     elif missing:
         status = "BLOCKED_MISSING_ASPEN_VISCOSITY"
@@ -646,6 +892,44 @@ def verify_stream_transport_properties(bundle: dict[str, Any]) -> dict[str, Any]
     }
 
 
+def classify_aspen_worker_status(
+    transport_verification: dict[str, Any],
+    extraction_blockers: list[dict[str, Any]] | None,
+    extraction_coverage: dict[str, Any] | None = None,
+) -> str:
+    """Give COM extraction blockers precedence over transport verification."""
+
+    coverage = extraction_coverage or {}
+    coverage_status = str(
+        coverage.get("registry_completeness_status") or ""
+    ).strip().upper()
+    coverage_blocked = bool(
+        coverage.get("root_diagnostics")
+        or coverage.get("tree_discovery_truncated_object_count")
+        or (coverage.get("case_discovery_budget") or {}).get("node_budget_exhausted")
+        or (coverage.get("case_discovery_budget") or {}).get("metadata_budget_exhausted")
+        or coverage_status.startswith("NOT_SCORABLE_")
+    )
+    if extraction_blockers or coverage_blocked:
+        return "BLOCKED_COM_EXTRACTION"
+    if transport_verification.get("status") != "PASS":
+        return "BLOCKED_TRANSPORT_PROPERTY_VERIFICATION"
+    return "PASS"
+
+
+def worker_selection_result_available(
+    worker_status: str,
+    result: Any,
+) -> bool:
+    """Return whether a worker status may expose a preliminary selection."""
+
+    return bool(
+        str(worker_status or "").strip().upper()
+        in WORKER_SELECTION_ALLOWED_STATUSES
+        and isinstance(result, dict)
+    )
+
+
 def persist_stream_transport_evidence(
     out_dir: Path,
     source: Path,
@@ -659,7 +943,7 @@ def persist_stream_transport_evidence(
 
     verification_path = out_dir / "stream_transport_verification.json"
     verification_path.write_text(
-        json.dumps(verification, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        json.dumps(verification, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n",
         encoding="utf-8",
     )
     if manifest is None:
@@ -679,6 +963,9 @@ def persist_stream_transport_evidence(
             "claim_boundary": (
                 "The extracted Aspen stream results already contained the required "
                 "phase-specific MUMX observations; no report-configuration claim is made."
+                if verification.get("status") == "PASS"
+                else "Transport-property completeness was not established; no "
+                "already-available or successful-augmentation claim is made."
             ),
             "source_case_path": str(source),
             "source_case_sha256": sha256(source),
@@ -705,7 +992,7 @@ def persist_stream_transport_evidence(
     }
     manifest_path = out_dir / "transport_property_augmentation_manifest.json"
     manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n",
         encoding="utf-8",
     )
     return manifest, manifest_path, verification_path
@@ -766,7 +1053,7 @@ def phase_from_vapor_fraction(value: Any) -> dict[str, Any]:
     return {**result, "status": "MIXED", "phase": "two_phase"}
 
 
-def node_elements(node: Any) -> list[Any]:
+def node_elements(node: Any, max_count: int | None = None) -> list[Any]:
     if node is None:
         return []
     try:
@@ -781,6 +1068,8 @@ def node_elements(node: Any) -> list[Any]:
     def collect(start: int) -> list[Any]:
         rows: list[Any] = []
         limit = count if count is not None and count >= 0 else 10000
+        if max_count is not None:
+            limit = min(limit, max(0, int(max_count)))
         for offset in range(limit):
             index = start + offset
             try:
@@ -798,6 +1087,111 @@ def node_elements(node: Any) -> list[Any]:
     zero_based = collect(0)
     one_based = collect(1)
     return one_based if len(one_based) > len(zero_based) else zero_based
+
+
+def strict_node_elements(
+    node: Any,
+    max_count: int,
+) -> dict[str, Any]:
+    """Enumerate a COM collection while retaining Count/Item failures."""
+
+    result: dict[str, Any] = {
+        "rows": [],
+        "errors": [],
+        "index_basis": None,
+        "declared_count": None,
+        "truncated": False,
+    }
+    if node is None:
+        return result
+    try:
+        elements = node.Elements
+    except Exception as exc:
+        result["errors"].append({
+            "operation": "IHNode.Elements",
+            "error": _safe_error_text(exc),
+        })
+        return result
+    try:
+        count = int(elements.Count)
+        if count < 0:
+            raise ValueError(f"negative Elements.Count={count}")
+        result["declared_count"] = count
+    except Exception as exc:
+        count = None
+        result["errors"].append({
+            "operation": "IHNode.Elements.Count",
+            "error": _safe_error_text(exc),
+        })
+
+    def get_item(index: int) -> tuple[Any | None, dict[str, Any] | None]:
+        call_error: BaseException | None = None
+        try:
+            return elements(index), None
+        except Exception as exc:
+            call_error = exc
+        try:
+            return elements.Item(index), None
+        except Exception as item_exc:
+            return None, {
+                "operation": "IHNode.Elements.Item",
+                "index": index,
+                "error": _safe_error_text(item_exc),
+                "call_fallback_error": _safe_error_text(call_error),
+            }
+
+    if count == 0:
+        result["index_basis"] = "empty"
+        return result
+
+    zero, zero_error = get_item(0)
+    if zero_error is None and zero is not None:
+        start = 0
+        first = zero
+    else:
+        one, one_error = get_item(1)
+        if one_error is None and one is not None:
+            start = 1
+            first = one
+        else:
+            result["errors"].append({
+                "operation": "IHNode.Elements.Item.basis_probe",
+                "zero_based_error": zero_error,
+                "one_based_error": one_error,
+            })
+            return result
+    result["index_basis"] = "zero_based" if start == 0 else "one_based"
+    limit = max(0, int(max_count))
+    expected = min(count, limit) if count is not None else limit
+    if count is not None and count > limit:
+        result["truncated"] = True
+    if expected <= 0:
+        result["truncated"] = bool(count)
+        return result
+    result["rows"].append(first)
+    for offset in range(1, expected):
+        index = start + offset
+        child, error = get_item(index)
+        if error is not None or child is None:
+            result["errors"].append(
+                error
+                or {
+                    "operation": "IHNode.Elements.Item",
+                    "index": index,
+                    "error": "NULL_CHILD_WITHIN_DECLARED_COUNT",
+                }
+            )
+            break
+        result["rows"].append(child)
+    if count is not None and len(result["rows"]) != expected:
+        result["errors"].append({
+            "operation": "IHNode.Elements.enumeration",
+            "error": "DECLARED_COUNT_NOT_ENUMERATED",
+            "declared_count": count,
+            "expected_with_limit": expected,
+            "enumerated_count": len(result["rows"]),
+        })
+    return result
 
 
 def node_name(node: Any) -> str:
@@ -835,6 +1229,23 @@ def extract_stream_composition(
     stream_compstatus: Any,
     warnings: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    rows, _ = extract_stream_composition_with_status(
+        tree,
+        base,
+        stream_id,
+        stream_compstatus,
+        warnings,
+    )
+    return rows
+
+
+def extract_stream_composition_with_status(
+    tree: Any,
+    base: str,
+    stream_id: str,
+    stream_compstatus: Any,
+    warnings: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     r"""Read the complete MIXED-stream composition vector from Aspen.
 
     The path order follows the existing workspace Aspen COM references:
@@ -843,54 +1254,173 @@ def extract_stream_composition(
     is inferred here.
     """
 
+    coverage: dict[str, Any] = {
+        "stream_id": stream_id,
+        "stream_record_type": "MATERIAL",
+        "status": "MISSING_NO_COMPOSITION_VECTOR",
+        "requested_vector_count": 1,
+        "found_vector_count": 0,
+        "component_count": 0,
+        "invalid_component_count": 0,
+        "enumeration_error_count": 0,
+        "independent_of_registry_field_hit_rate": True,
+        "candidate_attempts": [],
+        "component_observations": [],
+    }
     if owner_has_no_results(stream_compstatus):
-        return []
+        coverage["status"] = "MISSING_OWNER_HAS_NO_RESULTS"
+        warnings.append({
+            "code": "BLOCKED_COMPOSITION_VECTOR_OWNER_HAS_NO_RESULTS",
+            "object": stream_id,
+            "action": "do_not_claim_a_complete_composition_vector",
+        })
+        return [], coverage
+
+    failure_priority = {
+        "ENUMERATION_ERROR": 4,
+        "INVALID_COMPONENT_VALUES": 3,
+        "NOT_CLOSED": 2,
+        "EMPTY_VECTOR": 1,
+        "MISSING_ROOT": 0,
+    }
+    selected_failure: dict[str, Any] | None = None
     for relative, basis in (
         (r"Output\MOLEFRAC\MIXED", "mole_fraction"),
         (r"Output\MASSFRAC\MIXED", "mass_fraction"),
     ):
-        root = find_node(tree, base + "\\" + relative)
-        children = node_elements(root)
-        if not children:
+        root_path = base + "\\" + relative
+        attempt: dict[str, Any] = {
+            "basis": basis,
+            "path": root_path,
+            "status": "MISSING_ROOT",
+            "declared_count": None,
+            "enumerated_count": 0,
+            "enumeration_errors": [],
+            "invalid_components": [],
+            "fraction_sum": None,
+            "closed": False,
+        }
+        try:
+            root = tree.FindNode(root_path)
+        except Exception as exc:
+            attempt["status"] = "ENUMERATION_ERROR"
+            attempt["enumeration_errors"].append({
+                "operation": "Tree.FindNode",
+                "error": _safe_error_text(exc),
+            })
+            coverage["candidate_attempts"].append(attempt)
+            selected_failure = attempt
             continue
+        if root is None:
+            coverage["candidate_attempts"].append(attempt)
+            if selected_failure is None:
+                selected_failure = attempt
+            continue
+        enumeration = strict_node_elements(root, ROOT_COLLECTION_MAX_OBJECTS)
+        children = list(enumeration["rows"])
+        attempt["declared_count"] = enumeration["declared_count"]
+        attempt["enumerated_count"] = len(children)
+        attempt["enumeration_errors"] = list(enumeration["errors"])
+        attempt["truncated"] = bool(enumeration["truncated"])
         rows: list[dict[str, Any]] = []
         invalid: list[dict[str, Any]] = []
+        component_observations: list[dict[str, Any]] = []
         for child in children:
             component_id = node_name(child).strip()
-            fraction = finite(node_value(child))
+            raw_fraction = node_value(child)
+            fraction = finite(raw_fraction)
+            component_path = root_path + "\\" + component_id
             if not component_id or fraction is None or not 0.0 <= fraction <= 1.0:
                 invalid.append({
-                    "component_id": component_id,
-                    "value": node_value(child),
+                    "component_id": _safe_text(component_id, max_chars=128),
+                    "path": component_path,
+                    "value_metadata": _discovery_value_metadata(
+                        raw_fraction,
+                        node_value_type(child),
+                    ),
                 })
                 continue
             rows.append({
                 "component_id": component_id,
                 "fraction": fraction,
                 "basis": basis,
-                "source_path": base + "\\" + relative + "\\" + component_id,
+                "source_path": component_path,
             })
-        if invalid:
-            warnings.append({
-                "code": "COMPOSITION_COMPONENT_VALUE_INVALID",
-                "object": stream_id,
-                "path": base + "\\" + relative,
-                "invalid_components": invalid,
-                "action": "composition_vector_retained_for_local_normalizer_rejection",
+            component_observations.append({
+                "component_id": component_id,
+                "path": component_path,
+                "unit": "-",
+                "status": "found",
+                "provenance": {
+                    "source": "ASPEN_LIVE_COM_TREE",
+                    "registry_revision": ASPEN_EXTRACTION_REGISTRY_REVISION,
+                    "registry_field": "composition.*",
+                    "dynamic_prefix": relative,
+                    "selection_policy": "complete_component_vector_enumeration",
+                },
             })
-        if rows:
-            total = sum(float(item["fraction"]) for item in rows)
-            if abs(total - 1.0) > max(1.0e-8, 1.0e-6 * max(1.0, abs(total))):
-                warnings.append({
-                    "code": "COMPOSITION_VECTOR_NOT_CLOSED",
-                    "object": stream_id,
-                    "path": base + "\\" + relative,
-                    "basis": basis,
-                    "fraction_sum": total,
-                    "action": "property_and_compatibility_labels_remain_unknown",
-                })
-            return rows
-    return []
+        attempt["invalid_components"] = invalid
+        attempt["invalid_component_count"] = len(invalid)
+        total = sum(float(item["fraction"]) for item in rows)
+        tolerance = max(1.0e-8, 1.0e-6 * max(1.0, abs(total)))
+        closed = bool(rows) and abs(total - 1.0) <= tolerance
+        attempt["fraction_sum"] = total if rows else None
+        attempt["closure_tolerance"] = tolerance
+        attempt["closed"] = closed
+        if enumeration["errors"] or enumeration["truncated"]:
+            attempt["status"] = "ENUMERATION_ERROR"
+        elif invalid:
+            attempt["status"] = "INVALID_COMPONENT_VALUES"
+        elif not rows:
+            attempt["status"] = "EMPTY_VECTOR"
+        elif not closed:
+            attempt["status"] = "NOT_CLOSED"
+        else:
+            attempt["status"] = "FOUND_COMPLETE_VECTOR"
+        coverage["candidate_attempts"].append(attempt)
+        if attempt["status"] == "FOUND_COMPLETE_VECTOR":
+            coverage.update({
+                "status": "FOUND_COMPLETE_VECTOR",
+                "found_vector_count": 1,
+                "component_count": len(rows),
+                "basis": basis,
+                "fraction_sum": total,
+                "closed": True,
+                "component_observations": component_observations,
+            })
+            return rows, coverage
+        if (
+            selected_failure is None
+            or failure_priority.get(str(attempt["status"]), -1)
+            > failure_priority.get(str(selected_failure.get("status")), -1)
+        ):
+            selected_failure = attempt
+    if selected_failure is not None:
+        status = str(selected_failure.get("status") or "MISSING_ROOT")
+        coverage["status"] = {
+            "ENUMERATION_ERROR": "ERROR_COMPOSITION_ENUMERATION",
+            "INVALID_COMPONENT_VALUES": "INVALID_COMPONENT_VALUES",
+            "NOT_CLOSED": "INVALID_VECTOR_NOT_CLOSED",
+            "EMPTY_VECTOR": "MISSING_EMPTY_COMPOSITION_VECTOR",
+            "MISSING_ROOT": "MISSING_NO_COMPOSITION_VECTOR",
+        }.get(status, "MISSING_NO_COMPOSITION_VECTOR")
+        coverage["invalid_component_count"] = int(
+            selected_failure.get("invalid_component_count") or 0
+        )
+        coverage["enumeration_error_count"] = len(
+            selected_failure.get("enumeration_errors") or []
+        )
+        coverage["fraction_sum"] = selected_failure.get("fraction_sum")
+        coverage["closed"] = bool(selected_failure.get("closed"))
+    warnings.append({
+        "code": "BLOCKED_COMPOSITION_VECTOR_INCOMPLETE",
+        "object": stream_id,
+        "status": coverage["status"],
+        "invalid_component_count": coverage["invalid_component_count"],
+        "enumeration_error_count": coverage["enumeration_error_count"],
+        "action": "do_not_emit_or_claim_a_complete_composition_vector",
+    })
+    return [], coverage
 
 
 def node_record_type(node: Any) -> tuple[str, str]:
@@ -1118,7 +1648,7 @@ def ensure_stream_transport_property_via_com(
     }
     manifest_path = out_dir / "transport_property_augmentation_manifest.json"
     manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n",
         encoding="utf-8",
     )
     return manifest, manifest_path
@@ -1170,6 +1700,1060 @@ def read_first(
     if skipped_integer_node:
         return None, "", skipped_integer_node, 1, "skipped_integer_node_for_continuous_field"
     return None, "", "", None, "undefined_or_missing"
+
+
+def audit_extraction_registry() -> dict[str, Any]:
+    """Return a machine-readable self-audit of the Aspen extraction registry."""
+
+    issues: list[dict[str, Any]] = []
+    for scope, registry in (
+        ("stream", STREAM_FIELD_REGISTRY),
+        ("block", BLOCK_FIELD_REGISTRY),
+    ):
+        for field, spec in registry.items():
+            paths = spec.get("paths") if isinstance(spec, dict) else None
+            if not isinstance(paths, list) or not paths:
+                issues.append({
+                    "code": "REGISTRY_FIELD_WITHOUT_PATH",
+                    "scope": scope,
+                    "field": field,
+                })
+                continue
+            normalized = [str(path).strip().casefold() for path in paths]
+            if len(normalized) != len(set(normalized)):
+                issues.append({
+                    "code": "REGISTRY_FIELD_DUPLICATE_PATH",
+                    "scope": scope,
+                    "field": field,
+                })
+            invalid_paths = [
+                path for path in paths
+                if not str(path).startswith(("Input\\", "Output\\"))
+            ]
+            if invalid_paths:
+                issues.append({
+                    "code": "REGISTRY_FIELD_PATH_OUTSIDE_INPUT_OUTPUT",
+                    "scope": scope,
+                    "field": field,
+                    "paths": invalid_paths,
+                })
+            if spec.get("value_kind") not in {"continuous", "integer", "scalar"}:
+                issues.append({
+                    "code": "REGISTRY_FIELD_INVALID_VALUE_KIND",
+                    "scope": scope,
+                    "field": field,
+                    "value_kind": spec.get("value_kind"),
+                })
+    for module, spec in BLOCK_MODULE_REGISTRY.items():
+        if module != module.upper():
+            issues.append({
+                "code": "REGISTRY_MODULE_ID_NOT_UPPERCASE",
+                "module": module,
+            })
+        process_function = str(spec.get("process_function") or "").strip()
+        if not process_function:
+            issues.append({
+                "code": "REGISTRY_MODULE_WITHOUT_SEMANTIC_ROLE",
+                "module": module,
+            })
+        module_fields = list(spec.get("fields") or [])
+        if len(module_fields) != len(set(module_fields)):
+            issues.append({
+                "code": "REGISTRY_MODULE_DUPLICATE_FIELD",
+                "module": module,
+            })
+        for field in module_fields:
+            if field not in BLOCK_FIELD_REGISTRY:
+                issues.append({
+                    "code": "REGISTRY_MODULE_REFERENCES_UNKNOWN_FIELD",
+                    "module": module,
+                    "field": field,
+                })
+    for field in BLOCK_COMMON_FIELDS:
+        if field not in BLOCK_FIELD_REGISTRY:
+            issues.append({
+                "code": "REGISTRY_COMMON_BLOCK_FIELD_UNKNOWN",
+                "field": field,
+            })
+    stream_view_matches = STREAM_FIELDS == {
+        field: list(spec["paths"])
+        for field, spec in STREAM_FIELD_REGISTRY.items()
+    }
+    block_view_matches = BLOCK_FIELDS == {
+        field: list(spec["paths"])
+        for field, spec in BLOCK_FIELD_REGISTRY.items()
+        if field not in BLOCK_COMMON_FIELDS
+    }
+    process_view_matches = PROCESS_FUNCTIONS == {
+        module: str(spec["process_function"])
+        for module, spec in BLOCK_MODULE_REGISTRY.items()
+    }
+    if not stream_view_matches or not block_view_matches:
+        issues.append({
+            "code": "LEGACY_PATH_VIEW_DIVERGED_FROM_REGISTRY",
+            "stream_view_matches": stream_view_matches,
+            "block_view_matches": block_view_matches,
+        })
+    if not process_view_matches:
+        issues.append({
+            "code": "PROCESS_FUNCTIONS_VIEW_DIVERGED_FROM_MODULE_REGISTRY",
+        })
+    return {
+        "schema": "aspen-com-extraction-registry-audit-v1",
+        "registry_revision": ASPEN_EXTRACTION_REGISTRY_REVISION,
+        "status": "PASS" if not issues else "FAIL",
+        "counts": {
+            "stream_fields": len(STREAM_FIELD_REGISTRY),
+            "block_fields": len(BLOCK_FIELD_REGISTRY),
+            "registered_block_modules": len(BLOCK_MODULE_REGISTRY),
+            "issues": len(issues),
+        },
+        "legacy_compatibility_views": {
+            "STREAM_FIELDS": stream_view_matches,
+            "BLOCK_FIELDS": block_view_matches,
+            "PROCESS_FUNCTIONS": process_view_matches,
+        },
+        "unknown_module_policy": (
+            "UNSUPPORTED_MODULE_WITH_NULL_PROCESS_FUNCTION; never assign a "
+            "generic physical-equipment role"
+        ),
+        "issues": issues,
+    }
+
+
+def resolve_unit_with_provenance(
+    field: str,
+    raw_unit: str,
+    in_units_fields: dict[str, str] | None,
+) -> dict[str, Any]:
+    """Resolve one unit and retain the exact source of that decision."""
+
+    declared = str(raw_unit or "").strip()
+    resolved, fallback_used = resolve_aspen_unit(field, declared, in_units_fields)
+    if declared:
+        source = "IHNode.UnitString"
+    else:
+        unit_set_key = RAW_FIELD_TO_IN_UNITS_KEY.get(field)
+        from_unit_set = bool(
+            unit_set_key
+            and isinstance(in_units_fields, dict)
+            and str(in_units_fields.get(unit_set_key) or "").strip()
+        )
+        if from_unit_set:
+            source = "Aspen_BKP_global_IN-UNITS_card"
+        elif field in SEMANTIC_UNIT_DEFAULTS:
+            source = "named_Aspen_card_semantics"
+        else:
+            source = "missing"
+    return {
+        "unit": resolved,
+        "raw_unit": declared or None,
+        "fallback_used": fallback_used,
+        "source": source,
+        "in_units_field": RAW_FIELD_TO_IN_UNITS_KEY.get(field),
+    }
+
+
+def read_registered_field(
+    tree: Any,
+    base: str,
+    field: str,
+    spec: dict[str, Any],
+    owner_compstatus: Any = None,
+) -> dict[str, Any]:
+    """Read one registry field without hiding COM lookup or value errors."""
+
+    relative_paths = [str(path) for path in spec.get("paths") or []]
+    candidate_paths = [base + "\\" + path for path in relative_paths]
+    value_kind = str(spec.get("value_kind") or "continuous")
+    require_continuous = value_kind == "continuous"
+    no_results = owner_has_no_results(owner_compstatus)
+    lookup_errors: list[dict[str, str]] = []
+    skipped_output: list[str] = []
+    skipped_integer: list[str] = []
+    undefined_nodes: list[str] = []
+
+    provenance = {
+        "source": "ASPEN_LIVE_COM_TREE",
+        "registry_revision": ASPEN_EXTRACTION_REGISTRY_REVISION,
+        "registry_field": field,
+        "registry_description": str(spec.get("description") or ""),
+        "registry_requirement": str(spec.get("requirement") or "when_available"),
+        "selection_policy": "first_defined_candidate_in_registry_order",
+    }
+
+    for relative, absolute in zip(relative_paths, candidate_paths):
+        if no_results and relative.lstrip("\\").upper().startswith("OUTPUT\\"):
+            skipped_output.append(absolute)
+            continue
+        try:
+            node = tree.FindNode(absolute)
+        except Exception as exc:
+            lookup_errors.append({
+                "operation": "Tree.FindNode",
+                "path": absolute,
+                "error": _safe_error_text(exc),
+            })
+            continue
+        if node is None:
+            continue
+        try:
+            raw_value = node.Value
+        except Exception as exc:
+            lookup_errors.append({
+                "operation": "IHNode.Value",
+                "path": absolute,
+                "error": _safe_error_text(exc),
+            })
+            continue
+        try:
+            if value_kind == "scalar":
+                value = (
+                    _json_safe_com_value(raw_value)
+                    if raw_value not in (None, "")
+                    else None
+                )
+            else:
+                value = finite(raw_value)
+        except (TypeError, ValueError) as exc:
+            lookup_errors.append({
+                "operation": "json_safe_scalar_conversion",
+                "path": absolute,
+                "error": _safe_error_text(exc),
+                "value_metadata": _discovery_value_metadata(
+                    raw_value,
+                    node_value_type(node),
+                ),
+            })
+            continue
+        if value is None:
+            if raw_value not in (None, ""):
+                lookup_errors.append({
+                    "operation": "numeric_conversion",
+                    "path": absolute,
+                    "error": "NON_FINITE_OR_NON_NUMERIC_COM_VALUE",
+                    "value_metadata": _discovery_value_metadata(
+                        raw_value,
+                        node_value_type(node),
+                    ),
+                })
+            else:
+                undefined_nodes.append(absolute)
+            continue
+        try:
+            value_type = node.ValueType
+        except Exception:
+            value_type = None
+        if require_continuous and value_type == 1:
+            skipped_integer.append(absolute)
+            continue
+        try:
+            raw_unit = strip_unit(node.UnitString)
+            unit_error = None
+        except Exception as exc:
+            raw_unit = ""
+            unit_error = _safe_error_text(exc)
+        field_provenance = {
+            **provenance,
+            "selected_relative_path": relative,
+            "selected_candidate_index": relative_paths.index(relative),
+            "unit_read": "IHNode.UnitString" if unit_error is None else "IHNode.UnitString_error",
+        }
+        if unit_error is not None:
+            field_provenance["unit_read_error"] = unit_error
+        return {
+            "field": field,
+            "path": absolute,
+            "candidate_paths": candidate_paths,
+            "unit": raw_unit or None,
+            "raw_unit": raw_unit or None,
+            "status": "found",
+            "detail_status": "defined",
+            "value": value,
+            "value_type": value_type,
+            "provenance": field_provenance,
+            "errors": lookup_errors,
+            "recovered_error_count": len(lookup_errors),
+        }
+
+    if lookup_errors:
+        status = "error"
+        detail_status = "com_or_value_error"
+        selected_path = lookup_errors[0]["path"]
+    elif skipped_output:
+        status = "missing"
+        detail_status = "skipped_owner_no_results"
+        selected_path = skipped_output[0]
+    elif skipped_integer:
+        status = "missing"
+        detail_status = "skipped_integer_node_for_continuous_field"
+        selected_path = skipped_integer[0]
+    else:
+        status = "missing"
+        detail_status = "undefined_or_missing"
+        selected_path = candidate_paths[0] if candidate_paths else None
+    return {
+        "field": field,
+        "path": selected_path,
+        "candidate_paths": candidate_paths,
+        "unit": None,
+        "raw_unit": None,
+        "status": status,
+        "detail_status": detail_status,
+        "value": None,
+        "value_type": 1 if skipped_integer else None,
+        "provenance": {
+            **provenance,
+            "selected_relative_path": None,
+            "selected_candidate_index": None,
+        },
+        "errors": lookup_errors,
+        "recovered_error_count": 0,
+        "skipped_paths": skipped_output + skipped_integer,
+        "undefined_paths": undefined_nodes,
+    }
+
+
+SAFE_TEXT_MAX_CHARS = 512
+
+
+def _safe_text(value: Any, max_chars: int = SAFE_TEXT_MAX_CHARS) -> str:
+    """Return bounded, UTF-8-safe diagnostic text without recursive repr use."""
+
+    try:
+        text = str(value)
+    except Exception:
+        text = f"<{type(value).__name__}:unprintable>"
+    text = text.encode("utf-8", errors="replace").decode("utf-8")
+    # Cover both plain assignments and JSON/header renderings.  In particular,
+    # the two supported LLM environment-variable names do not contain a word
+    # boundary immediately before API_KEY, so the historical generic pattern
+    # alone did not redact them.
+    text = re.sub(
+        r"(?i)([\"']?(?:OPENAI_API_KEY|EQUIPMENT_DESIGN_LLM_API_KEY)[\"']?"
+        r"\s*[:=]\s*[\"']?)[^\"'\s,;]+",
+        r"\1<redacted>",
+        text,
+    )
+    text = re.sub(
+        r"(?i)([\"']?authorization[\"']?\s*(?:[:=]\s*)?[\"']?bearer\s+)"
+        r"[^\"'\s,;]+",
+        r"\1<redacted>",
+        text,
+    )
+    text = re.sub(
+        r"(?i)\b(api[_ -]?key|password|secret|token)\s*[:=]\s*[^\s,;]+",
+        r"\1=<redacted>",
+        text,
+    )
+    if len(text) > max_chars:
+        return text[:max_chars] + "…<truncated>"
+    return text
+
+
+def _safe_error_text(exc: BaseException) -> str:
+    return _safe_text(f"{type(exc).__name__}: {_safe_text(exc)}")
+
+
+def _json_safe_com_value(value: Any) -> Any:
+    """Return a bounded JSON scalar for explicit local debugging only.
+
+    The production discovery path never calls this function or persists its
+    return value.  It exists to make any future opt-in debugger fail closed on
+    NaN/Inf, unbounded strings, invalid Unicode, or opaque COM objects.
+    """
+
+    if value is None or isinstance(value, (bool, int)):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("NON_FINITE_COM_VALUE_REJECTED")
+        return value
+    if isinstance(value, str):
+        return _safe_text(value)
+    raise TypeError(f"UNSUPPORTED_COM_VALUE_TYPE:{type(value).__name__}")
+
+
+def new_case_discovery_budget() -> dict[str, Any]:
+    """Create one mutable, bounded inventory budget shared by the whole case."""
+
+    return {
+        "max_nodes": TREE_DISCOVERY_MAX_NODES_PER_CASE,
+        "nodes_visited": 0,
+        "node_budget_exhausted": False,
+        "max_metadata_bytes": TREE_DISCOVERY_MAX_METADATA_BYTES_PER_CASE,
+        "metadata_bytes_hashed": 0,
+        "metadata_bytes_output": 0,
+        "metadata_bytes_consumed": 0,
+        "metadata_budget_exhausted": False,
+        "metadata_values_truncated": 0,
+        "metadata_text_values_truncated": 0,
+    }
+
+
+def _consume_discovery_node(case_budget: dict[str, Any] | None) -> bool:
+    if case_budget is None:
+        return True
+    limit = max(0, int(case_budget.get("max_nodes") or 0))
+    used = max(0, int(case_budget.get("nodes_visited") or 0))
+    if used >= limit:
+        case_budget["node_budget_exhausted"] = True
+        return False
+    case_budget["nodes_visited"] = used + 1
+    return True
+
+
+def _metadata_byte_allowance(case_budget: dict[str, Any] | None) -> int | None:
+    if case_budget is None:
+        return None
+    limit = max(0, int(case_budget.get("max_metadata_bytes") or 0))
+    used = max(
+        0,
+        int(
+            case_budget.get(
+                "metadata_bytes_consumed",
+                case_budget.get("metadata_bytes_hashed") or 0,
+            )
+            or 0
+        ),
+    )
+    return max(0, limit - used)
+
+
+def _bounded_discovery_text(value: Any, max_chars: int) -> tuple[str, bool]:
+    """Return one bounded metadata string and whether information was cut."""
+
+    try:
+        rendered = str(value)
+    except Exception:
+        rendered = f"<{type(value).__name__}:unprintable>"
+    rendered = rendered.encode("utf-8", errors="replace").decode("utf-8")
+    if len(rendered) <= max_chars:
+        return rendered, False
+    return rendered[:max_chars] + "…<truncated>", True
+
+
+def _json_metadata_scalar(value: Any) -> tuple[Any, bool]:
+    """Normalize COM metadata type cards to a bounded JSON scalar."""
+
+    if value is None or isinstance(value, (bool, int)):
+        return value, False
+    if isinstance(value, float):
+        return (value, False) if math.isfinite(value) else (None, True)
+    rendered, truncated = _bounded_discovery_text(
+        value,
+        TREE_DISCOVERY_MAX_TYPE_CHARS,
+    )
+    return rendered, truncated
+
+
+def _metadata_output_size(metadata: dict[str, Any]) -> int:
+    """Return canonical UTF-8 bytes for the dynamic metadata actually emitted."""
+
+    return len(
+        json.dumps(
+            metadata,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+            allow_nan=False,
+        ).encode("utf-8", errors="replace")
+    )
+
+
+def _consume_discovery_metadata_output(
+    case_budget: dict[str, Any] | None,
+    metadata: dict[str, Any],
+) -> bool:
+    """Charge the exact emitted name/path/unit/type values to the case budget."""
+
+    if case_budget is None:
+        return True
+    required = _metadata_output_size(metadata)
+    allowance = _metadata_byte_allowance(case_budget)
+    if allowance is not None and required > allowance:
+        case_budget["metadata_budget_exhausted"] = True
+        return False
+    case_budget["metadata_bytes_output"] = (
+        int(case_budget.get("metadata_bytes_output") or 0) + required
+    )
+    case_budget["metadata_bytes_consumed"] = (
+        int(case_budget.get("metadata_bytes_consumed") or 0) + required
+    )
+    return True
+
+
+def _mark_discovery_text_truncated(
+    case_budget: dict[str, Any] | None,
+) -> None:
+    if case_budget is None:
+        return
+    # Per-value length bounds are part of the same fail-closed metadata budget.
+    # A huge COM name must never become a cheap truncated record that silently
+    # passes the total-byte gate.
+    case_budget["metadata_budget_exhausted"] = True
+    case_budget["metadata_text_values_truncated"] = (
+        int(case_budget.get("metadata_text_values_truncated") or 0) + 1
+    )
+
+
+def _hash_scalar_bytes_bounded(
+    value: Any,
+    *,
+    byte_allowance: int | None,
+) -> tuple[str | None, int | None, int, bool, str]:
+    """Hash strings/bytes incrementally; never allocate their full encoding."""
+
+    digest = hashlib.sha256()
+    consumed = 0
+
+    def accept(chunk: bytes) -> bool:
+        nonlocal consumed
+        if byte_allowance is not None and consumed + len(chunk) > byte_allowance:
+            permitted = max(0, byte_allowance - consumed)
+            if permitted:
+                digest.update(chunk[:permitted])
+                consumed += permitted
+            return False
+        digest.update(chunk)
+        consumed += len(chunk)
+        return True
+
+    if isinstance(value, str):
+        basis = "utf8_surrogatepass_string_bytes"
+        for start in range(0, len(value), TREE_DISCOVERY_HASH_CHUNK_CHARS):
+            chunk = value[start:start + TREE_DISCOVERY_HASH_CHUNK_CHARS].encode(
+                "utf-8",
+                errors="surrogatepass",
+            )
+            if not accept(chunk):
+                return None, None, consumed, False, basis
+    elif isinstance(value, bytes):
+        basis = "raw_bytes"
+        view = memoryview(value)
+        for start in range(0, len(view), TREE_DISCOVERY_HASH_CHUNK_CHARS):
+            if not accept(bytes(view[start:start + TREE_DISCOVERY_HASH_CHUNK_CHARS])):
+                return None, None, consumed, False, basis
+    elif value is None or isinstance(value, (bool, int, float)):
+        basis = "canonical_json_scalar_bytes"
+        raw = json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        if not accept(raw):
+            return None, None, consumed, False, basis
+    else:
+        basis = "type_marker_not_raw_value"
+        marker = (
+            f"UNSUPPORTED_TYPE:{type(value).__module__}.{type(value).__qualname__}"
+        ).encode("utf-8")
+        if not accept(marker):
+            return None, None, consumed, False, basis
+    return digest.hexdigest().upper(), consumed, consumed, True, basis
+
+
+def _discovery_value_metadata(
+    value: Any,
+    value_type: Any,
+    case_budget: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Hash a scalar without retaining its raw value in the export."""
+
+    if isinstance(value, float) and not math.isfinite(value):
+        marker = f"REJECTED_NON_FINITE:{value!r}".encode("ascii")
+        return {
+            "value_type": value_type,
+            "value_size": 0,
+            "value_sha256": hashlib.sha256(marker).hexdigest().upper(),
+            "value_metadata_status": "rejected_non_finite",
+            "hash_basis": "non_finite_rejection_marker",
+        }
+    allowance = _metadata_byte_allowance(case_budget)
+    value_sha256, value_size, consumed, complete, basis = _hash_scalar_bytes_bounded(
+        value,
+        byte_allowance=allowance,
+    )
+    if case_budget is not None:
+        case_budget["metadata_bytes_hashed"] = (
+            int(case_budget.get("metadata_bytes_hashed") or 0) + consumed
+        )
+        case_budget["metadata_bytes_consumed"] = (
+            int(case_budget.get("metadata_bytes_consumed") or 0) + consumed
+        )
+    if not complete:
+        if case_budget is not None:
+            case_budget["metadata_budget_exhausted"] = True
+            case_budget["metadata_values_truncated"] = (
+                int(case_budget.get("metadata_values_truncated") or 0) + 1
+            )
+        return {
+            "value_type": value_type,
+            "value_size": None,
+            "value_size_lower_bound": consumed + 1,
+            "value_sha256": None,
+            "value_metadata_status": "metadata_budget_exceeded_not_hashed",
+            "hash_basis": f"{basis}:incomplete_case_budget",
+        }
+    return {
+        "value_type": value_type,
+        "value_size": value_size,
+        "value_sha256": value_sha256,
+        "value_metadata_status": (
+            "unsupported_type_metadata_only"
+            if basis == "type_marker_not_raw_value"
+            else "hashed_without_raw_value"
+        ),
+        "hash_basis": basis,
+    }
+
+
+def _normalized_relative_path(path: str) -> str:
+    return str(path or "").strip("\\").casefold()
+
+
+def _registered_tree_path(
+    relative_path: str,
+    mapped_paths: list[str],
+    dynamic_prefixes: tuple[str, ...] = (),
+) -> bool:
+    relative = _normalized_relative_path(relative_path)
+    candidates = [_normalized_relative_path(path) for path in mapped_paths]
+    dynamic = [_normalized_relative_path(path) for path in dynamic_prefixes]
+    if relative in candidates:
+        return True
+    if any(candidate.startswith(relative + "\\") for candidate in candidates):
+        return True
+    return any(
+        relative == prefix
+        or relative.startswith(prefix + "\\")
+        or prefix.startswith(relative + "\\")
+        for prefix in dynamic
+    )
+
+
+def discover_object_tree(
+    tree: Any,
+    *,
+    scope: str,
+    object_id: str,
+    base: str,
+    mapped_paths: list[str],
+    module_type: str | None = None,
+    dynamic_prefixes: tuple[str, ...] = (),
+    case_budget: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Boundedly inventory Input/Output nodes and expose unregistered leaves."""
+
+    nodes: list[dict[str, Any]] = []
+    fields: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    visited: set[int] = set()
+    truncated = False
+    node_budget_exhausted = False
+    metadata_budget_exhausted = False
+
+    for section in ("Input", "Output"):
+        absolute_root = base + "\\" + section
+        try:
+            root = tree.FindNode(absolute_root)
+        except Exception as exc:
+            errors.append({
+                "scope": scope,
+                "object_id": object_id,
+                "module_type": module_type,
+                "path": absolute_root,
+                "unit": None,
+                "status": "error",
+                "provenance": {
+                    "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                    "operation": "Tree.FindNode",
+                    "error": _safe_error_text(exc),
+                },
+            })
+            continue
+        if root is None:
+            continue
+        stack: list[tuple[Any, str, str, int]] = [
+            (root, absolute_root, section, 0)
+        ]
+        while stack:
+            node, absolute_path, relative_path, depth = stack.pop()
+            identity = id(node)
+            if identity in visited:
+                continue
+            if len(visited) >= TREE_DISCOVERY_MAX_NODES_PER_OBJECT:
+                truncated = True
+                break
+            if not _consume_discovery_node(case_budget):
+                truncated = True
+                node_budget_exhausted = True
+                break
+            visited.add(identity)
+            enumeration_limit = TREE_DISCOVERY_MAX_NODES_PER_OBJECT - len(visited)
+            if case_budget is not None:
+                enumeration_limit = min(
+                    enumeration_limit,
+                    max(
+                        0,
+                        int(case_budget.get("max_nodes") or 0)
+                        - int(case_budget.get("nodes_visited") or 0),
+                    ),
+                )
+            enumeration = strict_node_elements(
+                node,
+                enumeration_limit,
+            )
+            children = list(enumeration["rows"])
+            if enumeration["truncated"]:
+                truncated = True
+            for enumeration_error in enumeration["errors"]:
+                errors.append({
+                    "scope": scope,
+                    "object_id": object_id,
+                    "module_type": module_type,
+                    "path": absolute_path,
+                    "unit": None,
+                    "status": "error",
+                    "provenance": {
+                        "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                        **enumeration_error,
+                    },
+                })
+            mapped = _registered_tree_path(
+                relative_path,
+                mapped_paths,
+                dynamic_prefixes,
+            )
+            emitted_name, name_truncated = _bounded_discovery_text(
+                node_name(node),
+                TREE_DISCOVERY_MAX_NAME_CHARS,
+            )
+            emitted_path, path_truncated = _bounded_discovery_text(
+                absolute_path,
+                TREE_DISCOVERY_MAX_PATH_CHARS,
+            )
+            emitted_relative_path, relative_path_truncated = _bounded_discovery_text(
+                relative_path,
+                TREE_DISCOVERY_MAX_PATH_CHARS,
+            )
+            emitted_unit, unit_truncated = _bounded_discovery_text(
+                node_unit(node),
+                TREE_DISCOVERY_MAX_UNIT_CHARS,
+            )
+            text_metadata_truncated = any((
+                name_truncated,
+                path_truncated,
+                relative_path_truncated,
+                unit_truncated,
+            ))
+            if text_metadata_truncated:
+                truncated = True
+                metadata_budget_exhausted = True
+                _mark_discovery_text_truncated(case_budget)
+            node_entry = {
+                "scope": scope,
+                "object_id": object_id,
+                "module_type": module_type,
+                "path": emitted_path,
+                "relative_path": emitted_relative_path,
+                "node_name": emitted_name,
+                "node_kind": "container" if children else "leaf",
+                "unit": emitted_unit or None,
+                "status": "mapped" if mapped else "unsupported",
+                "provenance": {
+                    "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                    "registry_revision": ASPEN_EXTRACTION_REGISTRY_REVISION,
+                    "mapping_policy": "exact_candidate_or_registered_dynamic_prefix",
+                },
+            }
+            if children:
+                if not _consume_discovery_metadata_output(
+                    case_budget,
+                    {
+                        "node_name": node_entry["node_name"],
+                        "path": node_entry["path"],
+                        "relative_path": node_entry["relative_path"],
+                        "unit": node_entry["unit"],
+                    },
+                ):
+                    truncated = True
+                    metadata_budget_exhausted = True
+                    errors.append({
+                        "scope": scope,
+                        "object_id": object_id,
+                        "module_type": module_type,
+                        "path": "<metadata-budget-exhausted>",
+                        "unit": None,
+                        "status": "error",
+                        "provenance": {
+                            "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                            "operation": "metadata_output",
+                            "error": "CASE_METADATA_BYTE_BUDGET_EXCEEDED",
+                        },
+                    })
+                    stack.clear()
+                    break
+                nodes.append(node_entry)
+                if text_metadata_truncated:
+                    errors.append({
+                        "scope": scope,
+                        "object_id": object_id,
+                        "module_type": module_type,
+                        "path": emitted_path,
+                        "unit": emitted_unit or None,
+                        "status": "error",
+                        "provenance": {
+                            "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                            "operation": "metadata_output",
+                            "error": "DISCOVERY_METADATA_TEXT_LIMIT_EXCEEDED",
+                        },
+                    })
+                    stack.clear()
+                    break
+            if not children:
+                try:
+                    value = node.Value
+                except Exception as exc:
+                    value = None
+                    errors.append({
+                        "scope": scope,
+                        "object_id": object_id,
+                        "module_type": module_type,
+                        "path": absolute_path,
+                        "unit": node_entry["unit"],
+                        "status": "error",
+                        "provenance": {
+                            "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                            "operation": "IHNode.Value",
+                            "error": _safe_error_text(exc),
+                        },
+                    })
+                if value not in (None, ""):
+                    emitted_value_type, value_type_truncated = _json_metadata_scalar(
+                        node_value_type(node)
+                    )
+                    if value_type_truncated:
+                        text_metadata_truncated = True
+                        truncated = True
+                        metadata_budget_exhausted = True
+                        _mark_discovery_text_truncated(case_budget)
+                    if not _consume_discovery_metadata_output(
+                        case_budget,
+                        {
+                            "field": emitted_name
+                            or emitted_relative_path.rsplit("\\", 1)[-1],
+                            "node_name": node_entry["node_name"],
+                            "path": node_entry["path"],
+                            "relative_path": node_entry["relative_path"],
+                            "unit": node_entry["unit"],
+                            "value_type": emitted_value_type,
+                        },
+                    ):
+                        truncated = True
+                        metadata_budget_exhausted = True
+                        errors.append({
+                            "scope": scope,
+                            "object_id": object_id,
+                            "module_type": module_type,
+                            "path": "<metadata-budget-exhausted>",
+                            "unit": None,
+                            "status": "error",
+                            "provenance": {
+                                "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                                "operation": "metadata_output",
+                                "error": "CASE_METADATA_BYTE_BUDGET_EXCEEDED",
+                            },
+                        })
+                        stack.clear()
+                        break
+                    value_metadata = _discovery_value_metadata(
+                        value,
+                        emitted_value_type,
+                        case_budget,
+                    )
+                    fields.append({
+                        **node_entry,
+                        "field": emitted_name or emitted_relative_path.rsplit("\\", 1)[-1],
+                        **value_metadata,
+                    })
+                    if value_metadata["value_metadata_status"] == "rejected_non_finite":
+                        errors.append({
+                            "scope": scope,
+                            "object_id": object_id,
+                            "module_type": module_type,
+                            "path": absolute_path,
+                            "unit": node_entry["unit"],
+                            "status": "error",
+                            "provenance": {
+                                "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                                "operation": "value_metadata",
+                                "error": "NON_FINITE_COM_VALUE_REJECTED",
+                            },
+                        })
+                    elif value_metadata["value_metadata_status"] == "metadata_budget_exceeded_not_hashed":
+                        truncated = True
+                        metadata_budget_exhausted = True
+                        errors.append({
+                            "scope": scope,
+                            "object_id": object_id,
+                            "module_type": module_type,
+                            "path": absolute_path,
+                            "unit": node_entry["unit"],
+                            "status": "error",
+                            "provenance": {
+                                "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                                "operation": "value_metadata",
+                                "error": "CASE_METADATA_BYTE_BUDGET_EXCEEDED",
+                            },
+                        })
+                        stack.clear()
+                        break
+                    if text_metadata_truncated:
+                        errors.append({
+                            "scope": scope,
+                            "object_id": object_id,
+                            "module_type": module_type,
+                            "path": emitted_path,
+                            "unit": emitted_unit or None,
+                            "status": "error",
+                            "provenance": {
+                                "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                                "operation": "metadata_output",
+                                "error": "DISCOVERY_METADATA_TEXT_LIMIT_EXCEEDED",
+                            },
+                        })
+                        stack.clear()
+                        break
+            if depth >= TREE_DISCOVERY_MAX_DEPTH:
+                if children:
+                    truncated = True
+                continue
+            for child in reversed(children):
+                raw_name = node_name(child).strip()
+                if not raw_name:
+                    errors.append({
+                        "scope": scope,
+                        "object_id": object_id,
+                        "module_type": module_type,
+                        "path": absolute_path,
+                        "unit": None,
+                        "status": "error",
+                        "provenance": {
+                            "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                            "operation": "IHNode.Name",
+                            "error": "EMPTY_CHILD_NAME",
+                        },
+                    })
+                    continue
+                name, child_name_truncated = _bounded_discovery_text(
+                    raw_name,
+                    TREE_DISCOVERY_MAX_NAME_CHARS,
+                )
+                if child_name_truncated:
+                    truncated = True
+                    metadata_budget_exhausted = True
+                    _mark_discovery_text_truncated(case_budget)
+                    errors.append({
+                        "scope": scope,
+                        "object_id": object_id,
+                        "module_type": module_type,
+                        "path": absolute_path,
+                        "unit": None,
+                        "status": "error",
+                        "provenance": {
+                            "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                            "operation": "IHNode.Name",
+                            "error": "DISCOVERY_METADATA_TEXT_LIMIT_EXCEEDED",
+                        },
+                    })
+                    stack.clear()
+                    break
+                stack.append((
+                    child,
+                    absolute_path + "\\" + name,
+                    relative_path + "\\" + name,
+                    depth + 1,
+                ))
+        if truncated:
+            break
+    return {
+        "nodes": nodes,
+        "fields": fields,
+        "errors": errors,
+        "truncated": truncated,
+        "visited_node_count": len(visited),
+        "budget_exhausted": {
+            "node": node_budget_exhausted,
+            "metadata": metadata_budget_exhausted,
+        },
+    }
+
+
+def summarize_field_coverage(
+    observations: dict[str, dict[str, Any]],
+    *,
+    unsupported_count: int = 0,
+    registry_status: str = "supported",
+    unmapped_field_count: int = 0,
+    discovery_error_count: int = 0,
+    discovery_truncated: bool = False,
+) -> dict[str, Any]:
+    requested = len(observations)
+    counts = {
+        "requested": requested,
+        "found": sum(1 for item in observations.values() if item.get("status") == "found"),
+        "missing": sum(1 for item in observations.values() if item.get("status") == "missing"),
+        "error": sum(1 for item in observations.values() if item.get("status") == "error"),
+        "unsupported": int(unsupported_count),
+    }
+    hit_rate = counts["found"] / requested if requested else None
+    completeness_scorable = (
+        registry_status == "supported"
+        and not discovery_truncated
+        and discovery_error_count == 0
+        and unmapped_field_count == 0
+        and counts["error"] == 0
+    )
+    if registry_status != "supported":
+        completeness_status = f"NOT_SCORABLE_{registry_status.upper()}"
+    elif discovery_truncated:
+        completeness_status = "NOT_SCORABLE_DISCOVERY_TRUNCATED"
+    elif discovery_error_count:
+        completeness_status = "NOT_SCORABLE_DISCOVERY_ERRORS"
+    elif counts["error"]:
+        completeness_status = "NOT_SCORABLE_REGISTERED_FIELD_ERRORS"
+    elif unmapped_field_count:
+        completeness_status = "REVIEW_UNMAPPED_FIELDS"
+    else:
+        completeness_status = "SCORED_REGISTERED_OBJECT"
+    return {
+        "counts": counts,
+        "recovered_error_count": sum(
+            int(item.get("recovered_error_count") or 0)
+            for item in observations.values()
+        ),
+        "registry_field_hit_rate": hit_rate,
+        "registry_field_hit_percent": (
+            round(100.0 * counts["found"] / requested, 6)
+            if requested
+            else None
+        ),
+        # Backward-compatible alias. This never claims semantic completeness.
+        "coverage_rate": hit_rate,
+        "coverage_percent": (
+            round(100.0 * counts["found"] / requested, 6)
+            if requested
+            else None
+        ),
+        "registry_completeness_status": completeness_status,
+        "registry_completeness_rate": hit_rate if completeness_scorable else None,
+        "requested_status_invariant": (
+            counts["found"] + counts["missing"] + counts["error"]
+            == requested
+        ),
+    }
 
 
 def parse_aspen_history(text: str) -> dict[str, Any]:
@@ -1433,6 +3017,48 @@ def verified_run_status(parsed: dict[str, Any]) -> dict[str, int] | None:
     return {name: counts[name] for name in required}
 
 
+def classify_run_evidence(
+    parsed: dict[str, Any],
+    *,
+    run_requested: bool,
+    raw_history_present: bool,
+) -> dict[str, Any]:
+    """Separate successful COM execution from formal clean-run evidence."""
+
+    if not run_requested:
+        return {
+            "status": "NOT_REQUESTED_READ_ONLY",
+            "clean": False,
+            "run_requested": False,
+            "raw_history_present": raw_history_present,
+            "counts": None,
+            "problem_lines": [],
+        }
+    counts = verified_run_status(parsed)
+    problems = (
+        [str(item) for item in parsed.get("problem_lines", [])]
+        if isinstance(parsed.get("problem_lines"), list)
+        else []
+    )
+    if counts is None or not raw_history_present:
+        status = "RUN_EVIDENCE_MISSING"
+        clean = False
+    elif any(counts.values()) or problems:
+        status = "DIRTY_RUN_EVIDENCE"
+        clean = False
+    else:
+        status = "CLEAN_RUN_EVIDENCE"
+        clean = True
+    return {
+        "status": status,
+        "clean": clean,
+        "run_requested": True,
+        "raw_history_present": raw_history_present,
+        "counts": counts,
+        "problem_lines": problems[:200],
+    }
+
+
 def create_aspen() -> tuple[Any, str]:
     import win32com.client as win32
 
@@ -1480,7 +3106,7 @@ def run_async(app: Any, timeout_s: int) -> dict[str, Any]:
         # diagnostic is retained instead of silently treating input processing
         # as verified.
         result["process_input"] = "unavailable"
-        result["process_input_warning"] = str(exc)
+        result["process_input_warning"] = _safe_error_text(exc)
     result["run2_return"] = repr(app.Engine.Run2(False))
     deadline = time.time() + timeout_s
     while time.time() < deadline:
@@ -1520,7 +3146,7 @@ def request_run_artifacts(app: Any, work: Path, out_dir: Path) -> dict[str, Any]
             "size_bytes": capture.stat().st_size if capture.is_file() else 0,
         }
     except Exception as exc:
-        result["save_as"] = {"status": "FAILED", "error": str(exc)}
+        result["save_as"] = {"status": "FAILED", "error": _safe_error_text(exc)}
 
     exports: dict[str, Any] = {}
     for name, export_type, filename in (
@@ -1537,7 +3163,7 @@ def request_run_artifacts(app: Any, work: Path, out_dir: Path) -> dict[str, Any]
                 "size_bytes": target.stat().st_size if target.is_file() else 0,
             }
         except Exception as exc:
-            exports[name] = {"status": "FAILED", "error": str(exc)}
+            exports[name] = {"status": "FAILED", "error": _safe_error_text(exc)}
     result["exports"] = exports
     return result
 
@@ -1569,19 +3195,35 @@ def connection_records(node: Any) -> list[dict[str, Any]]:
     return rows
 
 
-def extract_bundle(
+def extract_bundle_with_coverage(
     tree: Any,
     case: dict[str, Any],
     in_units_fields: dict[str, str] | None = None,
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
     units: dict[str, str] = {}
     warnings: list[dict[str, Any]] = []
+    registry_audit = audit_extraction_registry()
+    coverage_objects: list[dict[str, Any]] = []
+    unmapped_modules: list[dict[str, Any]] = []
+    unmapped_stream_record_types: list[dict[str, Any]] = []
+    unmapped_nodes: list[dict[str, Any]] = []
+    unmapped_fields: list[dict[str, Any]] = []
+    discovery_errors: list[dict[str, Any]] = []
+    composition_coverage_rows: list[dict[str, Any]] = []
+    case_discovery_budget = new_case_discovery_budget()
 
-    def register_unit(scope: str, field: str, unit: str, object_id: str) -> None:
-        resolved, fallback_used = resolve_aspen_unit(field, unit, in_units_fields)
+    def register_unit(
+        scope: str,
+        field: str,
+        unit: str,
+        object_id: str,
+    ) -> dict[str, Any]:
+        resolution = resolve_unit_with_provenance(field, unit, in_units_fields)
+        resolved = resolution["unit"]
+        fallback_used = bool(resolution["fallback_used"])
         if resolved is None:
             warnings.append({"code": "MISSING_UNITSTRING", "object": object_id, "field": field})
-            return
+            return resolution
         normalized = resolved
         if fallback_used:
             unit_set_key = RAW_FIELD_TO_IN_UNITS_KEY.get(field)
@@ -1607,40 +3249,143 @@ def extract_bundle(
         existing = units.get(key)
         if existing and existing != normalized:
             warnings.append({"code": "CONFLICTING_UNITSTRING", "object": object_id, "field": field, "units": [existing, normalized]})
-            return
+            return resolution
         units[key] = normalized
+        return resolution
 
     streams: list[dict[str, Any]] = []
     stream_record_types: dict[str, str] = {}
-    stream_root = find_node(tree, r"\Data\Streams")
-    for stream in node_elements(stream_root):
+    stream_root_access_error = False
+    try:
+        stream_root = tree.FindNode(r"\Data\Streams")
+    except Exception as exc:
+        stream_root_access_error = True
+        stream_root = None
+        discovery_errors.append({
+            "scope": "stream",
+            "object_id": None,
+            "module_type": None,
+            "path": r"\Data\Streams",
+            "unit": None,
+            "status": "error",
+            "provenance": {
+                "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                "operation": "Tree.FindNode",
+                "error": _safe_error_text(exc),
+            },
+        })
+    if stream_root is None:
+        warnings.append({
+            "code": (
+                "BLOCKED_COM_TREE_ROOT_ACCESS_ERROR"
+                if stream_root_access_error
+                else "BLOCKED_COM_TREE_ROOT_MISSING"
+            ),
+            "scope": "stream",
+            "path": r"\Data\Streams",
+        })
+        stream_nodes: list[Any] = []
+    else:
+        stream_enumeration = strict_node_elements(
+            stream_root,
+            ROOT_COLLECTION_MAX_OBJECTS,
+        )
+        stream_nodes = list(stream_enumeration["rows"])
+        for error in stream_enumeration["errors"]:
+            discovery_errors.append({
+                "scope": "stream",
+                "object_id": None,
+                "module_type": None,
+                "path": r"\Data\Streams",
+                "unit": None,
+                "status": "error",
+                "provenance": {
+                    "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                    **error,
+                },
+            })
+        if stream_enumeration["errors"]:
+            warnings.append({
+                "code": "BLOCKED_COM_TREE_ROOT_ENUMERATION_ERROR",
+                "scope": "stream",
+                "path": r"\Data\Streams",
+                "error_count": len(stream_enumeration["errors"]),
+            })
+        if stream_enumeration["truncated"]:
+            warnings.append({
+                "code": "BLOCKED_COM_TREE_ROOT_ENUMERATION_TRUNCATED",
+                "scope": "stream",
+                "limit": ROOT_COLLECTION_MAX_OBJECTS,
+            })
+    for stream in stream_nodes:
         stream_id = node_name(stream)
         if not stream_id:
             continue
         record_type, record_type_source = node_record_type(stream)
         stream_record_types[stream_id] = record_type
         stream_compstatus = node_compstatus(stream)
+        normalized_record_type = record_type or "UNKNOWN"
+        if normalized_record_type == "MATERIAL":
+            stream_registry_status = "supported"
+            active_stream_registry = STREAM_FIELD_REGISTRY
+        elif normalized_record_type in {"HEAT", "WORK", "ENERGY"}:
+            stream_registry_status = "not_applicable_non_material_stream"
+            active_stream_registry = {}
+        else:
+            stream_registry_status = "unsupported_stream_record_type"
+            active_stream_registry = {}
+            unmapped_stream_record_types.append({
+                "stream_id": stream_id,
+                "record_type": normalized_record_type,
+                "status": "unsupported",
+                "provenance": {
+                    "source": record_type_source,
+                    "registry_revision": ASPEN_EXTRACTION_REGISTRY_REVISION,
+                },
+            })
+            warnings.append({
+                "code": "UNSUPPORTED_STREAM_RECORD_TYPE",
+                "object": stream_id,
+                "record_type": normalized_record_type,
+                "record_type_source": record_type_source,
+                "action": "retain topology/discovery only; do not apply material-stream field coverage",
+            })
         row: dict[str, Any] = {
             "stream_id": stream_id,
-            "stream_record_type": record_type or "UNKNOWN",
+            "stream_record_type": normalized_record_type,
             "stream_record_type_source": record_type_source,
+            "stream_registry_status": stream_registry_status,
             "stream_compstatus": stream_compstatus,
             "connections": connection_records(stream),
             "aspen_raw_paths": {},
             "aspen_raw_values": {},
+            "field_observations": {},
         }
         base = rf"\Data\Streams\{stream_id}"
-        for field, paths in STREAM_FIELDS.items():
-            value, unit, relative, value_type, value_status = read_first(
-                tree, base, paths, stream_compstatus, require_continuous=True
+        for field, spec in active_stream_registry.items():
+            observation = read_registered_field(
+                tree,
+                base,
+                field,
+                spec,
+                stream_compstatus,
             )
-            if value is None:
+            value_status = str(observation["detail_status"])
+            value_type = observation.get("value_type")
+            if observation["status"] != "found":
+                unit_resolution = resolve_unit_with_provenance(
+                    field,
+                    "",
+                    in_units_fields,
+                )
+                observation["unit"] = unit_resolution["unit"]
+                observation["unit_provenance"] = unit_resolution
                 if value_status == "skipped_owner_no_results":
                     warnings.append({
                         "code": "OUTPUT_SKIPPED_NO_RESULTS",
                         "object": stream_id,
                         "field": field,
-                        "path": base + "\\" + relative,
+                        "path": observation.get("path"),
                         "compstatus": stream_compstatus,
                         "basis": "HAP_COMPSTATUS includes HAP_NORESULTS or HAP_NOT_RUN",
                     })
@@ -1649,21 +3394,47 @@ def extract_bundle(
                         "code": "CONTINUOUS_FIELD_SKIPPED_INTEGER_NODE",
                         "object": stream_id,
                         "field": field,
-                        "path": base + "\\" + relative,
+                        "path": observation.get("path"),
                         "value_type": value_type,
                         "basis": "IHNode.ValueType=1 is integer; target field requires a real physical quantity",
                     })
+                elif observation["status"] == "error":
+                    warnings.append({
+                        "code": "COM_FIELD_EXTRACTION_ERROR",
+                        "object": stream_id,
+                        "field": field,
+                        "path": observation.get("path"),
+                        "errors": observation.get("errors") or [],
+                    })
+                row["field_observations"][field] = observation
                 continue
+            if observation.get("recovered_error_count"):
+                warnings.append({
+                    "code": "COM_FIELD_EXTRACTION_RECOVERED_AFTER_ERROR",
+                    "object": stream_id,
+                    "field": field,
+                    "selected_path": observation.get("path"),
+                    "recovered_error_count": observation["recovered_error_count"],
+                    "errors": observation.get("errors") or [],
+                })
+            value = observation["value"]
+            raw_unit = str(observation.get("raw_unit") or "")
+            unit_resolution = register_unit("stream", field, raw_unit, stream_id)
+            observation["unit"] = unit_resolution["unit"]
+            observation["unit_provenance"] = unit_resolution
+            row["field_observations"][field] = observation
             row[field] = value
-            row["aspen_raw_paths"][field] = base + "\\" + relative
+            row["aspen_raw_paths"][field] = observation["path"]
             row["aspen_raw_values"][field] = {
                 "value": value,
                 "value_type": value_type,
-                "unit": unit,
-                "path": base + "\\" + relative,
+                "unit": raw_unit,
+                "resolved_unit": unit_resolution["unit"],
+                "unit_provenance": unit_resolution,
+                "path": observation["path"],
                 "status": value_status,
+                "provenance": observation["provenance"],
             }
-            register_unit("stream", field, unit, stream_id)
         solid_fraction = finite(row.get("SFRAC_OUT"))
         solid_fraction_source = "SFRAC_OUT"
         if solid_fraction is None:
@@ -1775,22 +3546,158 @@ def extract_bundle(
                     "do not invent a single mixture viscosity"
                 ),
             })
-        composition = extract_stream_composition(
-            tree,
-            base,
-            stream_id,
-            stream_compstatus,
-            warnings,
-        )
+        if normalized_record_type == "MATERIAL":
+            composition, composition_coverage = extract_stream_composition_with_status(
+                tree,
+                base,
+                stream_id,
+                stream_compstatus,
+                warnings,
+            )
+        else:
+            composition = []
+            composition_coverage = {
+                "stream_id": stream_id,
+                "stream_record_type": normalized_record_type,
+                "status": "NOT_APPLICABLE_NON_MATERIAL_STREAM",
+                "requested_vector_count": 0,
+                "found_vector_count": 0,
+                "component_count": 0,
+                "invalid_component_count": 0,
+                "enumeration_error_count": 0,
+                "candidate_attempts": [],
+                "component_observations": [],
+                "independent_of_registry_field_hit_rate": True,
+            }
         if composition:
             row["composition"] = composition
             row["composition_basis"] = composition[0]["basis"]
+        row["composition_extraction"] = composition_coverage
+        composition_coverage_rows.append(composition_coverage)
+        stream_mapped_paths = [
+            path
+            for spec in active_stream_registry.values()
+            for path in spec["paths"]
+        ]
+        discovery = discover_object_tree(
+            tree,
+            scope="stream",
+            object_id=stream_id,
+            base=base,
+            mapped_paths=stream_mapped_paths,
+            dynamic_prefixes=(
+                STREAM_DYNAMIC_MAPPED_PREFIXES
+                if normalized_record_type == "MATERIAL"
+                else ()
+            ),
+            case_budget=case_discovery_budget,
+        )
+        object_unmapped_nodes = [
+            item for item in discovery["nodes"]
+            if item["status"] == "unsupported"
+            and item["node_kind"] == "container"
+        ]
+        object_unmapped_fields = [
+            item for item in discovery["fields"]
+            if item["status"] == "unsupported"
+        ]
+        unmapped_nodes.extend(object_unmapped_nodes)
+        unmapped_fields.extend(object_unmapped_fields)
+        discovery_errors.extend(discovery["errors"])
+        stream_coverage = summarize_field_coverage(
+            row["field_observations"],
+            unsupported_count=(
+                len(object_unmapped_fields)
+                + (1 if stream_registry_status == "unsupported_stream_record_type" else 0)
+            ),
+            registry_status=stream_registry_status,
+            unmapped_field_count=len(object_unmapped_fields),
+            discovery_error_count=len(discovery["errors"]),
+            discovery_truncated=bool(discovery["truncated"]),
+        )
+        row["extraction_coverage"] = {
+            **stream_coverage,
+            "tree_discovery_truncated": discovery["truncated"],
+            "unmapped_node_count": len(object_unmapped_nodes),
+            "unmapped_field_count": len(object_unmapped_fields),
+            "discovery_error_count": len(discovery["errors"]),
+        }
+        coverage_objects.append({
+            "scope": "stream",
+            "object_id": stream_id,
+            "record_type": normalized_record_type,
+            "registry_status": stream_registry_status,
+            "composition_extraction": composition_coverage,
+            "fields": row["field_observations"],
+            **row["extraction_coverage"],
+        })
         streams.append(row)
 
     blocks: list[dict[str, Any]] = []
     equipment_map: list[dict[str, Any]] = []
-    block_root = find_node(tree, r"\Data\Blocks")
-    for block in node_elements(block_root):
+    block_root_access_error = False
+    try:
+        block_root = tree.FindNode(r"\Data\Blocks")
+    except Exception as exc:
+        block_root_access_error = True
+        block_root = None
+        discovery_errors.append({
+            "scope": "block",
+            "object_id": None,
+            "module_type": None,
+            "path": r"\Data\Blocks",
+            "unit": None,
+            "status": "error",
+            "provenance": {
+                "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                "operation": "Tree.FindNode",
+                "error": _safe_error_text(exc),
+            },
+        })
+    if block_root is None:
+        warnings.append({
+            "code": (
+                "BLOCKED_COM_TREE_ROOT_ACCESS_ERROR"
+                if block_root_access_error
+                else "BLOCKED_COM_TREE_ROOT_MISSING"
+            ),
+            "scope": "block",
+            "path": r"\Data\Blocks",
+        })
+        block_nodes: list[Any] = []
+    else:
+        block_enumeration = strict_node_elements(
+            block_root,
+            ROOT_COLLECTION_MAX_OBJECTS,
+        )
+        block_nodes = list(block_enumeration["rows"])
+        for error in block_enumeration["errors"]:
+            discovery_errors.append({
+                "scope": "block",
+                "object_id": None,
+                "module_type": None,
+                "path": r"\Data\Blocks",
+                "unit": None,
+                "status": "error",
+                "provenance": {
+                    "source": "ASPEN_LIVE_COM_TREE_DISCOVERY",
+                    **error,
+                },
+            })
+        if block_enumeration["errors"]:
+            warnings.append({
+                "code": "BLOCKED_COM_TREE_ROOT_ENUMERATION_ERROR",
+                "scope": "block",
+                "path": r"\Data\Blocks",
+                "error_count": len(block_enumeration["errors"]),
+            })
+        if block_enumeration["truncated"]:
+            warnings.append({
+                "code": "BLOCKED_COM_TREE_ROOT_ENUMERATION_TRUNCATED",
+                "scope": "block",
+                "limit": ROOT_COLLECTION_MAX_OBJECTS,
+            })
+    for block in block_nodes:
         block_id = node_name(block)
         if not block_id:
             continue
@@ -1798,12 +3705,38 @@ def extract_bundle(
         icon_token = str(node_value(block) or "").strip()
         if not block_type:
             block_type = "UNKNOWN"
+        module_spec = BLOCK_MODULE_REGISTRY.get(block_type)
         if block_type_source.startswith("missing:"):
             warnings.append({
                 "code": "BLOCKED_MODEL_IDENTITY",
                 "object": block_id,
                 "icon_token": icon_token,
                 "required": "AttributeValue(6):HAP_RECORDTYPE",
+            })
+        if module_spec is None:
+            unsupported_module = {
+                "block_id": block_id,
+                "module_type": block_type,
+                "icon_token": icon_token,
+                "block_type_source": block_type_source,
+                "status": "unsupported",
+                "process_function": None,
+                "provenance": {
+                    "source": block_type_source,
+                    "registry_revision": ASPEN_EXTRACTION_REGISTRY_REVISION,
+                    "reason": "module_type_absent_from_BLOCK_MODULE_REGISTRY",
+                },
+            }
+            unmapped_modules.append(unsupported_module)
+            warnings.append({
+                "code": "UNSUPPORTED_BLOCK_MODULE",
+                "object": block_id,
+                "block_type": block_type,
+                "icon_token": icon_token,
+                "action": (
+                    "retain topology and raw discovery only; do not assign a "
+                    "generic physical-equipment role"
+                ),
             })
         inlet_all, outlet_all, port_detail = port_connections(block)
         block_compstatus = node_compstatus(block)
@@ -1828,38 +3761,41 @@ def extract_bundle(
             "connections": connections,
             "aspen_raw_paths": {},
             "aspen_raw_values": {},
+            "field_observations": {},
+            "module_registry_status": (
+                "supported" if module_spec is not None else "unsupported"
+            ),
         }
         base = rf"\Data\Blocks\{block_id}"
-        block_status_node = find_node(tree, base + r"\Output\BLKSTAT")
-        if owner_has_no_results(block_compstatus):
-            if block_status_node is not None:
-                warnings.append({
-                    "code": "OUTPUT_SKIPPED_NO_RESULTS",
-                    "object": block_id,
-                    "field": "BLKSTAT",
-                    "path": base + r"\Output\BLKSTAT",
-                    "compstatus": block_compstatus,
-                    "basis": "HAP_COMPSTATUS includes HAP_NORESULTS or HAP_NOT_RUN",
-                })
-        else:
-            status = node_value(block_status_node)
-            if status is not None:
-                row["block_status"] = status
-        for field, paths in BLOCK_FIELDS.items():
-            value, unit, relative, value_type, value_status = read_first(
+        active_field_ids = list(BLOCK_COMMON_FIELDS)
+        if module_spec is not None:
+            active_field_ids.extend(str(field) for field in module_spec["fields"])
+        active_field_ids = list(dict.fromkeys(active_field_ids))
+        for field in active_field_ids:
+            spec = BLOCK_FIELD_REGISTRY[field]
+            observation = read_registered_field(
                 tree,
                 base,
-                paths,
+                field,
+                spec,
                 block_compstatus,
-                require_continuous=field != "NSTAGE",
             )
-            if value is None:
+            value_status = str(observation["detail_status"])
+            value_type = observation.get("value_type")
+            if observation["status"] != "found":
+                unit_resolution = resolve_unit_with_provenance(
+                    field,
+                    "",
+                    in_units_fields,
+                )
+                observation["unit"] = unit_resolution["unit"]
+                observation["unit_provenance"] = unit_resolution
                 if value_status == "skipped_owner_no_results":
                     warnings.append({
                         "code": "OUTPUT_SKIPPED_NO_RESULTS",
                         "object": block_id,
                         "field": field,
-                        "path": base + "\\" + relative,
+                        "path": observation.get("path"),
                         "compstatus": block_compstatus,
                         "basis": "HAP_COMPSTATUS includes HAP_NORESULTS or HAP_NOT_RUN",
                     })
@@ -1868,19 +3804,53 @@ def extract_bundle(
                         "code": "CONTINUOUS_FIELD_SKIPPED_INTEGER_NODE",
                         "object": block_id,
                         "field": field,
-                        "path": base + "\\" + relative,
+                        "path": observation.get("path"),
                         "value_type": value_type,
                         "basis": "IHNode.ValueType=1 is integer; target field requires a real physical quantity",
                     })
+                elif observation["status"] == "error":
+                    warnings.append({
+                        "code": "COM_FIELD_EXTRACTION_ERROR",
+                        "object": block_id,
+                        "field": field,
+                        "path": observation.get("path"),
+                        "errors": observation.get("errors") or [],
+                    })
+                row["field_observations"][field] = observation
+                continue
+            if observation.get("recovered_error_count"):
+                warnings.append({
+                    "code": "COM_FIELD_EXTRACTION_RECOVERED_AFTER_ERROR",
+                    "object": block_id,
+                    "field": field,
+                    "selected_path": observation.get("path"),
+                    "recovered_error_count": observation["recovered_error_count"],
+                    "errors": observation.get("errors") or [],
+                })
+            value = observation["value"]
+            raw_unit = str(observation.get("raw_unit") or "")
+            unit_resolution = (
+                resolve_unit_with_provenance(field, raw_unit, in_units_fields)
+                if field == "BLKSTAT"
+                else register_unit("block", field, raw_unit, block_id)
+            )
+            observation["unit"] = unit_resolution["unit"]
+            observation["unit_provenance"] = unit_resolution
+            row["field_observations"][field] = observation
+            if field == "BLKSTAT":
+                row["block_status"] = value
                 continue
             row[field] = value
-            row["aspen_raw_paths"][field] = base + "\\" + relative
+            row["aspen_raw_paths"][field] = observation["path"]
             raw_observation = {
                 "value": value,
                 "value_type": value_type,
-                "unit": unit,
-                "path": base + "\\" + relative,
+                "unit": raw_unit,
+                "resolved_unit": unit_resolution["unit"],
+                "unit_provenance": unit_resolution,
+                "path": observation["path"],
                 "status": value_status,
+                "provenance": observation["provenance"],
             }
             quantity_kind = block_field_quantity_kind(field, block_type)
             if quantity_kind:
@@ -1892,13 +3862,367 @@ def extract_bundle(
                     "power."
                 )
             row["aspen_raw_values"][field] = raw_observation
-            register_unit("block", field, unit, block_id)
+        block_mapped_paths = [
+            path
+            for field in active_field_ids
+            for path in BLOCK_FIELD_REGISTRY[field]["paths"]
+        ]
+        discovery = discover_object_tree(
+            tree,
+            scope="block",
+            object_id=block_id,
+            base=base,
+            mapped_paths=block_mapped_paths,
+            module_type=block_type,
+            case_budget=case_discovery_budget,
+        )
+        object_unmapped_nodes = [
+            item for item in discovery["nodes"]
+            if item["status"] == "unsupported"
+            and item["node_kind"] == "container"
+        ]
+        object_unmapped_fields = [
+            item for item in discovery["fields"]
+            if item["status"] == "unsupported"
+        ]
+        unmapped_nodes.extend(object_unmapped_nodes)
+        unmapped_fields.extend(object_unmapped_fields)
+        discovery_errors.extend(discovery["errors"])
+        unsupported_count = len(object_unmapped_fields) + (
+            1 if module_spec is None else 0
+        )
+        block_coverage = summarize_field_coverage(
+            row["field_observations"],
+            unsupported_count=unsupported_count,
+            registry_status=row["module_registry_status"],
+            unmapped_field_count=len(object_unmapped_fields),
+            discovery_error_count=len(discovery["errors"]),
+            discovery_truncated=bool(discovery["truncated"]),
+        )
+        row["extraction_coverage"] = {
+            **block_coverage,
+            "tree_discovery_truncated": discovery["truncated"],
+            "unmapped_node_count": len(object_unmapped_nodes),
+            "unmapped_field_count": len(object_unmapped_fields),
+            "discovery_error_count": len(discovery["errors"]),
+        }
+        coverage_objects.append({
+            "scope": "block",
+            "object_id": block_id,
+            "module_type": block_type,
+            "registry_status": row["module_registry_status"],
+            "fields": row["field_observations"],
+            **row["extraction_coverage"],
+        })
         blocks.append(row)
         equipment_map.append({
             "block_id": block_id,
             "equipment_tag": block_id,
-            "process_function": PROCESS_FUNCTIONS.get(block_type, "Aspen module; physical equipment role requires review"),
+            "block_type": block_type,
+            "mapping_status": (
+                "REGISTERED_PROCESS_MODULE"
+                if module_spec is not None
+                else "UNSUPPORTED_MODULE"
+            ),
+            "process_function": (
+                str(module_spec["process_function"])
+                if module_spec is not None
+                else None
+            ),
         })
+
+    total_counts = {
+        key: sum(
+            int((item.get("counts") or {}).get(key, 0))
+            for item in coverage_objects
+        )
+        for key in ("requested", "found", "missing", "error", "unsupported")
+    }
+    requested = total_counts["requested"]
+    registry_field_hit_rate = (
+        total_counts["found"] / requested if requested else None
+    )
+    unsupported_registry_identity_count = (
+        len(unmapped_modules) + len(unmapped_stream_record_types)
+    )
+    composition_requested = sum(
+        int(item["requested_vector_count"])
+        for item in composition_coverage_rows
+    )
+    composition_found = sum(
+        int(item["found_vector_count"])
+        for item in composition_coverage_rows
+    )
+    composition_failure_rows = [
+        item
+        for item in composition_coverage_rows
+        if int(item["requested_vector_count"]) > int(item["found_vector_count"])
+    ]
+    composition_coverage = {
+        "schema": "aspen-stream-composition-extraction-coverage-v1",
+        "status": (
+            "NOT_APPLICABLE_NO_MATERIAL_STREAMS"
+            if composition_requested == 0
+            else (
+                "PASS"
+                if composition_requested == composition_found
+                else "BLOCKED_INCOMPLETE_MATERIAL_STREAM_COMPOSITION"
+            )
+        ),
+        "independent_of_registry_field_hit_rate": True,
+        "material_stream_count": composition_requested,
+        "non_material_stream_count": sum(
+            1
+            for item in composition_coverage_rows
+            if item["status"] == "NOT_APPLICABLE_NON_MATERIAL_STREAM"
+        ),
+        "requested_vector_count": composition_requested,
+        "found_vector_count": composition_found,
+        "missing_vector_count": composition_requested - composition_found,
+        "invalid_or_error_vector_count": len(composition_failure_rows),
+        "component_count": sum(
+            int(item["component_count"])
+            for item in composition_coverage_rows
+        ),
+        "rows": composition_coverage_rows,
+    }
+    root_diagnostics = [
+        item for item in warnings
+        if "COM_TREE_ROOT" in str(item.get("code") or "")
+    ]
+    tree_discovery_truncated_object_count = sum(
+        1 for item in coverage_objects
+        if item.get("tree_discovery_truncated")
+    )
+    object_review_count = sum(
+        1
+        for item in coverage_objects
+        if item.get("registry_completeness_status") != "SCORED_REGISTERED_OBJECT"
+    )
+    case_budget_exhausted = bool(
+        case_discovery_budget.get("node_budget_exhausted")
+        or case_discovery_budget.get("metadata_budget_exhausted")
+    )
+    if registry_audit["status"] != "PASS":
+        global_completeness_status = "NOT_SCORABLE_REGISTRY_AUDIT_FAILED"
+    elif unsupported_registry_identity_count:
+        global_completeness_status = "NOT_SCORABLE_UNSUPPORTED_REGISTRY_IDENTITIES"
+    elif root_diagnostics:
+        global_completeness_status = "NOT_SCORABLE_COM_TREE_ROOT_DIAGNOSTICS"
+    elif case_budget_exhausted or tree_discovery_truncated_object_count:
+        global_completeness_status = "NOT_SCORABLE_DISCOVERY_TRUNCATED"
+    elif total_counts["error"]:
+        global_completeness_status = "NOT_SCORABLE_REGISTERED_FIELD_ERRORS"
+    elif object_review_count:
+        global_completeness_status = "REVIEW_OBJECT_DISCOVERY_GAPS"
+    else:
+        global_completeness_status = "SCORED_REGISTERED_OBJECTS"
+    global_completeness_scorable = (
+        global_completeness_status == "SCORED_REGISTERED_OBJECTS"
+    )
+    global_review_reasons: list[str] = []
+    if registry_audit["status"] != "PASS":
+        global_review_reasons.append("REGISTRY_AUDIT_FAILED")
+    if unsupported_registry_identity_count:
+        global_review_reasons.append("UNSUPPORTED_REGISTRY_IDENTITIES")
+    if root_diagnostics:
+        global_review_reasons.append("COM_TREE_ROOT_DIAGNOSTICS")
+    if case_budget_exhausted or tree_discovery_truncated_object_count:
+        global_review_reasons.append("DISCOVERY_TRUNCATED")
+    if total_counts["error"]:
+        global_review_reasons.append("REGISTERED_FIELD_ERRORS")
+    if object_review_count and not global_review_reasons:
+        global_review_reasons.append("OBJECT_DISCOVERY_GAPS")
+    coverage_report = {
+        "schema": "aspen-com-extraction-coverage-v1",
+        "registry_revision": ASPEN_EXTRACTION_REGISTRY_REVISION,
+        "registry_audit": registry_audit,
+        "source_contract": {
+            "value_source": "active isolated Aspen document live COM tree",
+            "read_only_extraction": True,
+            "source_bkp_mutated": False,
+            "unmapped_value_mode": "METADATA_ONLY_NO_RAW_VALUES",
+            "raw_unmapped_values_persisted": False,
+            "unmapped_value_metadata": [
+                "value_type", "value_size", "value_sha256"
+            ],
+            "unknown_module_policy": "fail_explicit_without_generic_role",
+            "discovery_bounds": {
+                "max_nodes_per_object": TREE_DISCOVERY_MAX_NODES_PER_OBJECT,
+                "max_depth": TREE_DISCOVERY_MAX_DEPTH,
+                "max_nodes_per_case": TREE_DISCOVERY_MAX_NODES_PER_CASE,
+                "max_metadata_bytes_per_case": TREE_DISCOVERY_MAX_METADATA_BYTES_PER_CASE,
+                "max_name_chars": TREE_DISCOVERY_MAX_NAME_CHARS,
+                "max_path_chars": TREE_DISCOVERY_MAX_PATH_CHARS,
+                "max_unit_chars": TREE_DISCOVERY_MAX_UNIT_CHARS,
+                "max_type_chars": TREE_DISCOVERY_MAX_TYPE_CHARS,
+            },
+        },
+        "counts": total_counts,
+        "recovered_error_count": sum(
+            int(item.get("recovered_error_count") or 0)
+            for item in coverage_objects
+        ),
+        "registry_field_hit_rate": registry_field_hit_rate,
+        "registry_field_hit_percent": (
+            round(100.0 * total_counts["found"] / requested, 6)
+            if requested
+            else None
+        ),
+        # Compatibility aliases retained for existing readers.
+        "coverage_rate": registry_field_hit_rate,
+        "coverage_percent": (
+            round(100.0 * total_counts["found"] / requested, 6)
+            if requested
+            else None
+        ),
+        "registry_completeness_status": global_completeness_status,
+        "global_review_required": bool(global_review_reasons),
+        "global_review_reasons": global_review_reasons,
+        "registry_completeness_rate": (
+            registry_field_hit_rate
+            if global_completeness_scorable
+            else None
+        ),
+        "requested_status_invariant": (
+            total_counts["found"]
+            + total_counts["missing"]
+            + total_counts["error"]
+            == requested
+        ),
+        "count_semantics": {
+            "requested": "registry fields requested for the detected object/module types",
+            "found": "requested fields with a finite/scalar COM value",
+            "missing": "requested fields absent, undefined, owner-not-run, or an integer placeholder",
+            "error": "requested fields whose COM lookup/value access or numeric conversion failed",
+            "unsupported": "unmapped module identities plus discovered non-registry leaf fields; not a requested-field subset",
+            "composition": "reported independently in composition_extraction; non-material streams are not requested",
+        },
+        "object_count": len(coverage_objects),
+        "object_review_count": object_review_count,
+        "objects": coverage_objects,
+        "unmapped_modules": unmapped_modules,
+        "unmapped_stream_record_types": unmapped_stream_record_types,
+        "unmapped_nodes": unmapped_nodes,
+        "unmapped_fields": unmapped_fields,
+        "composition_extraction": composition_coverage,
+        "discovery_errors": discovery_errors,
+        "discovery_error_count": len(discovery_errors),
+        "root_diagnostic_count": len(root_diagnostics),
+        "case_discovery_budget_exhausted": case_budget_exhausted,
+        "root_diagnostics": root_diagnostics,
+        "tree_discovery_truncated_object_count": tree_discovery_truncated_object_count,
+        "case_discovery_budget": dict(case_discovery_budget),
+    }
+    case["com_extraction_coverage_summary"] = {
+        "schema": coverage_report["schema"],
+        "registry_revision": ASPEN_EXTRACTION_REGISTRY_REVISION,
+        "counts": total_counts,
+        "registry_field_hit_rate": coverage_report["registry_field_hit_rate"],
+        "registry_field_hit_percent": coverage_report["registry_field_hit_percent"],
+        "coverage_rate": coverage_report["coverage_rate"],
+        "coverage_percent": coverage_report["coverage_percent"],
+        "registry_completeness_status": coverage_report["registry_completeness_status"],
+        "global_review_required": coverage_report["global_review_required"],
+        "global_review_reasons": coverage_report["global_review_reasons"],
+        "registry_completeness_rate": coverage_report["registry_completeness_rate"],
+        "unmapped_module_count": len(unmapped_modules),
+        "unmapped_stream_record_type_count": len(unmapped_stream_record_types),
+        "unmapped_node_count": len(unmapped_nodes),
+        "unmapped_field_count": len(unmapped_fields),
+        "discovery_error_count": len(discovery_errors),
+        "root_diagnostic_count": len(root_diagnostics),
+        "tree_discovery_truncated_object_count": tree_discovery_truncated_object_count,
+        "case_discovery_budget_exhausted": case_budget_exhausted,
+        "composition_extraction": {
+            key: value
+            for key, value in composition_coverage.items()
+            if key != "rows"
+        },
+    }
+    if registry_audit["status"] != "PASS":
+        warnings.append({
+            "code": "BLOCKED_EXTRACTION_REGISTRY_AUDIT_FAILED",
+            "issues": registry_audit["issues"],
+        })
+    if unsupported_registry_identity_count:
+        warnings.append({
+            "code": "BLOCKED_COM_UNSUPPORTED_REGISTRY_IDENTITIES",
+            "count": unsupported_registry_identity_count,
+            "unmapped_module_count": len(unmapped_modules),
+            "unmapped_stream_record_type_count": len(unmapped_stream_record_types),
+            "action": "extend and audit the explicit registry before equipment selection",
+        })
+    if total_counts["error"]:
+        warnings.append({
+            "code": "BLOCKED_COM_REGISTERED_FIELD_ERRORS",
+            "count": total_counts["error"],
+            "action": "review every registered field error; missing values remain distinct and are not fabricated",
+        })
+    if unmapped_fields:
+        warnings.append({
+            "code": "UNMAPPED_COM_TREE_FIELDS_DISCOVERED",
+            "count": len(unmapped_fields),
+            "objects": sorted({
+                f"{item['scope']}:{item['object_id']}"
+                for item in unmapped_fields
+            }),
+            "action": "review extraction_coverage.unmapped_fields and extend the registry explicitly",
+        })
+    if discovery_errors:
+        warnings.append({
+            "code": "BLOCKED_COM_TREE_DISCOVERY_ERRORS",
+            "count": len(discovery_errors),
+            "action": "review extraction_coverage.discovery_errors; no error was converted into a value",
+        })
+    if coverage_report["tree_discovery_truncated_object_count"]:
+        warnings.append({
+            "code": "BLOCKED_COM_TREE_DISCOVERY_TRUNCATED",
+            "object_count": coverage_report["tree_discovery_truncated_object_count"],
+            "limits": coverage_report["source_contract"]["discovery_bounds"],
+        })
+    if case_budget_exhausted:
+        warnings.append({
+            "code": "BLOCKED_COM_TREE_CASE_DISCOVERY_BUDGET_EXHAUSTED",
+            "budget": dict(case_discovery_budget),
+            "action": "treat registry completeness as not scorable and rerun with reviewed limits",
+        })
+
+    case["com_extraction_blockers"] = [
+        item
+        for item in warnings
+        if str(item.get("code") or "").startswith("BLOCKED_")
+    ]
+
+    for row in streams:
+        row.pop("field_observations", None)
+        row.pop("extraction_coverage", None)
+        row.pop("composition_extraction", None)
+        row.pop("stream_registry_status", None)
+        if isinstance(row.get("composition"), list):
+            row["composition"] = [
+                {
+                    key: component[key]
+                    for key in ("component_id", "fraction", "basis", "source_path")
+                    if key in component
+                }
+                for component in row["composition"]
+            ]
+    for row in blocks:
+        row.pop("field_observations", None)
+        row.pop("extraction_coverage", None)
+        row.pop("module_registry_status", None)
+
+    legacy_equipment_map: list[dict[str, Any]] = []
+    for item in equipment_map:
+        legacy_item = {
+            "block_id": item["block_id"],
+            "equipment_tag": item["equipment_tag"],
+        }
+        process_function = item.get("process_function")
+        if isinstance(process_function, str) and process_function.strip():
+            legacy_item["process_function"] = process_function
+        legacy_equipment_map.append(legacy_item)
 
     bundle = {
         "schema": "aspen-equipment-export-v1",
@@ -1906,8 +4230,23 @@ def extract_bundle(
         "units": units,
         "streams": streams,
         "blocks": blocks,
-        "equipment_map": equipment_map,
+        "equipment_map": legacy_equipment_map,
     }
+    return bundle, warnings, coverage_report
+
+
+def extract_bundle(
+    tree: Any,
+    case: dict[str, Any],
+    in_units_fields: dict[str, str] | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Backward-compatible v1 bundle API; detailed coverage is a sidecar."""
+
+    bundle, warnings, _ = extract_bundle_with_coverage(
+        tree,
+        case,
+        in_units_fields,
+    )
     return bundle, warnings
 
 
@@ -1924,9 +4263,71 @@ def close_aspen(app: Any | None) -> None:
         pass
 
 
-def write_and_derive(bundle: dict[str, Any], out_dir: Path) -> dict[str, Any]:
+def validate_extraction_coverage_sidecar(
+    extraction_coverage: dict[str, Any],
+) -> None:
+    """Validate the full sidecar contract before any coverage bytes are written."""
+
+    schema_path = PACKAGE_ROOT / "knowledge_graph" / "aspen_extraction_coverage.schema.json"
+    if not schema_path.is_file():
+        raise RuntimeError(
+            "ASPEN_EXTRACTION_COVERAGE_SCHEMA_MISSING:knowledge_graph/"
+            "aspen_extraction_coverage.schema.json"
+        )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(schema)
+    validator = Draft202012Validator(schema)
+    error = next(iter(validator.iter_errors(extraction_coverage)), None)
+    if error is None:
+        return
+    location = "/".join(str(item) for item in error.absolute_path) or "<root>"
+    # Do not include error.instance or the validator's rendered message: an
+    # invalid sidecar may contain a secret or an adversarially large value.
+    raise ValueError(
+        "ASPEN_EXTRACTION_COVERAGE_SCHEMA_INVALID:"
+        f"path={_safe_text(location, max_chars=256)};validator={error.validator}"
+    )
+
+
+def write_and_derive(
+    bundle: dict[str, Any],
+    out_dir: Path,
+    extraction_coverage: dict[str, Any] | None = None,
+    *,
+    allow_derivation: bool = True,
+) -> dict[str, Any]:
     bundle_path = out_dir / "aspen_equipment_export.json"
-    bundle_path.write_text(json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8")
+    bundle_to_write = dict(bundle)
+    bundle_to_write["case"] = dict(bundle.get("case") or {})
+    embedded_coverage = bundle_to_write.pop("extraction_coverage", None)
+    if extraction_coverage is None and isinstance(embedded_coverage, dict):
+        extraction_coverage = embedded_coverage
+    if extraction_coverage is not None and not isinstance(extraction_coverage, dict):
+        raise TypeError("ASPEN_EXTRACTION_COVERAGE_SCHEMA_INVALID:expected_object")
+    coverage_artifact: dict[str, Any] | None = None
+    if isinstance(extraction_coverage, dict):
+        validate_extraction_coverage_sidecar(extraction_coverage)
+        coverage_path = out_dir / "aspen_extraction_coverage.json"
+        coverage_path.write_text(
+            json.dumps(
+                extraction_coverage,
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+                allow_nan=False,
+            ) + "\n",
+            encoding="utf-8",
+        )
+        coverage_artifact = {
+            "path": str(coverage_path),
+            "sha256": sha256(coverage_path),
+        }
+        bundle_to_write["case"]["com_extraction_coverage_path"] = coverage_path.name
+        bundle_to_write["case"]["com_extraction_coverage_sha256"] = coverage_artifact["sha256"]
+    bundle_path.write_text(
+        json.dumps(bundle_to_write, ensure_ascii=False, indent=2, allow_nan=False),
+        encoding="utf-8",
+    )
     reloaded = json.loads(bundle_path.read_text(encoding="utf-8"))
     # First persist a topology-safe PFD.  Without the derivation adapter this
     # projection may display only explicitly canonical field names; raw Aspen
@@ -1935,12 +4336,30 @@ def write_and_derive(bundle: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     pfd_mapping = aspen_pfd.build_pfd_mapping(reloaded)
     pfd_path = out_dir / "aspen_pfd_mapping.json"
     pfd_path.write_text(
-        json.dumps(pfd_mapping, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        json.dumps(pfd_mapping, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n",
         encoding="utf-8",
     )
+    if not allow_derivation:
+        pfd_summary = aspen_pfd.summarize_pfd_mapping(pfd_mapping)
+        output: dict[str, Any] = {
+            "bundle": str(bundle_path),
+            "derivation": None,
+            "result": None,
+            "derivation_skipped": "BLOCKED_COM_EXTRACTION",
+            "pfd_mapping": str(pfd_path),
+            "pfd_mapping_file_sha256": sha256(pfd_path),
+            "mapping_sha256": pfd_mapping["mapping_sha256"],
+            "pfd_summary": pfd_summary,
+        }
+        if coverage_artifact is not None:
+            output["extraction_coverage"] = coverage_artifact
+        return output
     result = derivation.derive_bundle(reloaded, bundle_path)
     result_path = out_dir / "equipment_derivation_result.json"
-    result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    result_path.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
     canonical_blocks = aspen_pfd.canonical_parameters_by_block(result)
     canonical_streams = aspen_pfd.canonical_parameters_by_stream(result)
     pfd_mapping = aspen_pfd.build_pfd_mapping(
@@ -1954,11 +4373,11 @@ def write_and_derive(bundle: dict[str, Any], out_dir: Path) -> dict[str, Any]:
         ),
     )
     pfd_path.write_text(
-        json.dumps(pfd_mapping, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        json.dumps(pfd_mapping, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n",
         encoding="utf-8",
     )
     pfd_summary = aspen_pfd.summarize_pfd_mapping(pfd_mapping)
-    return {
+    output = {
         "bundle": str(bundle_path),
         "derivation": str(result_path),
         "result": result,
@@ -1967,6 +4386,9 @@ def write_and_derive(bundle: dict[str, Any], out_dir: Path) -> dict[str, Any]:
         "mapping_sha256": pfd_mapping["mapping_sha256"],
         "pfd_summary": pfd_summary,
     }
+    if coverage_artifact is not None:
+        output["extraction_coverage"] = coverage_artifact
+    return output
 
 
 def build_run_evidence(case_id: str, history_path: Path, parsed: dict[str, Any], out_dir: Path) -> tuple[Path, dict[str, Any]]:
@@ -1981,7 +4403,10 @@ def build_run_evidence(case_id: str, history_path: Path, parsed: dict[str, Any],
         "run_status": parsed["counts"],
     }
     evidence_path = out_dir / "aspen_run_status_evidence.json"
-    evidence_path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
+    evidence_path.write_text(
+        json.dumps(evidence, ensure_ascii=False, indent=2, allow_nan=False),
+        encoding="utf-8",
+    )
     return evidence_path, evidence
 
 
@@ -2012,6 +4437,7 @@ def run_mock(
     return {
         "schema": "equipment-design-app-aspen-worker-v1",
         "status": "PASS_MOCK",
+        "selection_result_available": True,
         "mock": True,
         "history_parse": parsed,
         **pipeline,
@@ -2119,7 +4545,7 @@ def run_real(
                     in_units_global = global_in_units(in_units_cards)
                     shutil.copy2(ascii_export, out_dir / "after_run_or_current.inp")
             except Exception as exc:
-                metadata["inp_export_warning"] = str(exc)
+                metadata["inp_export_warning"] = _safe_error_text(exc)
             case["aspen_in_units_cards"] = in_units_cards
             case["aspen_global_in_units"] = in_units_global
             metadata["aspen_in_units_card_count"] = len(in_units_cards)
@@ -2132,10 +4558,13 @@ def run_real(
 
             # Read the live COM tree before SaveAs changes the active document
             # identity.  The source archive itself remains untouched.
-            bundle, extraction_warnings = extract_bundle(
+            bundle, extraction_warnings, extraction_coverage = extract_bundle_with_coverage(
                 app.Tree,
                 case,
                 (in_units_global or {}).get("fields") if in_units_global else None,
+            )
+            metadata["com_extraction_coverage_summary"] = dict(
+                bundle["case"].get("com_extraction_coverage_summary") or {}
             )
             transport_verification = verify_stream_transport_properties(bundle)
             (
@@ -2183,9 +4612,10 @@ def run_real(
                 sha256(transport_manifest_path)
             )
             bundle["case"]["com_extraction_warnings"] = extraction_warnings
-            bundle["case"]["com_extraction_blockers"] = [
-                item for item in extraction_warnings if str(item.get("code", "")).startswith("BLOCKED_")
-            ]
+            extraction_blockers = list(
+                bundle["case"].get("com_extraction_blockers") or []
+            )
+            bundle["case"]["com_extraction_blockers"] = extraction_blockers
             if run:
                 metadata["run_artifact_capture"] = request_run_artifacts(app, work, out_dir)
 
@@ -2214,6 +4644,13 @@ def run_real(
 
             run_status = verified_run_status(parsed)
             case["run_status"] = run_status
+            run_evidence_gate = classify_run_evidence(
+                parsed,
+                run_requested=run,
+                raw_history_present=history_path is not None,
+            )
+            case["run_evidence_gate"] = run_evidence_gate
+            metadata["run_evidence_gate"] = run_evidence_gate
             if history_path is not None and parsed.get("found"):
                 history_text = history_path.read_text(encoding="utf-8", errors="replace")
                 recovered_results = parse_history_block_results(history_text)
@@ -2232,14 +4669,25 @@ def run_real(
                 case["run_status_evidence_path"] = evidence_path.name
                 case["run_status_evidence_sha256"] = sha256(evidence_path)
 
-            pipeline = write_and_derive(bundle, out_dir)
-            worker_status = (
-                "PASS"
-                if transport_verification["status"] == "PASS"
-                else "BLOCKED_TRANSPORT_PROPERTY_VERIFICATION"
+            worker_status = classify_aspen_worker_status(
+                transport_verification,
+                extraction_blockers,
+                extraction_coverage,
+            )
+            pipeline = write_and_derive(
+                bundle,
+                out_dir,
+                extraction_coverage=extraction_coverage,
+                allow_derivation=worker_status != "BLOCKED_COM_EXTRACTION",
             )
             metadata.update({
                 "status": worker_status,
+                "selection_result_available": worker_selection_result_available(
+                    worker_status,
+                    pipeline.get("result"),
+                ),
+                "com_extraction_blockers": extraction_blockers,
+                "formal_run_evidence_ready": bool(run_evidence_gate.get("clean")),
                 "history_parse": parsed,
                 "stream_count": len(bundle["streams"]),
                 "block_count": len(bundle["blocks"]),
@@ -2322,15 +4770,23 @@ def main(argv: list[str] | None = None) -> int:
         result = {
             "schema": "equipment-design-app-aspen-worker-v1",
             "status": "FAILED",
-            "error": str(exc),
+            "selection_result_available": False,
+            "error": _safe_error_text(exc),
             "fallback": "manual_or_llm_mode",
-            "traceback": traceback.format_exc(),
+            "traceback": _safe_text(traceback.format_exc(), max_chars=4096),
         }
         rc = 2
     if rc == 0 and result.get("status") not in {"PASS", "PASS_MOCK"}:
         rc = 3
-    result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps({"status": result.get("status"), "worker_result": str(result_path)}, ensure_ascii=False))
+    result_path.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False),
+        encoding="utf-8",
+    )
+    print(json.dumps(
+        {"status": result.get("status"), "worker_result": str(result_path)},
+        ensure_ascii=False,
+        allow_nan=False,
+    ))
     return rc
 
 

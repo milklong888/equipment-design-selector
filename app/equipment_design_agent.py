@@ -55,6 +55,7 @@ PARAMETER_PACKAGE_SCHEMA = PACKAGE_ROOT / "knowledge_graph" / "equipment_design_
 CONNECTION_SELECTION_SCHEMA = PACKAGE_ROOT / "knowledge_graph" / "equipment_connection_selection_package.schema.json"
 SERVICE_PROFILE_SCHEMA = PACKAGE_ROOT / "knowledge_graph" / "equipment_service_profile.schema.json"
 ASPEN_EQUIPMENT_EXPORT_SCHEMA = PACKAGE_ROOT / "knowledge_graph" / "aspen_equipment_export.schema.json"
+ASPEN_EXTRACTION_COVERAGE_SCHEMA = PACKAGE_ROOT / "knowledge_graph" / "aspen_extraction_coverage.schema.json"
 CANONICAL_OPERATIONS = (
     "capabilities",
     "schema_get",
@@ -68,6 +69,7 @@ CANONICAL_OPERATIONS = (
     "knowledge_search",
     "aspen_derive",
     "aspen_import",
+    "aspen_suite",
     "pfd_build",
     "pfd_override",
     "pfd_recalculate",
@@ -89,6 +91,7 @@ OPERATION_ALIASES = {
     "knowledge.query": "knowledge_search",
     "aspen.export.derive": "aspen_derive",
     "aspen.case.import": "aspen_import",
+    "aspen.case.suite": "aspen_suite",
     "aspen.pfd.build": "pfd_build",
     "aspen.pfd.override": "pfd_override",
     "aspen.pfd.recalculate": "pfd_recalculate",
@@ -114,6 +117,11 @@ STRICT_OPERATION_PAYLOAD_KEYS: dict[str, set[str]] = {
     "render_report": {"input", "format", "output_path"},
     "organize_answer": {"input", "format", "output_path"},
     "customer_export": {"input", "output_path"},
+    "aspen_suite": {
+        "manifest_path", "cases", "case_base_dir", "output_dir",
+        "pressure_basis", "atmospheric_pressure_mpa", "timeout_s",
+        "run", "ensure_stream_transport", "require_clean", "require_all",
+    },
     "pfd_build": {"bundle_path", "overrides", "output_path"},
     "pfd_override": {"bundle_path", "overrides", "block_id", "selection_id", "output_path"},
     "pfd_recalculate": {
@@ -145,6 +153,7 @@ SCHEMA_PATHS: dict[str, Path] = {
     "equipment-connection-selection-package-v1": CONNECTION_SELECTION_SCHEMA,
     "equipment-service-profile-v1": SERVICE_PROFILE_SCHEMA,
     "aspen-equipment-export-v1": ASPEN_EQUIPMENT_EXPORT_SCHEMA,
+    "aspen-com-extraction-coverage-v1": ASPEN_EXTRACTION_COVERAGE_SCHEMA,
     "equipment-customer-output-profiles-v1": CUSTOMER_PROFILE_SCHEMA,
     "equipment-customer-delivery-bundle-v1": CUSTOMER_DELIVERY_BUNDLE_SCHEMA,
     "equipment-overview-table-v1": EQUIPMENT_OVERVIEW_SCHEMA,
@@ -198,6 +207,14 @@ def _agent_provider_config(raw_config: Any) -> dict[str, Any]:
             )
         config["base_url"] = "https://api.openai.com/v1"
         config["api_key"] = os.environ.get(FIXED_LLM_API_KEY_ENV, "")
+    elif provider == "deepseek":
+        if supplied_base_url:
+            raise AgentRequestError(
+                "LLM_BASE_URL_LITERAL_FORBIDDEN",
+                "Agent 请求不能覆盖 DeepSeek endpoint；provider=deepseek 固定使用 api.deepseek.com。",
+            )
+        config["base_url"] = "https://api.deepseek.com"
+        config["api_key"] = os.environ.get(FIXED_LLM_API_KEY_ENV, "")
     elif provider == "openai_compatible":
         if supplied_base_url:
             raise AgentRequestError(
@@ -214,7 +231,10 @@ def _agent_provider_config(raw_config: Any) -> dict[str, Any]:
         config["api_key"] = os.environ.get(FIXED_LLM_API_KEY_ENV, "")
     elif provider == "local_openai_compatible":
         config["base_url"] = supplied_base_url or llm_bridge.SUPPORTED_PROVIDERS[provider]["default_base_url"]
-        config["api_key"] = ""
+        # A loopback service may still require a Bearer credential.  The GUI
+        # binds it through the same short-lived, in-memory environment channel
+        # as remote providers; never copy the literal into the Agent payload.
+        config["api_key"] = os.environ.get(FIXED_LLM_API_KEY_ENV, "")
     else:  # offline mock
         config.pop("base_url", None)
         config["api_key"] = ""
@@ -323,6 +343,7 @@ def _provenance() -> dict[str, Any]:
         "connection_selection_schema": CONNECTION_SELECTION_SCHEMA,
         "service_profile_schema": SERVICE_PROFILE_SCHEMA,
         "aspen_equipment_export_schema": ASPEN_EQUIPMENT_EXPORT_SCHEMA,
+        "aspen_extraction_coverage_schema": ASPEN_EXTRACTION_COVERAGE_SCHEMA,
         "customer_profile_schema": CUSTOMER_PROFILE_SCHEMA,
         "customer_delivery_bundle_schema": CUSTOMER_DELIVERY_BUNDLE_SCHEMA,
         "equipment_overview_schema": EQUIPMENT_OVERVIEW_SCHEMA,
@@ -1034,6 +1055,7 @@ def _hybrid_selection_completeness(
             "EXPLICIT_TERMINAL_TYPE_SELECTED",
             "CONDITIONED_TERMINAL_TYPE_SELECTED",
             "DEFAULTED_TERMINAL_TYPE_SELECTED",
+            "PROGRAMMATIC_PIPE_ROUTE_AND_GEOMETRY_SELECTED",
         }
         and bool(str(terminal.get("recommended_type") or "").strip())
     )
@@ -1104,6 +1126,7 @@ def _hybrid_result_envelope(
     deterministic_recalculation: dict[str, Any] | None = None,
     calculation_assist_application: dict[str, Any] | None = None,
     terminal_selection_application: dict[str, Any] | None = None,
+    engineering_choice_application: dict[str, Any] | None = None,
     errors: list[dict[str, Any]] | None = None,
     steps: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
@@ -1152,6 +1175,7 @@ def _hybrid_result_envelope(
         "deterministic_recalculation": deterministic_recalculation,
         "calculation_assist_application": calculation_assist_application,
         "terminal_selection_application": terminal_selection_application,
+        "engineering_choice_application": engineering_choice_application,
         "selection_completeness": selection_completeness,
         "prepared": prepared,
         "knowledge_context": knowledge_context,
@@ -1238,11 +1262,23 @@ def _auto_apply_verified_hybrid_updates(
     verified_model_estimate_inputs: dict[str, Any],
     verified_model_estimate_lineage: dict[str, Any],
     verified_terminal_overrides: dict[str, str],
+    verified_engineering_choice_inputs: dict[str, Any],
+    verified_engineering_choice_lineage: dict[str, Any],
     api: EquipmentDesignApi,
-) -> tuple[dict[str, Any] | None, list[str], dict[str, Any], dict[str, Any]]:
+) -> tuple[
+    dict[str, Any] | None,
+    list[str],
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+]:
     """Replay calculation inputs and one scoped registered terminal rule in one pass."""
 
-    if not verified_terminal_overrides and not verified_model_estimate_inputs:
+    if (
+        not verified_terminal_overrides
+        and not verified_model_estimate_inputs
+        and not verified_engineering_choice_inputs
+    ):
         recalculation, artifacts, calculation_application = _auto_apply_verified_calculation_inputs(
             source_operation,
             source_input,
@@ -1253,6 +1289,11 @@ def _auto_apply_verified_hybrid_updates(
             "status": "NOT_NEEDED",
             "applied_rule_id": None,
             "deferred_overrides": {},
+            "overwritten_fields": [],
+        }, {
+            "status": "NOT_NEEDED",
+            "applied_inputs": {},
+            "deferred_inputs": {},
             "overwritten_fields": [],
         }
     if source_operation not in {"manual_match", "auto_match"}:
@@ -1269,12 +1310,22 @@ def _auto_apply_verified_hybrid_updates(
             "applied_rule_id": None,
             "deferred_overrides": verified_terminal_overrides,
             "overwritten_fields": [],
+        }, {
+            "status": "DEFERRED_SOURCE_NOT_SINGLE_DEVICE_PATCHABLE",
+            "applied_inputs": {},
+            "deferred_inputs": verified_engineering_choice_inputs,
+            "overwritten_fields": [],
         }
     deferred_terminal_overrides: dict[str, str] = {}
     if len(verified_terminal_overrides) > 1:
         deferred_terminal_overrides = dict(verified_terminal_overrides)
         verified_terminal_overrides = {}
-    if deferred_terminal_overrides and not verified_model_estimate_inputs and not verified_inputs:
+    if (
+        deferred_terminal_overrides
+        and not verified_model_estimate_inputs
+        and not verified_engineering_choice_inputs
+        and not verified_inputs
+    ):
         recalculation, artifacts, calculation_application = _auto_apply_verified_calculation_inputs(
             source_operation,
             source_input,
@@ -1285,6 +1336,11 @@ def _auto_apply_verified_hybrid_updates(
             "status": "DEFERRED_MULTIPLE_SELECTION_CONTEXTS",
             "applied_rule_id": None,
             "deferred_overrides": deferred_terminal_overrides,
+            "overwritten_fields": [],
+        }, {
+            "status": "NOT_NEEDED",
+            "applied_inputs": {},
+            "deferred_inputs": {},
             "overwritten_fields": [],
         }
 
@@ -1302,6 +1358,11 @@ def _auto_apply_verified_hybrid_updates(
             "status": "DEFERRED_VALUES_OBJECT_MISSING",
             "applied_rule_id": None,
             "deferred_overrides": verified_terminal_overrides,
+            "overwritten_fields": [],
+        }, {
+            "status": "DEFERRED_VALUES_OBJECT_MISSING",
+            "applied_inputs": {},
+            "deferred_inputs": verified_engineering_choice_inputs,
             "overwritten_fields": [],
         }
 
@@ -1324,6 +1385,19 @@ def _auto_apply_verified_hybrid_updates(
         applied_model_estimate_inputs[field] = value
         if field in verified_model_estimate_lineage:
             applied_model_estimate_lineage[field] = verified_model_estimate_lineage[field]
+    applied_engineering_choice_inputs: dict[str, Any] = {}
+    deferred_engineering_choice_inputs: dict[str, Any] = {}
+    applied_engineering_choice_lineage: dict[str, Any] = {}
+    for field, value in verified_engineering_choice_inputs.items():
+        if field in values and values.get(field) not in (None, ""):
+            deferred_engineering_choice_inputs[field] = value
+            continue
+        values[field] = value
+        applied_engineering_choice_inputs[field] = value
+        if field in verified_engineering_choice_lineage:
+            applied_engineering_choice_lineage[field] = (
+                verified_engineering_choice_lineage[field]
+            )
     if not verified_terminal_overrides:
         terminal_application = {
             "status": (
@@ -1355,6 +1429,7 @@ def _auto_apply_verified_hybrid_updates(
         terminal_application["applied_rule_id"] is None
         and not applied_inputs
         and not applied_model_estimate_inputs
+        and not applied_engineering_choice_inputs
     ):
         return None, [], {
             "status": "NO_MISSING_FIELDS_APPLIED",
@@ -1363,7 +1438,12 @@ def _auto_apply_verified_hybrid_updates(
             "applied_model_estimate_inputs": {},
             "deferred_model_estimate_inputs": deferred_model_estimate_inputs,
             "overwritten_fields": [],
-        }, terminal_application
+        }, terminal_application, {
+            "status": "NO_MISSING_FIELDS_APPLIED",
+            "applied_inputs": {},
+            "deferred_inputs": deferred_engineering_choice_inputs,
+            "overwritten_fields": [],
+        }
 
     if source_operation == "manual_match":
         selection_id = str(replay_payload.get("selection_id") or "").strip()
@@ -1376,12 +1456,14 @@ def _auto_apply_verified_hybrid_updates(
             selection_id,
             values,
             model_estimate_lineage=applied_model_estimate_lineage,
+            engineering_choice_lineage=applied_engineering_choice_lineage,
         )
         artifacts: list[str] = []
     else:
         recalculation = app_core.auto_match(
             values,
             model_estimate_lineage=applied_model_estimate_lineage,
+            engineering_choice_lineage=applied_engineering_choice_lineage,
         )
         artifacts = []
     if not isinstance(recalculation, dict):
@@ -1409,7 +1491,31 @@ def _auto_apply_verified_hybrid_updates(
         "recalculation_sha256": recalculation_sha256,
     }
     terminal_application["recalculation_sha256"] = recalculation_sha256
-    return recalculation, artifacts, calculation_application, terminal_application
+    engineering_choice_application = {
+        "status": (
+            "REGISTERED_ENGINEERING_CHOICES_APPLIED_AND_RECALCULATED"
+            if applied_engineering_choice_inputs
+            else "DEFERRED_EXISTING_VALUE_AUTHORITY"
+            if deferred_engineering_choice_inputs
+            else "NOT_NEEDED"
+        ),
+        "applied_inputs": applied_engineering_choice_inputs,
+        "deferred_inputs": deferred_engineering_choice_inputs,
+        "choice_lineage": applied_engineering_choice_lineage,
+        "evidence_class": "J" if applied_engineering_choice_inputs else None,
+        "promotion_cap": (
+            "TYPE_SCREENING" if applied_engineering_choice_inputs else None
+        ),
+        "overwritten_fields": [],
+        "recalculation_sha256": recalculation_sha256,
+    }
+    return (
+        recalculation,
+        artifacts,
+        calculation_application,
+        terminal_application,
+        engineering_choice_application,
+    )
 
 
 def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -> tuple[Any, list[str]]:
@@ -1528,8 +1634,9 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
                     "equipment-agent-organized-answer-v1"
                 ),
                 "fixed_section_order": [
-                    "结论",
-                    "计算",
+                    "基本信息",
+                    "分支选择与大模型调控",
+                    "详细计算链条",
                     "候选与系统修改方案",
                     "强制警告",
                     "待补证据",
@@ -1823,6 +1930,36 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
                 exit_code=5 if dependency else 3,
             )
         return response.get("value"), artifacts
+    if operation == "aspen_suite":
+        suite_payload = dict(payload)
+        require_all = bool(suite_payload.pop("require_all", False))
+        response = api.import_aspen_suite(suite_payload)
+        artifacts = [
+            str(path)
+            for path in (
+                response.get("session_dir"),
+                response.get("report_path"),
+                response.get("markdown_report_path"),
+            )
+            if path
+        ]
+        if not response.get("ok"):
+            raise AgentOperationError(
+                "ASPEN_SUITE_FAILED",
+                str(response.get("error") or "Aspen 批量队列执行失败。"),
+                response,
+                exit_code=3,
+            )
+        report = response.get("value")
+        report = report if isinstance(report, dict) else {}
+        if require_all and report.get("status") != "PASS":
+            raise AgentOperationError(
+                "ASPEN_SUITE_ACCEPTANCE_NOT_MET",
+                "Aspen 批量队列已完成，但没有全部通过所选验收口径。",
+                report,
+                exit_code=4,
+            )
+        return report, artifacts
     if operation == "pfd_build":
         source_path, bundle, source_hash = _pfd_bundle_from_payload(payload)
         overrides = _pfd_overrides(payload)
@@ -2125,7 +2262,23 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
         verified_terminal_overrides = orchestration.get("verified_terminal_selection_overrides", {})
         if not isinstance(verified_terminal_overrides, dict):
             verified_terminal_overrides = {}
-        recalculation, recalculation_artifacts, assist_application, terminal_selection_application = (
+        verified_engineering_choice_inputs = orchestration.get(
+            "verified_engineering_choice_inputs", {}
+        )
+        if not isinstance(verified_engineering_choice_inputs, dict):
+            verified_engineering_choice_inputs = {}
+        verified_engineering_choice_lineage = orchestration.get(
+            "verified_engineering_choice_lineage", {}
+        )
+        if not isinstance(verified_engineering_choice_lineage, dict):
+            verified_engineering_choice_lineage = {}
+        (
+            recalculation,
+            recalculation_artifacts,
+            assist_application,
+            terminal_selection_application,
+            engineering_choice_application,
+        ) = (
             _auto_apply_verified_hybrid_updates(
                 source_operation,
                 source_input,
@@ -2133,6 +2286,8 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
                 verified_model_estimate_inputs,
                 verified_model_estimate_lineage,
                 verified_terminal_overrides,
+                verified_engineering_choice_inputs,
+                verified_engineering_choice_lineage,
                 api,
             )
         )
@@ -2153,6 +2308,7 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
             deterministic_recalculation=recalculation,
             calculation_assist_application=assist_application,
             terminal_selection_application=terminal_selection_application,
+            engineering_choice_application=engineering_choice_application,
             steps=base_steps + [
                 {"id": "provider", "status": "COMPLETED", "authoritative": False},
                 {"id": "hybrid_continue", "status": "COMPLETED", "authoritative": False},
@@ -2266,7 +2422,22 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
         verified_calculation_inputs = proposal.get("verified_calculation_inputs", {})
         if not isinstance(verified_calculation_inputs, dict):
             verified_calculation_inputs = {}
-        if not approved_ids and not has_candidate_reference and not verified_calculation_inputs:
+        verified_engineering_choice_inputs = proposal.get(
+            "verified_engineering_choice_inputs", {}
+        )
+        if not isinstance(verified_engineering_choice_inputs, dict):
+            verified_engineering_choice_inputs = {}
+        verified_engineering_choice_lineage = proposal.get(
+            "verified_engineering_choice_lineage", {}
+        )
+        if not isinstance(verified_engineering_choice_lineage, dict):
+            verified_engineering_choice_lineage = {}
+        if (
+            not approved_ids
+            and not has_candidate_reference
+            and not verified_calculation_inputs
+            and not verified_engineering_choice_inputs
+        ):
             raise AgentRequestError(
                 "APPROVED_CHANGE_IDS_REQUIRED",
                 "没有受控候选引用时，approval.approved_change_ids 必须是非空字符串数组。",
@@ -2286,6 +2457,7 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
             raise AgentOperationError("LLM_REPLAY_SOURCE_INVALID", "replay source payload 无效。")
         replay_payload = json.loads(json.dumps(source_payload, ensure_ascii=False))
         current: dict[str, Any]
+        applied_engineering_choice_lineage: dict[str, Any] = {}
         if source_operation == "manual_match":
             current = replay_payload.get("values")
             if not isinstance(current, dict):
@@ -2294,6 +2466,13 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
             for field, value in verified_calculation_inputs.items():
                 if field not in draft or draft.get(field) in (None, ""):
                     draft[field] = value
+            for field, value in verified_engineering_choice_inputs.items():
+                if field not in draft or draft.get(field) in (None, ""):
+                    draft[field] = value
+                    if field in verified_engineering_choice_lineage:
+                        applied_engineering_choice_lineage[field] = (
+                            verified_engineering_choice_lineage[field]
+                        )
             replay_payload["values"] = draft
         elif source_operation == "auto_match" and isinstance(replay_payload.get("values"), dict):
             current = replay_payload["values"]
@@ -2301,9 +2480,20 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
             for field, value in verified_calculation_inputs.items():
                 if field not in draft or draft.get(field) in (None, ""):
                     draft[field] = value
+            for field, value in verified_engineering_choice_inputs.items():
+                if field not in draft or draft.get(field) in (None, ""):
+                    draft[field] = value
+                    if field in verified_engineering_choice_lineage:
+                        applied_engineering_choice_lineage[field] = (
+                            verified_engineering_choice_lineage[field]
+                        )
             replay_payload["values"] = draft
         else:
-            if approved_validation.get("accepted_changes") or verified_calculation_inputs:
+            if (
+                approved_validation.get("accepted_changes")
+                or verified_calculation_inputs
+                or verified_engineering_choice_inputs
+            ):
                 raise AgentRequestError(
                     "LLM_SOURCE_NOT_PATCHABLE",
                     f"{source_operation} 不能自动注入描述字段；请保留审核记录或重建可重放单设备输入。",
@@ -2320,7 +2510,31 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
                 "LLM 草案改变了硬参数，已拒绝。",
                 {"fields": sorted(changed_hard_fields)},
             )
-        recalculation, recalculation_artifacts = _execute(source_operation, replay_payload, api)
+        if source_operation == "manual_match" and applied_engineering_choice_lineage:
+            selection_id = str(replay_payload.get("selection_id") or "").strip()
+            if not selection_id:
+                raise AgentOperationError(
+                    "LLM_REPLAY_SOURCE_INVALID",
+                    "manual_match replay 缺少 selection_id。",
+                )
+            recalculation = app_core.manual_match(
+                selection_id,
+                replay_payload["values"],
+                engineering_choice_lineage=applied_engineering_choice_lineage,
+            )
+            recalculation_artifacts: list[str] = []
+        elif source_operation == "auto_match" and applied_engineering_choice_lineage:
+            recalculation = app_core.auto_match(
+                replay_payload["values"],
+                engineering_choice_lineage=applied_engineering_choice_lineage,
+            )
+            recalculation_artifacts = []
+        else:
+            recalculation, recalculation_artifacts = _execute(
+                source_operation,
+                replay_payload,
+                api,
+            )
         candidate_validation: dict[str, Any] | None = None
         if isinstance(candidate_reference, dict) and candidate_reference.get("status") == "candidate_reference":
             registry = {
@@ -2372,6 +2586,18 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
             "deterministic_recalculation": recalculation,
             "execution_timeline": execution_timeline,
             "candidate_reference_validation": candidate_validation,
+            "engineering_choice_application": {
+                "status": (
+                    "REGISTERED_ENGINEERING_CHOICES_APPLIED_AND_RECALCULATED"
+                    if applied_engineering_choice_lineage else "NOT_NEEDED"
+                ),
+                "applied_inputs": {
+                    field: draft[field]
+                    for field in applied_engineering_choice_lineage
+                },
+                "choice_lineage": applied_engineering_choice_lineage,
+                "overwritten_fields": [],
+            },
         }, recalculation_artifacts
     if operation == "selftest":
         bundle = app_core.require_runtime_bundle()
@@ -2471,6 +2697,11 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
             candidate_generation_executed = selection_execution_status in {
                 "EXECUTED",
                 "EXECUTED_TYPE_SCREENING_ONLY",
+                # The pipe selector has already produced a concrete type,
+                # DN/OD×t/PN and piping-class component schedule.  This status
+                # keeps the separate project-authority/material-table gates
+                # open; it does not mean candidate generation failed.
+                "TYPE_AND_GEOMETRY_SELECTED_PIPE_DESIGN_BLOCKED",
             }
             family_acceptance_rows.append({
                 "family_id": case["family_id"],
@@ -2627,7 +2858,7 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
                         "parallel_train_count_estimate"
                     )
                     == 2
-                    and "轴流泵系统"
+                    and "立式导叶式混流泵"
                     in str(
                         large_pump["result"].get(
                             "engineering_adjustment_plan", {}
@@ -2641,8 +2872,9 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
                         "section_order"
                     )
                     == [
-                        "结论",
-                        "计算",
+                        "基本信息",
+                        "分支选择与大模型调控",
+                        "详细计算链条",
                         "候选与系统修改方案",
                         "强制警告",
                         "待补证据",
@@ -2689,6 +2921,8 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
                     "equipment-evidence-index-v1",
                     "equipment-design-pfd-mapping-v1",
                     "equipment-agent-organized-answer-v1",
+                    "aspen-equipment-export-v1",
+                    "aspen-com-extraction-coverage-v1",
                 } <= schema_ids,
                 "detail": sorted(schema_ids),
             },

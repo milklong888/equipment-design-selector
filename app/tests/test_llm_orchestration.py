@@ -62,6 +62,7 @@ def empty_output(prepared: dict, injection_point: str = "audit") -> dict:
         "proposed_changes": [],
         "condition_assessments": [],
         "terminal_selection_assists": [],
+        "engineering_choice_assists": [],
         "calculation_assists": [],
         "retrieval_plan": [],
         "ambiguity_decision": None,
@@ -89,6 +90,403 @@ def organize_output(output: dict) -> dict:
 
 
 class LlmOrchestrationTests(unittest.TestCase):
+    def test_registered_ai_choice_library_covers_all_17_families(self) -> None:
+        registry = app_core.matcher.load_ai_engineering_choice_registry()
+        model_rules = app_core.matcher.load_model_rules()
+        expected_families = {
+            item["family_id"] for item in model_rules["families"]
+        }
+        actual_families = {
+            item["family_id"] for item in registry["families"]
+        }
+        self.assertEqual(actual_families, expected_families)
+        self.assertEqual(len(actual_families), 17)
+        for family in registry["families"]:
+            with self.subTest(family_id=family["family_id"]):
+                self.assertGreaterEqual(len(family["terminal_type_choices"]), 2)
+                self.assertTrue(family["material_component_axes"])
+                self.assertTrue(family["background"])
+                self.assertTrue(family["source_refs"])
+                for choice in family["terminal_type_choices"]:
+                    quality = app_core.matcher.terminal_type_name_quality(
+                        choice["recommended_type"]
+                    )
+                    self.assertTrue(quality["is_concrete"], choice)
+                    self.assertTrue(choice["selection_basis"])
+                    self.assertTrue(choice["source_refs"])
+                for axis in family["material_component_axes"]:
+                    self.assertGreaterEqual(len(axis["choices"]), 2)
+                    for choice in axis["choices"]:
+                        self.assertTrue(choice["field_values"])
+                        self.assertTrue(choice["selection_basis"])
+                        self.assertTrue(choice["source_refs"])
+
+    def test_registered_type_choices_are_exposed_for_every_family(self) -> None:
+        rules = app_core.matcher.load_rules()
+        graph = app_core.matcher.load_graph()
+        for family in rules["families"]:
+            family_id = family["id"]
+            with self.subTest(family_id=family_id):
+                result = app_core.matcher.match_one(
+                    {"equipment_family": family_id},
+                    rules,
+                    graph,
+                )
+                self.assertEqual(result["status"], "MATCHED")
+                registered = result["model_recommendation"][
+                    "terminal_type_rule_registry"
+                ]
+                self.assertGreaterEqual(len(registered), 2)
+
+    def test_engineering_choice_is_verified_auto_replayed_and_disclosed(self) -> None:
+        values = {
+            "equipment_tag": "P-AI-CHOICE",
+            "phase": "liquid",
+            "flow_m3_h": 20,
+            "head_m": 30,
+            "density_kg_m3": 1000,
+            "main_medium": "water",
+        }
+        source_input = {
+            "operation": "manual_match",
+            "payload": {"selection_id": "block:PUMP", "values": values},
+        }
+        prepare_response, code = agent.execute_request({
+            "schema": "equipment-design-agent-request-v1",
+            "operation": "hybrid_prepare",
+            "payload": {
+                "input": source_input,
+                "knowledge": {"enabled": False},
+                "injection_point": "engineering_choice",
+                "context_scope": "minimum",
+            },
+        })
+        self.assertEqual(code, 0, prepare_response)
+        prepared = prepare_response["result"]
+        choice = next(
+            item
+            for item in prepared["context_pack"]["engineering_choice_registry"]
+            if item["choice_id"] == "pump:route:clean_water_standard"
+        )
+        output = empty_output(prepared, "engineering_choice")
+        output["engineering_choice_assists"] = [{
+            "assist_id": "choose_clean_water_route",
+            "axis_id": choice["axis_id"],
+            "choice_id": choice["choice_id"],
+            "selection_context_sha256": choice["selection_context_sha256"],
+            "reason": "The immutable case identifies clean water without hazard or corrosion labels.",
+            "citations": ["deterministic_result"],
+        }]
+        organize_output(output)
+
+        response, code = agent.execute_request({
+            "schema": "equipment-design-agent-request-v1",
+            "operation": "hybrid_run",
+            "payload": {
+                "input": source_input,
+                "knowledge": {"enabled": False},
+                "injection_point": "engineering_choice",
+                "context_scope": "minimum",
+                "llm": {
+                    "enabled": True,
+                    "config": {"provider": "mock", "mock_response": output},
+                },
+            },
+        })
+
+        self.assertEqual(code, 0, response)
+        hybrid = response["result"]
+        self.assertEqual(
+            hybrid["engineering_choice_application"]["status"],
+            "REGISTERED_ENGINEERING_CHOICES_APPLIED_AND_RECALCULATED",
+        )
+        self.assertEqual(
+            hybrid["engineering_choice_application"]["overwritten_fields"],
+            [],
+        )
+        recalculated = hybrid["deterministic_recalculation"]["result"]
+        self.assertEqual(
+            recalculated["pump_engineering_selection"]["material_and_seal"][
+                "route_id"
+            ],
+            "CLEAN_WATER_STANDARD",
+        )
+        selected = recalculated["ai_engineering_choice_inputs"][0]
+        self.assertEqual(
+            selected["choice_id"],
+            "pump:route:clean_water_standard",
+        )
+        self.assertEqual(selected["evidence_class"], "J")
+        self.assertEqual(selected["promotion_cap"], "TYPE_SCREENING")
+        self.assertFalse(selected["overwrite_allowed"])
+
+    def test_pump_s30408_alone_cannot_authorize_corrosive_316l_route(self) -> None:
+        pump = app_core.manual_match(
+            "block:PUMP",
+            {
+                "equipment_tag": "P-S30408-GATE",
+                "phase": "liquid",
+                "flow_m3_h": 20,
+                "head_m": 30,
+                "density_kg_m3": 1000,
+                "process_function": "clean liquid pressure boosting",
+                "material": "S30408",
+            },
+        )
+        prepared = llm_bridge.hybrid_prepare(
+            pump,
+            {"status": "NOT_REQUESTED", "hits": []},
+            "engineering_choice",
+        )
+        choice = next(
+            item
+            for item in prepared["context_pack"]["engineering_choice_registry"]
+            if item["choice_id"] == "pump:route:corrosive_316l_hard_face"
+        )
+        self.assertFalse(choice["eligible_for_ai_selection"])
+        self.assertEqual(
+            choice["deterministic_trigger_support"]["status"],
+            "NOT_SUPPORTED",
+        )
+        self.assertTrue(any(
+            fact.startswith("immutable_general_material_requires_explicit_component_mapping:")
+            for fact in choice["deterministic_trigger_support"]["blocking_facts"]
+        ))
+
+        output = empty_output(prepared, "engineering_choice")
+        output["engineering_choice_assists"] = [{
+            "assist_id": "attempt_corrosive_route_from_s30408_only",
+            "axis_id": choice["axis_id"],
+            "choice_id": choice["choice_id"],
+            "selection_context_sha256": choice["selection_context_sha256"],
+            "reason": "S30408 alone is not corrosion-service evidence.",
+            "citations": ["deterministic_result"],
+        }]
+        organize_output(output)
+
+        result = llm_bridge.hybrid_continue(prepared, output)
+        self.assertEqual(result["verified_engineering_choice_inputs"], {})
+        self.assertEqual(
+            result["engineering_choice_assist_validation"][0]["status"],
+            "REJECTED_NONBLOCKING_CHOICE_NOT_APPLICABLE",
+        )
+
+    def test_explicit_corrosive_pump_service_keeps_registered_route_available(self) -> None:
+        pump = app_core.manual_match(
+            "block:PUMP",
+            {
+                "equipment_tag": "P-CORROSIVE-GATE",
+                "phase": "liquid",
+                "flow_m3_h": 20,
+                "head_m": 30,
+                "density_kg_m3": 1030,
+                "main_medium": "chloride brine",
+                "chloride_ppm": 1200,
+            },
+        )
+        prepared = llm_bridge.hybrid_prepare(
+            pump,
+            {"status": "NOT_REQUESTED", "hits": []},
+            "engineering_choice",
+        )
+        choice = next(
+            item
+            for item in prepared["context_pack"]["engineering_choice_registry"]
+            if item["choice_id"] == "pump:route:corrosive_316l_hard_face"
+        )
+        self.assertTrue(choice["eligible_for_ai_selection"])
+        self.assertEqual(
+            choice["deterministic_trigger_support"]["status"],
+            "SUPPORTED",
+        )
+        self.assertIn(
+            "program_pump_service_route:CORROSIVE_316L_HARD_FACE",
+            choice["deterministic_trigger_support"]["supporting_facts"],
+        )
+
+        output = empty_output(prepared, "engineering_choice")
+        output["engineering_choice_assists"] = [{
+            "assist_id": "choose_proven_corrosive_route",
+            "axis_id": choice["axis_id"],
+            "choice_id": choice["choice_id"],
+            "selection_context_sha256": choice["selection_context_sha256"],
+            "reason": "The deterministic classifier proved chloride brine service.",
+            "citations": ["deterministic_result"],
+        }]
+        organize_output(output)
+
+        result = llm_bridge.hybrid_continue(prepared, output)
+        self.assertEqual(
+            result["verified_engineering_choice_inputs"],
+            {"pump_material_route_override_id": "CORROSIVE_316L_HARD_FACE"},
+        )
+        self.assertEqual(
+            result["engineering_choice_assist_validation"][0]["status"],
+            "VERIFIED_REGISTERED_ENGINEERING_CHOICE",
+        )
+
+    def test_choice_gate_blocks_exchanger_type_mismatch_and_unknown_compressor_service(
+        self,
+    ) -> None:
+        exchanger = app_core.manual_match(
+            "block:HEATX",
+            {
+                "equipment_tag": "E-TYPE-GATE",
+                "process_function": "clean liquid-liquid heat exchange",
+                "temperature_c": 180,
+            },
+        )
+        exchanger_prepared = llm_bridge.hybrid_prepare(
+            exchanger,
+            {"status": "NOT_REQUESTED", "hits": []},
+            "engineering_choice",
+        )
+        plate_choices = [
+            item
+            for item in exchanger_prepared["context_pack"][
+                "engineering_choice_registry"
+            ]
+            if item["axis_id"] == "other_exchanger:plate_gasket_package"
+        ]
+        self.assertEqual(len(plate_choices), 2)
+        self.assertTrue(all(
+            item["eligible_for_ai_selection"] is False
+            for item in plate_choices
+        ))
+        self.assertTrue(all(
+            any(
+                fact.startswith("terminal_type_is_not_plate_exchanger:")
+                for fact in item["deterministic_trigger_support"]["blocking_facts"]
+            )
+            for item in plate_choices
+        ))
+
+        compressor = app_core.manual_match(
+            "block:COMPR",
+            {
+                "equipment_tag": "C-UNKNOWN-SERVICE-GATE",
+                "phase": "gas",
+                "process_function": "continuous gas compression",
+            },
+        )
+        compressor_prepared = llm_bridge.hybrid_prepare(
+            compressor,
+            {"status": "NOT_REQUESTED", "hits": []},
+            "engineering_choice",
+        )
+        compressor_choices = [
+            item
+            for item in compressor_prepared["context_pack"][
+                "engineering_choice_registry"
+            ]
+            if item["axis_id"] == "compressor:rotor_seal_package"
+        ]
+        self.assertEqual(len(compressor_choices), 2)
+        self.assertTrue(all(
+            item["eligible_for_ai_selection"] is False
+            for item in compressor_choices
+        ))
+        self.assertTrue(all(
+            item["deterministic_trigger_support"]["status"]
+            == "INSUFFICIENT_EVIDENCE"
+            for item in compressor_choices
+        ))
+
+    def test_validator_rejects_tampered_eligible_choice_without_trigger_support(
+        self,
+    ) -> None:
+        context_sha256 = "A" * 64
+        context_pack = {
+            "engineering_choice_registry": [{
+                "family_id": "family_pump",
+                "axis_id": "pump:material_seal_route",
+                "choice_id": "pump:route:corrosive_316l_hard_face",
+                "selection_context_sha256": context_sha256,
+                "eligible_for_ai_selection": True,
+                "application_policy": "fill_missing_fields_only_trigger_supported",
+                "field_values": {
+                    "pump_material_route_override_id": "CORROSIVE_316L_HARD_FACE",
+                },
+                "deterministic_trigger_support": {
+                    "status": "INSUFFICIENT_EVIDENCE",
+                    "reason": "specialized corrosion route was not proven",
+                },
+            }],
+        }
+        validations = llm_bridge.validate_engineering_choice_assists(
+            [{
+                "assist_id": "tampered_eligibility",
+                "axis_id": "pump:material_seal_route",
+                "choice_id": "pump:route:corrosive_316l_hard_face",
+                "selection_context_sha256": context_sha256,
+                "reason": "attempted bypass",
+                "citations": ["deterministic_result"],
+            }],
+            context_pack,
+        )
+        self.assertEqual(
+            validations[0]["status"],
+            "REJECTED_NONBLOCKING_TRIGGER_NOT_SUPPORTED",
+        )
+        self.assertFalse(validations[0]["auto_apply"])
+        self.assertEqual(validations[0]["resolved_field_values"], {})
+
+    def test_invented_or_existing_value_conflicting_choice_is_not_applied(self) -> None:
+        exchanger = app_core.manual_match(
+            "family:family_fixed_tubesheet_exchanger",
+            {
+                "equipment_tag": "E-AI-CONFLICT",
+                "heat_duty_kw": 500,
+                "overall_u_w_m2k": 600,
+                "lmtd_k": 30,
+                "shell_material_grade": "Q345R",
+            },
+        )
+        prepared = llm_bridge.hybrid_prepare(
+            exchanger,
+            {"status": "NOT_REQUESTED", "hits": []},
+            "engineering_choice",
+        )
+        registry = prepared["context_pack"]["engineering_choice_registry"]
+        conflicting = next(
+            item for item in registry
+            if item["choice_id"] == "fixed_exchanger:material:316l_wetted"
+        )
+        self.assertFalse(conflicting["eligible_for_ai_selection"])
+        output = empty_output(prepared, "engineering_choice")
+        output["engineering_choice_assists"] = [{
+            "assist_id": "conflicting_choice",
+            "axis_id": conflicting["axis_id"],
+            "choice_id": conflicting["choice_id"],
+            "selection_context_sha256": conflicting[
+                "selection_context_sha256"
+            ],
+            "reason": "attempt to overwrite an existing user material",
+            "citations": ["deterministic_result"],
+        }, {
+            "assist_id": "invented_choice",
+            "axis_id": conflicting["axis_id"],
+            "choice_id": "invented:material:package",
+            "selection_context_sha256": conflicting[
+                "selection_context_sha256"
+            ],
+            "reason": "invented package regression",
+            "citations": ["deterministic_result"],
+        }]
+        organize_output(output)
+
+        result = llm_bridge.hybrid_continue(prepared, output)
+        self.assertEqual(result["verified_engineering_choice_inputs"], {})
+        self.assertEqual(
+            [item["status"] for item in result[
+                "engineering_choice_assist_validation"
+            ]],
+            [
+                "REJECTED_NONBLOCKING_CHOICE_NOT_APPLICABLE",
+                "REJECTED_NONBLOCKING_UNKNOWN_REGISTERED_CHOICE",
+            ],
+        )
+
     def test_verified_recipe_is_program_computed_and_interleaved_in_ai_order(self) -> None:
         prepared = llm_bridge.hybrid_prepare(
             pump_result(), {"status": "NOT_REQUESTED", "hits": []}, "audit"
@@ -651,6 +1049,140 @@ class LlmOrchestrationTests(unittest.TestCase):
         self.assertEqual(rows["density_kg_m3"]["state"], "DEFAULTED")
         self.assertEqual(rows["head_m"]["state"], "DEFAULTED")
 
+    def test_valve_formal_gate_markers_never_enter_model_estimate_replay(self) -> None:
+        values = {
+            "equipment_tag": "FV-GATE-REGRESSION",
+            "valve_function": "control",
+            "phase": "liquid",
+            "flow_m3_h": 80,
+            "density_kg_m3": 1000,
+            "pressure_drop_kpa": 50,
+            "selected_dn": "DN80",
+            "pressure_class": "PN16",
+            "material": "S31603",
+            "operating_pressure_mpa": 1.0,
+            "pressure_basis": "gauge",
+            "design_pressure_factor": 1.1,
+        }
+        source_input = {
+            "operation": "manual_match",
+            "payload": {"selection_id": "block:VALVE", "values": values},
+        }
+        deterministic = app_core.manual_match("block:VALVE", values)
+        context_pack = llm_bridge.build_context_pack(
+            deterministic,
+            {"status": "NOT_REQUESTED", "hits": []},
+            "audit",
+        )
+        registry = {
+            item["field_id"]: item
+            for item in context_pack["missing_input_registry"]
+        }
+        synthetic_target = (
+            "calculation_promotion_cap:"
+            "valve_liquid_equivalent_cv_screening:TYPE_SCREENING"
+        )
+
+        self.assertIn("atmospheric_pressure_mpa", registry)
+        self.assertNotIn(synthetic_target, registry)
+        self.assertFalse(
+            any(
+                field_id.startswith(("calculation_promotion_cap:", "design_fallback:"))
+                for field_id in registry
+            )
+        )
+
+        validations = llm_bridge.validate_calculation_assists(
+            [{
+                "assist_id": "must_not_estimate_formal_gate",
+                "target_field": synthetic_target,
+                "target_unit": "dimensionless",
+                "method": "model_inference",
+                "recipe_id": None,
+                "proposed_value": 1.0,
+                "certainty": "uncertain",
+                "uncertainty_note": "A formal promotion gate is not an input value.",
+                "inference_basis": "conservative_screening_assumption",
+                "assumptions": ["regression only"],
+                "lower_bound": 0.0,
+                "upper_bound": 2.0,
+                "confidence": "low",
+                "sensitivity_note": "The deterministic evidence gate must remain authoritative.",
+                "requested_preliminary_auto_apply": True,
+                "reason": "attempt to reproduce the observed valve replay failure",
+                "citations": ["deterministic_result"],
+            }],
+            context_pack,
+        )
+        self.assertEqual(
+            validations[0]["status"],
+            "REJECTED_MODEL_ESTIMATE_TARGET_NOT_REGISTERED_MISSING_INPUT",
+        )
+        self.assertFalse(validations[0]["auto_apply"])
+
+        verified_model_inputs = {
+            item["target_field"]: item["resolved_value"]
+            for item in validations
+            if item["status"] == "VERIFIED_PROVISIONAL_ENGINEERING_ESTIMATE"
+            and item["auto_apply"] is True
+        }
+        verified_model_lineage = {
+            item["target_field"]: item
+            for item in validations
+            if item["status"] == "VERIFIED_PROVISIONAL_ENGINEERING_ESTIMATE"
+            and item["auto_apply"] is True
+        }
+        recalculation, _artifacts, application, _terminal, _engineering = (
+            agent._auto_apply_verified_hybrid_updates(
+                "manual_match",
+                source_input,
+                {},
+                verified_model_inputs,
+                verified_model_lineage,
+                {},
+                {},
+                {},
+                EquipmentDesignApi(),
+            )
+        )
+        self.assertEqual(verified_model_inputs, {})
+        self.assertEqual(verified_model_lineage, {})
+        self.assertIsNone(recalculation)
+        self.assertEqual(application["status"], "NOT_NEEDED")
+
+    def test_programmatic_pipe_route_is_complete_preliminary_not_formally_promoted(self) -> None:
+        deterministic = app_core.manual_match(
+            "family:family_process_piping",
+            {
+                "equipment_tag": "PL-PRELIMINARY-COMPLETE",
+                "main_medium": "water",
+                "phase": "liquid",
+                "flow_m3_h": 100.0,
+                "density_kg_m3": 997.0,
+                "dynamic_viscosity_mpa_s": 0.89,
+                "target_velocity_m_s": 1.8,
+                "design_pressure_mpa": 2.5,
+                "design_pressure_basis": "gauge",
+                "design_temperature_c": 120.0,
+                "material": "S30408",
+            },
+        )
+
+        completeness = agent._hybrid_selection_completeness(
+            deterministic,
+            None,
+        )
+
+        self.assertEqual(completeness["acceptance"], "PASS")
+        self.assertTrue(completeness["terminal_form_complete"])
+        self.assertTrue(completeness["engineering_candidate_complete"])
+        self.assertEqual(completeness["candidate_matching_status"], "READY")
+        self.assertFalse(completeness["formal_promotion_allowed"])
+        self.assertIn(
+            "project_authority_piping_class",
+            completeness["formal_evidence_gaps"],
+        )
+
     def test_direct_component_choice_fields_are_excluded_and_registry_summary_is_visible(self) -> None:
         source_input = {
             "operation": "manual_match",
@@ -945,6 +1477,16 @@ class LlmOrchestrationTests(unittest.TestCase):
             candidate["selection_feature_vector_sha256"],
             candidate["selection_context_sha256"],
         )
+        self.assertEqual(
+            prepared["output_contract"]["allowed_citation_context_ids"],
+            ["deterministic_result", "kg:001"],
+        )
+        citation_enum = (
+            prepared["output_contract"]["provider_json_schema"]
+            ["properties"]["calculation_assists"]["items"]
+            ["properties"]["citations"]["items"]["enum"]
+        )
+        self.assertEqual(citation_enum, ["deterministic_result", "kg:001"])
 
     def test_mock_run_is_offline_and_reuses_continue_validator(self) -> None:
         prepared = llm_bridge.hybrid_prepare(pump_result(), {"status": "NOT_REQUESTED", "hits": []}, "audit")
@@ -956,7 +1498,7 @@ class LlmOrchestrationTests(unittest.TestCase):
             "citations": ["deterministic_result"],
         }]
         organize_output(output)
-        with patch.object(llm_bridge.urllib.request, "urlopen", side_effect=AssertionError("network forbidden")):
+        with patch.object(llm_bridge, "_open_authenticated_request", side_effect=AssertionError("network forbidden")):
             result = llm_bridge.hybrid_run(
                 {"provider": "mock", "model": "offline", "mock_response": output},
                 prepared,
@@ -993,7 +1535,7 @@ class LlmOrchestrationTests(unittest.TestCase):
             captured["payload"] = json.loads(request.data.decode("utf-8"))
             return FakeResponse()
 
-        with patch.object(llm_bridge.urllib.request, "urlopen", side_effect=fake_urlopen):
+        with patch.object(llm_bridge, "_open_authenticated_request", side_effect=fake_urlopen):
             result = llm_bridge.hybrid_run({
                 "provider": "openai",
                 "base_url": "https://api.openai.com/v1",
@@ -1038,9 +1580,22 @@ class LlmOrchestrationTests(unittest.TestCase):
             ["properties"]["citations"]
         )
         self.assertEqual(nested_citations["minItems"], 1)
+        self.assertEqual(nested_citations["items"]["enum"], ["deterministic_result"])
+        self.assertEqual(
+            provider_schema["properties"]["citations"]["items"]["properties"]["context_id"]["enum"],
+            ["deterministic_result"],
+        )
         self.assertEqual(captured["timeout"], 17)
         self.assertEqual(result["provider"], "openai")
         user_payload = json.loads(captured["payload"]["messages"][1]["content"])
+        self.assertEqual(
+            user_payload["allowed_citation_context_ids"],
+            ["deterministic_result"],
+        )
+        system_prompt = captured["payload"]["messages"][0]["content"]
+        self.assertIn("copy only an entire whitelist string exactly", system_prompt)
+        self.assertIn("Never append a colon, field path", system_prompt)
+        self.assertIn("missing_input_registry and its field paths are not context IDs", system_prompt)
         active_policy = user_payload["active_output_policy"]
         self.assertEqual(active_policy["injection_point"], "audit")
         self.assertEqual(
@@ -1085,7 +1640,7 @@ class LlmOrchestrationTests(unittest.TestCase):
             captured["payload"] = json.loads(request.data.decode("utf-8"))
             return FakeResponse()
 
-        with patch.object(llm_bridge.urllib.request, "urlopen", side_effect=fake_urlopen):
+        with patch.object(llm_bridge, "_open_authenticated_request", side_effect=fake_urlopen):
             result = llm_bridge.hybrid_run({
                 "provider": "openai_compatible",
                 "base_url": "https://example.invalid/v1/chat/completions",
@@ -1103,6 +1658,11 @@ class LlmOrchestrationTests(unittest.TestCase):
         self.assertIn("instructions", payload)
         user_payload = json.loads(payload["input"])
         self.assertEqual(user_payload["active_output_policy"]["injection_point"], "audit")
+        self.assertEqual(
+            user_payload["allowed_citation_context_ids"],
+            ["deterministic_result"],
+        )
+        self.assertIn("Never append a colon, field path", payload["instructions"])
         self.assertEqual(payload["reasoning"], {"effort": "xhigh"})
         self.assertFalse(payload["store"])
         self.assertNotIn("messages", payload)
@@ -1112,6 +1672,139 @@ class LlmOrchestrationTests(unittest.TestCase):
         self.assertEqual(result["reasoning_effort"], "xhigh")
         self.assertTrue(result["response_storage_disabled"])
 
+    def test_deepseek_provider_requests_json_and_maps_reasoning_controls(self) -> None:
+        prepared = llm_bridge.hybrid_prepare(
+            pump_result(),
+            {"status": "NOT_REQUESTED", "hits": []},
+            "audit",
+        )
+        output = empty_output(prepared)
+        organize_output(output)
+        response_body = {
+            "choices": [{"message": {"content": json.dumps(output, ensure_ascii=False)}}],
+        }
+        captured: dict[str, object] = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            @staticmethod
+            def read() -> bytes:
+                return json.dumps(response_body, ensure_ascii=False).encode("utf-8")
+
+        def fake_urlopen(request, timeout):
+            captured["url"] = request.full_url
+            captured["timeout"] = timeout
+            captured["payload"] = json.loads(request.data.decode("utf-8"))
+            return FakeResponse()
+
+        with patch.object(llm_bridge, "_open_authenticated_request", side_effect=fake_urlopen):
+            result = llm_bridge.hybrid_run({
+                "provider": "deepseek",
+                "base_url": "https://api.deepseek.com",
+                "model": "deepseek-v4-pro",
+                "wire_api": "chat_completions",
+                "reasoning_effort": "xhigh",
+                "timeout_s": 37,
+                "api_key": "TEST-KEY",
+            }, prepared)
+
+        payload = captured["payload"]
+        self.assertEqual(captured["url"], "https://api.deepseek.com/chat/completions")
+        self.assertEqual(payload["response_format"], {"type": "json_object"})
+        self.assertEqual(payload["thinking"], {"type": "enabled"})
+        self.assertEqual(payload["reasoning_effort"], "max")
+        system_prompt = payload["messages"][0]["content"]
+        self.assertIn("Return one JSON object", system_prompt)
+        self.assertIn("confidence exactly low or medium, never high", system_prompt)
+        self.assertIn("represents whole sections rather than individual items", system_prompt)
+        self.assertIn("calculation_assists has at most one block", system_prompt)
+        self.assertIn("Simplified Chinese (zh-CN)", system_prompt)
+        user_payload = json.loads(payload["messages"][1]["content"])
+        constraints = user_payload["generation_constraints"]
+        confidence = constraints["model_inference_confidence"]
+        self.assertEqual(confidence["allowed_exact_values"], ["low", "medium"])
+        self.assertEqual(confidence["forbidden_values"], ["high"])
+        composition = constraints["output_composition"]
+        self.assertTrue(composition["blocks_represent_sections_not_items"])
+        self.assertTrue(composition["section_ref_must_be_unique"])
+        self.assertEqual(composition["calculation_assists_max_block_count"], 1)
+        language = constraints["user_visible_language"]
+        self.assertEqual(language["locale"], "zh-CN")
+        self.assertIn("summary", language["required_paths"])
+        self.assertIn("calculation_assists[*].reason", language["required_paths"])
+        self.assertIn(
+            "output_composition.blocks[*].heading",
+            language["required_paths"],
+        )
+        self.assertEqual(
+            constraints,
+            user_payload["output_contract"]["generation_constraints"],
+        )
+        self.assertEqual(result["provider"], "deepseek")
+        self.assertEqual(result["model"], "deepseek-v4-pro")
+        self.assertFalse(result["api_key_persisted"])
+
+    def test_known_deepseek_generation_errors_remain_fail_closed(self) -> None:
+        prepared = llm_bridge.hybrid_prepare(
+            pump_result(),
+            {"status": "NOT_REQUESTED", "hits": []},
+            "audit",
+        )
+        high_confidence = empty_output(prepared)
+        high_confidence["calculation_assists"] = [{
+            "assist_id": "model_guess",
+            "target_field": "operating_pressure_mpa",
+            "target_unit": "MPa",
+            "method": "model_inference",
+            "recipe_id": None,
+            "proposed_value": 0.3,
+            "certainty": "uncertain",
+            "uncertainty_note": "仅用于初步筛选。",
+            "inference_basis": "conservative_screening_assumption",
+            "assumptions": ["按低压液体工况初筛"],
+            "lower_bound": 0.1,
+            "upper_bound": 0.6,
+            "confidence": "high",
+            "sensitivity_note": "应在上下限处重新校核。",
+            "requested_preliminary_auto_apply": True,
+            "reason": "在缺少正式数据时保持初步流程可运行。",
+            "citations": ["deterministic_result"],
+        }]
+        organize_output(high_confidence)
+        with self.assertRaisesRegex(ValueError, "confidence must be low or medium"):
+            llm_bridge.hybrid_continue(prepared, high_confidence)
+
+        duplicate_section = empty_output(prepared)
+        duplicate_section["calculation_assists"] = [{
+            "assist_id": "derive_mass_flow",
+            "target_field": "mass_flow_kg_h",
+            "target_unit": "kg/h",
+            "method": "deterministic_recipe",
+            "recipe_id": "mass_flow_from_volume_density",
+            "proposed_value": None,
+            "certainty": "certain",
+            "uncertainty_note": None,
+            "reason": "现有输入满足登记公式。",
+            "citations": ["deterministic_result"],
+        }]
+        organize_output(duplicate_section)
+        calculation_block = next(
+            block
+            for block in duplicate_section["output_composition"]["blocks"]
+            if block["section_ref"] == "calculation_assists"
+        )
+        duplicate_section["output_composition"]["blocks"].append({
+            **calculation_block,
+            "block_id": "calculation_assists_duplicate",
+        })
+        with self.assertRaisesRegex(ValueError, "重复组织同一段：calculation_assists"):
+            llm_bridge.hybrid_continue(prepared, duplicate_section)
+
     def test_nested_claim_requires_nonempty_citation(self) -> None:
         prepared = llm_bridge.hybrid_prepare(pump_result(), {"status": "NOT_REQUESTED", "hits": []}, "audit")
         output = empty_output(prepared)
@@ -1120,6 +1813,47 @@ class LlmOrchestrationTests(unittest.TestCase):
         }]
         with self.assertRaisesRegex(ValueError, "至少需要一个"):
             llm_bridge.hybrid_continue(prepared, output)
+
+    def test_observed_deepseek_annotated_citation_remains_fail_closed(self) -> None:
+        prepared = llm_bridge.hybrid_prepare(
+            pump_result(), {"status": "NOT_REQUESTED", "hits": []}, "audit"
+        )
+        output = empty_output(prepared)
+        output["audit_findings"] = [{
+            "finding_id": "audit-annotated-citation",
+            "severity": "warning",
+            "message": "atmospheric pressure remains provisional",
+            "citations": [
+                "deterministic_result: missing_input_registry field: atmospheric_pressure_mpa"
+            ],
+        }]
+        organize_output(output)
+        with self.assertRaisesRegex(ValueError, "不存在的 context_id"):
+            llm_bridge.hybrid_continue(prepared, output)
+
+    def test_colon_bearing_kg_context_id_is_accepted_exactly(self) -> None:
+        prepared = llm_bridge.hybrid_prepare(
+            pump_result(),
+            {
+                "status": "PASS_BUNDLED_GRAPH",
+                "hits": [{"path": "kg/pump.md", "text": "pump evidence"}],
+            },
+            "audit",
+            "routed",
+        )
+        output = empty_output(prepared)
+        output["audit_findings"] = [{
+            "finding_id": "audit-kg-citation",
+            "severity": "info",
+            "message": "knowledge evidence was reviewed",
+            "citations": ["kg:001"],
+        }]
+        organize_output(output)
+        result = llm_bridge.hybrid_continue(prepared, output)
+        self.assertEqual(
+            result["step_output"]["audit_findings"][0]["citations"],
+            ["kg:001"],
+        )
 
     def test_condition_id_must_come_from_deterministic_registry(self) -> None:
         prepared = llm_bridge.hybrid_prepare(
@@ -1548,7 +2282,7 @@ class LlmOrchestrationTests(unittest.TestCase):
             "payload": {"prepared": prepared, "step_output": output},
         })
         self.assertEqual(code, 0, continue_response)
-        with patch.object(llm_bridge.urllib.request, "urlopen", side_effect=AssertionError("network forbidden")):
+        with patch.object(llm_bridge, "_open_authenticated_request", side_effect=AssertionError("network forbidden")):
             run_response, code = agent.execute_request({
                 "schema": "equipment-design-agent-request-v1",
                 "operation": "hybrid_run",

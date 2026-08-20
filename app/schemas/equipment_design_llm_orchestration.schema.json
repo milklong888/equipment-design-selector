@@ -11,6 +11,8 @@
     "verified_model_estimate_inputs", "verified_model_estimate_lineage",
     "terminal_selection_assist_validation", "verified_terminal_selection_overrides",
     "verified_terminal_selection_override_id",
+    "engineering_choice_assist_validation", "verified_engineering_choice_inputs",
+    "verified_engineering_choice_lineage",
     "output_composition", "execution_timeline",
     "proposal", "validated_proposal", "candidate_reference",
     "replay_contract", "transition_contract", "apply_contract", "orchestration_sha256"
@@ -34,6 +36,9 @@
     "terminal_selection_assist_validation": {"type": "array"},
     "verified_terminal_selection_overrides": {"type": "object"},
     "verified_terminal_selection_override_id": {"type": ["string", "null"]},
+    "engineering_choice_assist_validation": {"type": "array"},
+    "verified_engineering_choice_inputs": {"type": "object"},
+    "verified_engineering_choice_lineage": {"type": "object"},
     "output_composition": {"type": "object"},
     "execution_timeline": {
       "$ref": "equipment_design_interleaved_timeline.schema.json"

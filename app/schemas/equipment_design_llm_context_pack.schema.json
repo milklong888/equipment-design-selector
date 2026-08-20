@@ -8,15 +8,18 @@
     "schema", "injection_point", "mode", "context_scope", "coverage_status",
     "included_assets", "truncated_assets", "char_count",
     "deterministic_result_sha256", "kg_result_sha256", "kg_status",
-    "candidate_registry", "condition_registry", "terminal_type_rule_registry", "calculation_recipe_catalog",
+    "candidate_registry", "condition_registry", "terminal_type_rule_registry",
+    "engineering_choice_registry", "calculation_recipe_catalog",
     "missing_input_registry", "model_estimate_policy",
+    "engineering_choice_policy",
     "sources", "context_sha256"
   ],
   "properties": {
     "schema": {"const": "equipment-design-llm-context-pack-v1"},
     "injection_point": {
       "enum": [
-        "semantic_extraction", "textual_condition_judgment", "ambiguity_resolution",
+        "semantic_extraction", "textual_condition_judgment", "engineering_choice",
+        "ambiguity_resolution",
         "kg_retrieval_planning", "audit"
       ]
     },
@@ -114,6 +117,10 @@
         }
       }
     },
+    "engineering_choice_registry": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
     "calculation_recipe_catalog": {
       "type": "array",
       "items": {
@@ -191,6 +198,25 @@
         "promotion_cap": {"const": "TYPE_SCREENING"},
         "formal_model_promotion_allowed": {"const": false},
         "script_conflict_policy": {"const": "deterministic_script_wins"}
+      }
+    },
+    "engineering_choice_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled", "registered_choice_ids_only", "fill_missing_fields_only",
+        "existing_value_overwrite_allowed", "program_replay_required",
+        "evidence_class", "promotion_cap", "formal_model_promotion_allowed"
+      ],
+      "properties": {
+        "enabled": {"const": true},
+        "registered_choice_ids_only": {"const": true},
+        "fill_missing_fields_only": {"const": true},
+        "existing_value_overwrite_allowed": {"const": false},
+        "program_replay_required": {"const": true},
+        "evidence_class": {"const": "J"},
+        "promotion_cap": {"const": "TYPE_SCREENING"},
+        "formal_model_promotion_allowed": {"const": false}
       }
     },
     "sources": {

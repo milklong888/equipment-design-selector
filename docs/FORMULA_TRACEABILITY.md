@@ -197,23 +197,37 @@ P_h = ρ·g·Q·H
 
 这样用户能沿着“轴功率 → 水力功率 → 扬程 → 进出口压力/密度”逐级回看，而不是只看到最终功率。
 
-## 9. 40 条登记计算规则覆盖
+## 9. 45 条登记计算规则覆盖
 
 所有 `CALCULATION_REQUIREMENTS` 项现在必须在 `CALCULATION_POLICIES` 中存在完全对应的来源策略；测试要求两组 ID 完全相等。
+
+> 版本边界：下面五条专用链已进入 v2.4.3 Windows 成品；它们是可追溯的程序初算/型式筛选链，不会因为已发布就自动升级成厂家正式设计证据。
 
 | 设备/领域 | 计算 ID → 公式 ID |
 | --- | --- |
 | 泵 | `pump_head_from_pressure → B_PUMP_PRESSURE_HEAD`；`pump_hydraulic_power → A_PUMP_HYDRAULIC_POWER`；`pump_shaft_power → A_PUMP_SHAFT_POWER`；`pump_cavitation_margin → A_PUMP_CAVITATION_DIFFERENCE` |
 | 阀门 | `valve_pressure_drop_from_streams → A_VALVE_PRESSURE_DROP_FROM_STREAMS`；`valve_liquid_equivalent_cv_screening → B_VALVE_LIQUID_EQUIVALENT_CV_SCREENING`；`valve_maximum_pressure_drop_screening → B_VALVE_MAXIMUM_PRESSURE_DROP_SCREENING` |
 | 液力回收 | `liquid_turbine_pressure_head → B_LIQUID_TURBINE_PRESSURE_DROP_HEAD_COMPONENT`；`liquid_turbine_hydraulic_power → B_LIQUID_TURBINE_PRESSURE_DROP_POWER_COMPONENT`；`liquid_turbine_shaft_power → B_LIQUID_TURBINE_SHAFT_POWER_FROM_PRESSURE_COMPONENT` |
-| 压缩/膨胀 | `pressure_ratio → A_PRESSURE_RATIO`；`compressor_isentropic_shaft_power → B_COMPRESSOR_ISENTROPIC_SHAFT_POWER_FROM_ACTUAL_INLET_FLOW`；`compressor_total_power → B_COMPRESSOR_TOTAL_INPUT_POWER_SCREENING` |
+| 压缩/膨胀 | `pressure_ratio → A_PRESSURE_RATIO`；`compressor_isentropic_shaft_power → B_COMPRESSOR_ISENTROPIC_SHAFT_POWER_FROM_ACTUAL_INLET_FLOW`；`compressor_total_power → B_COMPRESSOR_TOTAL_INPUT_POWER_SCREENING`；`gas_expander_stage_power_bypass_screening → GAS_EXPANDER_STAGE_POWER_BYPASS_SCREENING` |
 | 管线 | `pipe_required_diameter → A_PIPE_REQUIRED_ID`；`pipe_standard_dn_selection → B_PIPE_STANDARD_DN_SELECTION`；`pipe_actual_velocity → A_PIPE_ACTUAL_VELOCITY` |
 | 压力与机械初算 | `design_pressure_basis_conversion → A_DESIGN_PRESSURE_ABSOLUTE_TO_GAUGE`；`design_pressure → B_DESIGN_PRESSURE_FACTOR`；`cylinder_thickness → B_VESSEL_SHELL_THICKNESS`；`head_thickness → B_VESSEL_ELLIPSOIDAL_HEAD_THICKNESS` |
 | 塔器 | `tower_preliminary_diameter → B_TOWER_PRELIMINARY_DIAMETER_FROM_TRAFFIC`；`tower_tray_spacing → B_TOWER_TRAY_SPACING_SERIES`；`tower_cross_section → A_CIRCULAR_CROSS_SECTION`；`tower_active_area_fraction → B_TOWER_ACTIVE_AREA_CLOSURE`；`tower_active_area → B_TOWER_ACTIVE_AREA`；`tower_hole_area → B_TOWER_HOLE_AREA`；`tower_actual_superficial_velocity → B_TOWER_ACTIVE_AREA_VELOCITY`；`tower_internal_height → B_TOWER_ACTIVE_TRAY_HEIGHT`；`tower_preliminary_height → B_TOWER_PRELIMINARY_HEIGHT`；`tower_bottom_liquid_height → B_TOWER_HOLDUP_HEIGHT` |
 | 容器/储存 | `cylinder_volume → A_CYLINDER_STRAIGHT_VOLUME`；`storage_required_volume → A_STORAGE_REQUIRED_VOLUME_FROM_RESIDENCE` |
-| 膜 | `membrane_area → A_TUBULAR_MEMBRANE_GEOMETRIC_AREA` |
+| 搅拌/静态混合 | `agitator_re_np_power_screening → AGITATOR_RE_NP_POWER_SCREENING`；`static_mixer_hydraulic_train_screening → STATIC_MIXER_HYDRAULIC_TRAIN_SCREENING` |
+| 膜 | `membrane_area → A_TUBULAR_MEMBRANE_GEOMETRIC_AREA`；`membrane_flux_recovery_array_screening → MEMBRANE_FLUX_RECOVERY_ARRAY_SCREENING` |
+| 吸附成套 | `tsa_cycle_bed_capacity_screening → TSA_CYCLE_BED_CAPACITY_SCREENING` |
 | 换热器 | `heater_sensible_duty_screening → B_HEATER_SENSIBLE_DUTY_SCREENING`；`exchanger_area → B_HEX_LMTD_AREA`；`exchanger_tube_count → B_HEX_TUBE_COUNT_FROM_AREA` |
 | 结晶/过滤/干燥 | `crystallizer_working_volume → A_CRYSTALLIZER_WORKING_VOLUME`；`filter_area_from_cake_flux → B_FILTER_AREA_FROM_CAKE_FLUX`；`dryer_water_evaporation → A_DRYER_WATER_BALANCE`；`dryer_specific_duty → B_DRYER_SPECIFIC_DUTY` |
+
+### 9.1 新增五条专用链怎样避免“有型号但没有计算”
+
+| 专用链 | 程序实际分支与硬门 | 仍不能由该公式证明 |
+| --- | --- | --- |
+| 搅拌器 Re—Np—功率 | 按用户锁定、混合任务、黏度和 Re 选择桨族；用显式 Np-Re 保底式及 `P=Np·ρ·N³·D⁵` 计算轴功率；挡板数量与型号后缀保持一致；未知显式桨型或超大筛选负荷硬阻断 | 混合时间、固体悬浮、气体分散、临界转速、轴系强度和厂家桨叶额定值 |
+| 静态混合器 DN—压降—并联 | 从登记 DN/外径目录选径，计算速度、Re、元件长度和压降；流速和压降都必须满足约束；超限时自动增径或并联，用户锁定且仍超限时硬阻断 | 混合均匀度、停留时间分布、堵塞/清洗通过性和厂家压降曲线 |
+| 膜通量—回收率—阵列 | 显式几何优先；卷式、管式、中空纤维、平板不得互相套用面积；按产水目标、通量、裕量向上取整元件、并联列和级数；欠配阵列硬阻断 | 产水质量、截留率、浓差极化、结垢、组件水力学和厂家 projection |
+| TSA 周期—容量—床层 | 只有杂质负荷、动态工作容量或带可识别物理单位的容量基准闭合后才给床层数值；未知成套功能不再默认 TSA；缺失或无效 `capacity_basis` 时床层设计硬阻断 | 穿透时间、传质区、再生热耗、产品露点、吸附剂寿命和厂家保证 |
+| 气体膨胀机级数—功率—旁路 | 尊重用户/Aspen 的密度和质量流量；按绝压比、热力参数和效率初算级数及功率；单级允许压比必须有限且大于 1；两相风险、低温材料边界或不合理压力关系硬阻断，并保留 100% 保护旁路 | 厂家效率图、阻塞裕度、相包络、转子动力学、超速保护和材料 MDMT 正式校核 |
 
 ## 10. 用户在哪里查看
 

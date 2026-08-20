@@ -45,7 +45,253 @@ STANDARD_SOURCE_INVENTORY_PATH = (
     / "selection_learning_graph_20260622"
     / "standard_source_inventory.csv"
 )
-ENGINE_VERSION = "1.9.3"
+GBT20801_SOURCE_PACKAGE_DIR = (
+    PACKAGE_ROOT
+    / "knowledge_graph"
+    / "standards_graph"
+    / "source_layer"
+    / "documents"
+    / "std_gb_t_20801_1_2025"
+)
+GBT20801_SOURCE_STATUS_PATH = GBT20801_SOURCE_PACKAGE_DIR / "status.json"
+GBT20801_SOURCE_TABLES_PATH = GBT20801_SOURCE_PACKAGE_DIR / "tables.csv"
+GBT20801_SOURCE_RAW_PAGES_PATH = (
+    GBT20801_SOURCE_PACKAGE_DIR / "raw_pages.jsonl"
+)
+PIPE_INTERNAL_FALLBACK_POLICY_ID = "PIPE-INTERNAL-FALLBACK-2026-01"
+PIPE_INTERNAL_FALLBACK_POLICY: dict[str, Any] = {
+    "policy_id": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+    "claim_boundary": (
+        "仅在同项目输入、Aspen物性、已验证标准表或厂家数据缺失时用于程序初筛；"
+        "不是GB/T 20801.1-2025条文或材料许用应力表，不得直接用于施工、采购或压力管道报审。"
+    ),
+    "wall_formula": (
+        "t_pressure=P*Do/(2*S*E+P); "
+        "t_required_nominal=(t_pressure+CA+A_erosion+A_thread+A_forming)"
+        "/(1-mill_negative_tolerance)"
+    ),
+    "allowable_stress_formula": (
+        "S_screen=min((2/3)*Sy20*fT,(1/3)*Rm20)"
+    ),
+    "default_mill_negative_tolerance_fraction": 0.125,
+    "default_erosion_allowance_mm": 0.0,
+    "default_thread_groove_allowance_mm": 0.0,
+    "default_forming_allowance_mm": 0.0,
+    "reference_line_length_m": 100.0,
+    "material_screening_properties": {
+        "CS20": {
+            "profile_revision": "PIPE-MAT-CS20-2026-02",
+            "grade": "20",
+            "product_standard": "GB/T 8163-2018",
+            "yield_strength_20c_mpa": 245.0,
+            "tensile_strength_20c_mpa": 410.0,
+            "screening_temperature_range_c": [-50.0, 425.0],
+            "temperature_factor_points": [
+                [-50.0, 1.00],
+                [20.0, 1.00],
+                [100.0, 0.95],
+                [200.0, 0.85],
+                [300.0, 0.72],
+                [400.0, 0.55],
+                [425.0, 0.45],
+            ],
+        },
+        "SS304": {
+            "profile_revision": "PIPE-MAT-SS304-2026-02",
+            "grade": "S30408（06Cr19Ni10）",
+            "product_standard": "GB/T 14976-2025",
+            "yield_strength_20c_mpa": 205.0,
+            "tensile_strength_20c_mpa": 520.0,
+            "screening_temperature_range_c": [-196.0, 400.0],
+            "temperature_factor_points": [
+                [-196.0, 1.00],
+                [20.0, 1.00],
+                [100.0, 0.92],
+                [200.0, 0.78],
+                [300.0, 0.66],
+                [400.0, 0.56],
+            ],
+        },
+        "SS316L": {
+            "profile_revision": "PIPE-MAT-SS316L-2026-02",
+            "grade": "S31603（022Cr17Ni12Mo2）",
+            "product_standard": "GB/T 14976-2025",
+            "yield_strength_20c_mpa": 175.0,
+            "tensile_strength_20c_mpa": 480.0,
+            "screening_temperature_range_c": [-196.0, 400.0],
+            "temperature_factor_points": [
+                [-196.0, 1.00],
+                [20.0, 1.00],
+                [100.0, 0.92],
+                [200.0, 0.78],
+                [300.0, 0.66],
+                [400.0, 0.56],
+            ],
+        },
+        "LT16MNDG": {
+            "profile_revision": "PIPE-MAT-LT16MNDG-2026-02",
+            "grade": "16MnDG",
+            "product_standard": "GB/T 18984-2016",
+            "yield_strength_20c_mpa": 280.0,
+            "tensile_strength_20c_mpa": 440.0,
+            "screening_temperature_range_c": [-70.0, 300.0],
+            "temperature_factor_points": [
+                [-70.0, 1.00],
+                [20.0, 1.00],
+                [100.0, 0.94],
+                [200.0, 0.82],
+                [300.0, 0.68],
+            ],
+        },
+        "AS15CRMO": {
+            "profile_revision": "PIPE-MAT-AS15CRMO-2026-02",
+            "grade": "15CrMo",
+            "product_standard": "GB/T 9948-2025",
+            "yield_strength_20c_mpa": 295.0,
+            "tensile_strength_20c_mpa": 450.0,
+            "screening_temperature_range_c": [20.0, 550.0],
+            "temperature_factor_points": [
+                [20.0, 0.74],
+                [100.0, 0.67],
+                [200.0, 0.60],
+                [300.0, 0.56],
+                [400.0, 0.53],
+                [450.0, 0.50],
+                [500.0, 0.45],
+                [550.0, 0.20],
+            ],
+        },
+        "LINED_CS_PTFE": {
+            "profile_revision": "PIPE-MAT-LINED-CS-PTFE-2026-02",
+            "grade": "20钢基管+PTFE衬里",
+            "product_standard": (
+                "基管GB/T 8163-2018；衬里产品规范待项目确认"
+            ),
+            "yield_strength_20c_mpa": 245.0,
+            "tensile_strength_20c_mpa": 410.0,
+            "screening_temperature_range_c": [-20.0, 180.0],
+            "temperature_factor_points": [
+                [-20.0, 1.00],
+                [20.0, 1.00],
+                [100.0, 0.95],
+                [150.0, 0.88],
+                [180.0, 0.80],
+            ],
+        },
+    },
+}
+PIPE_MATERIAL_STANDARD_ROUTES: dict[str, dict[str, Any]] = {
+    "CS20": {
+        "grade_search_key": "GB/T 8163 + 20",
+        "annex_b_page_hints": [143],
+        "product_standard": "GB/T 8163-2018",
+        "official_registry_url": (
+            "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?"
+            "hcno=D5537747C227CE74971D8E07FAB5BFD9"
+        ),
+        "product_standard_status": "CURRENT_IDENTITY_VERIFIED",
+    },
+    "SS304": {
+        "grade_search_key": "GB/T 14976 + 06Cr19Ni10/S30408",
+        "annex_b_page_hints": [160],
+        "product_standard": "GB/T 14976-2025",
+        "official_registry_url": (
+            "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?"
+            "hcno=064C7CE386EE926B10AECD1E3E9C539A"
+        ),
+        "product_standard_status": "CURRENT_IDENTITY_VERIFIED",
+    },
+    "SS316L": {
+        "grade_search_key": "GB/T 14976 + 022Cr17Ni12Mo2/S31603",
+        "annex_b_page_hints": [160],
+        "product_standard": "GB/T 14976-2025",
+        "official_registry_url": (
+            "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?"
+            "hcno=064C7CE386EE926B10AECD1E3E9C539A"
+        ),
+        "product_standard_status": "CURRENT_IDENTITY_VERIFIED",
+    },
+    "LT16MNDG": {
+        "grade_search_key": "GB/T 18984 + 16MnDG",
+        "annex_b_page_hints": [152],
+        "annex_e_page_hints": [215],
+        "product_standard": "GB/T 18984-2016",
+        "official_registry_url": (
+            "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?"
+            "hcno=B949EA0B2FF00EE20637016E230EE278"
+        ),
+        "product_standard_status": "CURRENT_IDENTITY_VERIFIED",
+    },
+    "AS15CRMO": {
+        "grade_search_key": "GB/T 9948 + 15CrMo",
+        "annex_b_page_hints": [154],
+        "product_standard": "GB/T 9948-2025",
+        "official_registry_url": (
+            "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?"
+            "hcno=9F7352F97E415F5BA9242403A9DB4CED"
+        ),
+        "product_standard_status": "CURRENT_IDENTITY_VERIFIED",
+    },
+    "LINED_CS_PTFE": {
+        "grade_search_key": "GB/T 8163 + 20（仅基管）",
+        "annex_b_page_hints": [143],
+        "product_standard": (
+            "基管GB/T 8163-2018；PTFE衬里产品规范待项目确认"
+        ),
+        "official_registry_url": (
+            "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?"
+            "hcno=D5537747C227CE74971D8E07FAB5BFD9"
+        ),
+        "product_standard_status": (
+            "BASE_PIPE_IDENTITY_VERIFIED_LINING_SPEC_OPEN"
+        ),
+    },
+}
+PIPE_HYDRAULIC_DEFAULT_POLICY_ID = "PIPE-HYDRAULIC-DEFAULTS-2026-01"
+PIPE_HYDRAULIC_DEFAULT_POLICY: dict[str, Any] = {
+    "policy_id": PIPE_HYDRAULIC_DEFAULT_POLICY_ID,
+    "missing_process_state_placeholder": {
+        "selected_dn": 25,
+        "provisional_wall_thickness_mm": 4.0,
+        "design_pressure_mpa_gauge": 0.1,
+        "design_temperature_c": 40.0,
+        "material_route": "CS20",
+        "basis": (
+            "project-configurable minimum complete line-spec placeholder; "
+            "DN25 is an internal conservative identity default, not a "
+            "national-code minimum"
+        ),
+        "promotion_cap": "TYPE_SCREENING",
+    },
+    "phase_defaults": {
+        "liquid": {
+            "density_kg_m3": 1000.0,
+            "dynamic_viscosity_mpa_s": 1.0,
+            "basis": "water_like_liquid_reference_at_approximately_20C",
+        },
+        "vapor": {
+            "density_kg_m3": 1.2,
+            "dynamic_viscosity_mpa_s": 0.018,
+            "basis": "air_like_gas_reference_at_near_ambient_conditions",
+        },
+        "gas": {
+            "density_kg_m3": 1.2,
+            "dynamic_viscosity_mpa_s": 0.018,
+            "basis": "air_like_gas_reference_at_near_ambient_conditions",
+        },
+        "unknown": {
+            "density_kg_m3": 1000.0,
+            "dynamic_viscosity_mpa_s": 1.0,
+            "basis": "unknown_phase_forced_to_water_like_liquid_reference",
+        },
+    },
+    "claim_boundary": (
+        "默认物性只保证程序可形成可审查的水力学初筛结果；液体按近常温水样、"
+        "气体按近常温空气样。它不是Aspen物性、实验物性或厂家数据，任何采用"
+        "默认密度/黏度的结果必须报警并禁止作为正式管径或压降验收。"
+    ),
+}
+ENGINE_VERSION = "1.9.5"
 SINGLE_INLET_OUTLET_BLOCKS = {"PUMP", "COMPR", "MCOMPR", "VALVE", "HEATER", "PIPE"}
 CLEAN_BLOCK_WORDS = {"0", "ok", "pass", "passed", "converged", "success", "successful", "完成", "正常"}
 SIMULATION_LOGIC_BLOCK_TYPES = frozenset({"FSPLIT", "MIXER", "HIERARCHY"})
@@ -6402,7 +6648,90 @@ def apply_pipe_hydraulic_preselection(
         ),
     }
     if flow_m3_h is None or flow_m3_h <= 0.0:
-        base["status"] = "BLOCKED_MISSING_OR_NONPOSITIVE_FLOW"
+        placeholder = dict(
+            PIPE_HYDRAULIC_DEFAULT_POLICY[
+                "missing_process_state_placeholder"
+            ]
+        )
+        selected_dn = int(placeholder["selected_dn"])
+        catalog = matcher.load_pipe_standard_dn_od()
+        selected_row = next(
+            (
+                row
+                for row in catalog
+                if int(row.get("dn") or 0) == selected_dn
+            ),
+            None,
+        )
+        if selected_row is None:
+            base["status"] = "BLOCKED_PLACEHOLDER_DN_NOT_IN_VERIFIED_CATALOG"
+            base["preselection_sha256"] = _canonical_sha256(base)
+            record["pipe_hydraulic_preselection"] = base
+            return base
+        wall = float(placeholder["provisional_wall_thickness_mm"])
+        outer = float(selected_row["outer_diameter_mm"])
+        inner = outer - 2.0 * wall
+        selected_catalog_record = {
+            key: selected_row.get(key)
+            for key in (
+                "dn",
+                "nps",
+                "outer_diameter_mm",
+                "standard_id",
+                "standard_version",
+                "source_pdf_sha256",
+                "physical_page",
+                "source_table_asset_id",
+                "source_row_1based",
+                "qa_status",
+                "reuse_class",
+                "application_boundary",
+            )
+        }
+        selected_catalog_record["catalog_path"] = str(
+            matcher.PIPE_STANDARD_DN_OD_PATH
+        )
+        selected_catalog_record["catalog_sha256"] = sha256_file(
+            matcher.PIPE_STANDARD_DN_OD_PATH
+        )
+        selected_catalog_record["record_binding_sha256"] = (
+            _canonical_sha256(selected_catalog_record)
+        )
+        base.update({
+            "status": (
+                "PROVISIONAL_MINIMUM_COMPLETE_SPEC_PLACEHOLDER_"
+                "MISSING_PROCESS_STATE"
+            ),
+            "selected_dn_candidate": selected_dn,
+            "selected_catalog_outer_diameter_mm": outer,
+            "provisional_wall_thickness_mm": wall,
+            "selected_provisional_inner_diameter_mm": inner,
+            "placeholder_required_inner_diameter_mm": inner,
+            "placeholder_design_pressure_mpa_gauge": float(
+                placeholder["design_pressure_mpa_gauge"]
+            ),
+            "placeholder_design_temperature_c": float(
+                placeholder["design_temperature_c"]
+            ),
+            "selected_catalog_record": selected_catalog_record,
+            "selection_scope": (
+                "CONCRETE_IDENTITY_PLACEHOLDER_ONLY_NO_HYDRAULIC_SIZING"
+            ),
+            "default_policy": placeholder,
+            "formal_hydraulic_acceptance": False,
+            "open_gates": [
+                "positive_process_flow",
+                "phase_and_state_condition",
+                "aspen_or_project_pressure_and_temperature",
+                "project_line_length_and_fittings",
+                "project_pressure_drop_acceptance",
+            ],
+            "warning": (
+                "Aspen 未给出可用正流量/相态/状态；程序仍按已验证 DN 表生成"
+                "具体 DN25 完整规格占位候选。该分支只保证输出可审查，禁止用于"
+                "正式水力、采购或施工。"
+            ),
+        })
         base["preselection_sha256"] = _canonical_sha256(base)
         record["pipe_hydraulic_preselection"] = base
         return base
@@ -7056,16 +7385,365 @@ def _pipe_product_standard_evidence(
     return evidence
 
 
+def _csv_bool(value: Any) -> bool:
+    return str(value or "").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+    }
+
+
+@functools.lru_cache(maxsize=1)
+def _gbt20801_material_source_index() -> dict[str, Any]:
+    """Load the local standard-package QA gate for material-table routing."""
+
+    result: dict[str, Any] = {
+        "schema": "gbt20801-material-source-index-v1",
+        "status": "SOURCE_PACKAGE_MISSING",
+        "source_package_path": str(GBT20801_SOURCE_PACKAGE_DIR),
+        "source_pdf_sha256": None,
+        "package_qa_status": None,
+        "material_tables": [],
+        "thickness_margin_figure": {
+            "figure_id": "std_gb_t_20801_1_2025:p0061:f01",
+            "page_1based": 61,
+            "asset_path": (
+                "knowledge_graph/standards_graph/source_layer/documents/"
+                "std_gb_t_20801_1_2025/figures/p0061_f01.png"
+            ),
+            "asset_present": (
+                GBT20801_SOURCE_PACKAGE_DIR
+                / "figures"
+                / "p0061_f01.png"
+            ).is_file(),
+            "manual_review_required": True,
+            "role": (
+                "支持计算厚度、附加量、负偏差和选用名义厚度分层列账；"
+                "不提供本程序内置壁厚公式的数值授权。"
+            ),
+        },
+    }
+    if not (
+        GBT20801_SOURCE_STATUS_PATH.is_file()
+        and GBT20801_SOURCE_TABLES_PATH.is_file()
+    ):
+        result["index_sha256"] = _canonical_sha256(result)
+        return result
+    try:
+        status = json.loads(
+            GBT20801_SOURCE_STATUS_PATH.read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        result["status"] = "SOURCE_PACKAGE_STATUS_UNREADABLE"
+        result["error"] = f"{type(exc).__name__}:{exc}"
+        result["index_sha256"] = _canonical_sha256(result)
+        return result
+
+    material_tables: list[dict[str, Any]] = []
+    try:
+        with GBT20801_SOURCE_TABLES_PATH.open(
+            "r",
+            encoding="utf-8-sig",
+            newline="",
+        ) as handle:
+            for row in csv.DictReader(handle):
+                caption = str(row.get("caption") or "")
+                compact_caption = re.sub(r"\s+", "", caption)
+                if "表B.1" not in compact_caption:
+                    continue
+                csv_path = str(row.get("csv_path") or "")
+                asset_path = GBT20801_SOURCE_PACKAGE_DIR / csv_path
+                material_tables.append(
+                    {
+                        "table_id": row.get("table_id"),
+                        "page_1based": int(
+                            finite_number(row.get("page_1based")) or 0
+                        ),
+                        "caption": caption,
+                        "structure_confidence": finite_number(
+                            row.get("structure_confidence")
+                        ),
+                        "structure_mode": row.get("structure_mode"),
+                        "asset_qa_status": row.get("asset_qa_status"),
+                        "numeric_reuse_allowed": _csv_bool(
+                            row.get("numeric_reuse_allowed")
+                        ),
+                        "csv_path": csv_path,
+                        "csv_asset_present": asset_path.is_file(),
+                        "source_pdf_sha256": row.get(
+                            "source_pdf_sha256"
+                        ),
+                    }
+                )
+    except OSError as exc:
+        result["status"] = "SOURCE_PACKAGE_TABLE_INDEX_UNREADABLE"
+        result["error"] = f"{type(exc).__name__}:{exc}"
+        result["index_sha256"] = _canonical_sha256(result)
+        return result
+
+    result.update(
+        {
+            "status": "PASS_WITH_REVIEW_SOURCE_INDEX_LOADED",
+            "source_pdf_sha256": status.get("source_pdf_sha256"),
+            "package_qa_status": status.get("status"),
+            "manual_review_pages": status.get("manual_review_pages") or [],
+            "material_tables": material_tables,
+            "material_table_count": len(material_tables),
+            "numeric_reuse_allowed_table_count": sum(
+                1
+                for table in material_tables
+                if table["numeric_reuse_allowed"]
+            ),
+        }
+    )
+    result["index_sha256"] = _canonical_sha256(result)
+    return result
+
+
+def _pipe_material_standard_table_route(
+    material_code: str,
+) -> dict[str, Any]:
+    route = dict(
+        PIPE_MATERIAL_STANDARD_ROUTES.get(
+            material_code,
+            PIPE_MATERIAL_STANDARD_ROUTES["CS20"],
+        )
+    )
+    source_index = _gbt20801_material_source_index()
+    page_hints = {
+        int(page)
+        for page in route.get("annex_b_page_hints") or []
+    }
+    candidates = [
+        dict(table)
+        for table in source_index.get("material_tables") or []
+        if int(table.get("page_1based") or 0) in page_hints
+    ]
+    numeric_reuse_allowed = bool(candidates) and all(
+        table.get("numeric_reuse_allowed") is True
+        and table.get("csv_asset_present") is True
+        for table in candidates
+    )
+    if source_index.get("status") != "PASS_WITH_REVIEW_SOURCE_INDEX_LOADED":
+        route_status = "STANDARD_SOURCE_PACKAGE_UNAVAILABLE"
+    elif not candidates:
+        route_status = "STANDARD_TABLE_CANDIDATE_NOT_LOCATED"
+    elif not numeric_reuse_allowed:
+        route_status = "STANDARD_TABLE_FOUND_NUMERIC_REUSE_BLOCKED"
+    else:
+        route_status = (
+            "STANDARD_TABLE_METADATA_FOUND_EXACT_CELL_BINDING_OPEN"
+        )
+    result = {
+        "schema": "pipe-material-standard-table-route-v1",
+        "status": route_status,
+        "material_code": material_code,
+        **route,
+        "design_standard": "GB/T 20801.1-2025",
+        "annex": "附录B（规范性）材料牌号和许用应力",
+        "source_package_status": source_index.get("package_qa_status"),
+        "source_pdf_sha256": source_index.get("source_pdf_sha256"),
+        "source_index_sha256": source_index.get("index_sha256"),
+        "candidate_tables": candidates,
+        "exact_grade_temperature_cell_bound": False,
+        "numeric_reuse_allowed": numeric_reuse_allowed,
+        "standard_numeric_value_adopted": False,
+        "fallback_reason": (
+            "已找到附录B候选页，但表格元数据禁止数值复用或表格资产未随包提供；"
+            "精确牌号×厚度×温度单元格尚未绑定，因此转入有版本号的内置筛查曲线。"
+            if route_status
+            == "STANDARD_TABLE_FOUND_NUMERIC_REUSE_BLOCKED"
+            else (
+                "标准表精确牌号×厚度×温度单元格尚未绑定，"
+                "因此转入有版本号的内置筛查曲线。"
+            )
+        ),
+        "thickness_margin_figure": source_index.get(
+            "thickness_margin_figure"
+        ),
+        "claim_boundary": (
+            "找到表或页不等于数字可用；只有精确材料牌号、产品形态、厚度分档、"
+            "设计温度列和表格QA全部闭合后，才允许把标准数值提升为计算输入。"
+        ),
+    }
+    result["route_sha256"] = _canonical_sha256(result)
+    return result
+
+
+def _pipe_hydraulic_property_inputs(
+    *,
+    record: dict[str, Any],
+) -> dict[str, Any]:
+    canonical_phase = matcher.canonical_phase(record.get("phase"))
+    default_phase = (
+        canonical_phase
+        if canonical_phase in {"liquid", "vapor"}
+        else "unknown"
+    )
+    defaults = PIPE_HYDRAULIC_DEFAULT_POLICY["phase_defaults"][
+        default_phase
+    ]
+    source_kind = str(
+        record.get("_pipe_input_source_kind") or "ASPEN_EXPORT"
+    ).strip().upper()
+    direct_origin = (
+        "ASPEN_EXTRACTED_OR_EXPORT_INPUT"
+        if source_kind == "ASPEN_EXPORT"
+        else "USER_OR_PROJECT_INPUT"
+    )
+
+    density = finite_number(record.get("density_kg_m3"))
+    if density is not None and density > 0.0:
+        density_origin = direct_origin
+    else:
+        density = float(defaults["density_kg_m3"])
+        density_origin = "DEFAULT_HYDRAULIC_PARAMETER_PACKAGE_WARNING"
+
+    viscosity = finite_number(record.get("dynamic_viscosity_mpa_s"))
+    viscosity_diagnostic = (
+        dict(record.get("viscosity_fallback_diagnostic") or {})
+        if isinstance(record.get("viscosity_fallback_diagnostic"), dict)
+        else {}
+    )
+    if viscosity is not None and viscosity > 0.0:
+        viscosity_origin = (
+            "INTERNAL_VISCOSITY_CORRELATION_WARNING"
+            if viscosity_diagnostic.get("internal_correlation_used") is True
+            else direct_origin
+        )
+    else:
+        viscosity = float(defaults["dynamic_viscosity_mpa_s"])
+        viscosity_origin = (
+            "DEFAULT_HYDRAULIC_PARAMETER_PACKAGE_WARNING"
+        )
+
+    warning_fields = [
+        field_id
+        for field_id, origin in (
+            ("density_kg_m3", density_origin),
+            ("dynamic_viscosity_mpa_s", viscosity_origin),
+        )
+        if "WARNING" in origin
+    ]
+    default_fields = [
+        field_id
+        for field_id, origin in (
+            ("density_kg_m3", density_origin),
+            ("dynamic_viscosity_mpa_s", viscosity_origin),
+        )
+        if origin == "DEFAULT_HYDRAULIC_PARAMETER_PACKAGE_WARNING"
+    ]
+    result = {
+        "schema": "pipe-hydraulic-property-input-ledger-v1",
+        "policy_id": PIPE_HYDRAULIC_DEFAULT_POLICY_ID,
+        "status": (
+            "DEFAULT_HYDRAULIC_PARAMETERS_USED_WARNING"
+            if default_fields
+            else (
+                "INTERNAL_VISCOSITY_CORRELATION_USED_WARNING"
+                if warning_fields
+                else "DIRECT_OR_ASPEN_HYDRAULIC_PROPERTIES_USED"
+            )
+        ),
+        "canonical_phase": canonical_phase or "unknown",
+        "default_phase_branch": default_phase,
+        "density_kg_m3": density,
+        "density_origin": density_origin,
+        "dynamic_viscosity_mpa_s": viscosity,
+        "dynamic_viscosity_origin": viscosity_origin,
+        "default_package_basis": defaults["basis"],
+        "fallback_fields": warning_fields,
+        "default_fields": default_fields,
+        "formal_design_evidence": not warning_fields,
+        "warning": PIPE_HYDRAULIC_DEFAULT_POLICY["claim_boundary"],
+    }
+    result["ledger_sha256"] = _canonical_sha256(result)
+    return result
+
+
 def _programmatic_pipe_material(
     medium_name: str,
     preliminary_material: str,
     design_temperature_c: float,
 ) -> dict[str, Any]:
     text = f"{medium_name} {preliminary_material}".casefold()
+    preliminary_material_key = re.sub(
+        r"[\s_\-—（）()\[\]/]+",
+        "",
+        preliminary_material.casefold(),
+    )
     if any(
         marker in text
         for marker in (
-            "耐蚀", "316", "chloride", "hcl", "盐酸", "氯化", "氯离子",
+            "hcl", "盐酸", "氯化氢", "hydrofluoric", "氢氟酸",
+            "强腐蚀酸", "浓硫酸", "次氯酸", "sodium hypochlorite",
+        )
+    ):
+        return {
+            "code": "LINED_CS_PTFE",
+            "material": (
+                "20钢基管+PTFE衬里耐蚀工艺管道"
+                "（程序保底候选；衬里牌号、厚度、渗透和真空适用性待相容性确认）"
+            ),
+            "material_grade": "20钢基管/PTFE衬里",
+            "product_standard": (
+                "基管GB/T 8163-2018身份候选；衬里产品规范待项目确认"
+            ),
+            "product_standard_identity_candidate": True,
+            "product_standard_scope_established": False,
+            "product_standard_evidence": (
+                _pipe_product_standard_evidence("GB/T 8163-2018")
+            ),
+            "corrosion_allowance_mm": 1.5,
+            "roughness_mm": 0.01,
+            "wall_table_preference": "table1",
+            "selection_basis": (
+                "high_corrosion_marker_internal_lined_pipe_fallback"
+            ),
+            "compatibility_warning": (
+                "强酸/卤化介质不允许由“316L通用耐蚀”规则直接闭合；"
+                "程序改选20钢基管+PTFE衬里候选，但必须用组成、浓度、温度、"
+                "渗透性和真空工况完成材料相容性复核。"
+            ),
+        }
+    if (
+        "s30408" in preliminary_material_key
+        or "06cr19ni10" in preliminary_material_key
+        or preliminary_material_key in {"304", "ss304", "sus304"}
+        or "304不锈钢" in preliminary_material_key
+        or "304stainless" in preliminary_material_key
+    ):
+        return {
+            "code": "SS304",
+            "material": (
+                "S30408（06Cr19Ni10）不锈钢无缝钢管"
+                "（GB/T 14976-2025 产品标准身份候选，程序初选）"
+            ),
+            "material_grade": "S30408（06Cr19Ni10）",
+            "product_standard": "GB/T 14976-2025",
+            "product_standard_identity_candidate": True,
+            "product_standard_scope_established": False,
+            "product_standard_evidence": (
+                _pipe_product_standard_evidence("GB/T 14976-2025")
+            ),
+            "corrosion_allowance_mm": 0.0,
+            "roughness_mm": 0.015,
+            "wall_table_preference": "table3",
+            "selection_basis": (
+                "explicit_s30408_or_304_preliminary_material_input"
+            ),
+            "compatibility_warning": (
+                "程序已把用户给出的S30408/06Cr19Ni10映射为304不锈钢路线，"
+                "但这不等于材料相容性或正式管道等级确认；仍须复核介质组成、"
+                "氯离子、温度、点蚀、缝隙腐蚀和应力腐蚀开裂风险，并确认"
+                "GB/T 14976-2025对具体产品、交货状态、尺寸及温度范围的适用性。"
+            ),
+        }
+    if any(
+        marker in text
+        for marker in (
+            "耐蚀", "316", "chloride", "氯化", "氯离子",
             "强酸", "强碱", "洁净", "卫生", "pharma", "sanitary",
         )
     ):
@@ -7086,38 +7764,55 @@ def _programmatic_pipe_material(
             "roughness_mm": 0.015,
             "wall_table_preference": "table3",
             "selection_basis": "corrosive_or_clean_service_marker",
+            "compatibility_warning": (
+                "S31603仅为程序材料路线候选；含氯介质仍须核查氯离子浓度、"
+                "温度、缝隙腐蚀、点蚀及应力腐蚀开裂风险。"
+            ),
         }
     if design_temperature_c <= -20.0 or "低温" in text:
         return {
-            "code": "LT09MND",
-            "material": "09MnD低温钢无缝钢管（程序初选；产品标准与冲击要求待复核）",
-            "material_grade": "09MnD",
-            "product_standard": "产品标准待项目材料规范确认",
-            "product_standard_identity_candidate": False,
+            "code": "LT16MNDG",
+            "material": (
+                "16MnDG低温管道用无缝钢管"
+                "（GB/T 18984-2016产品路线，程序初选）"
+            ),
+            "material_grade": "16MnDG",
+            "product_standard": "GB/T 18984-2016",
+            "product_standard_identity_candidate": True,
             "product_standard_scope_established": False,
             "product_standard_evidence": (
-                _pipe_product_standard_evidence("")
+                _pipe_product_standard_evidence("GB/T 18984-2016")
             ),
             "corrosion_allowance_mm": 1.5,
             "roughness_mm": 0.045,
             "wall_table_preference": "table1",
             "selection_basis": "low_temperature_route",
+            "compatibility_warning": (
+                "16MnDG是明确的低温无缝管产品路线候选；最低设计金属温度、"
+                "厚度分档、冲击试验温度与吸收能、焊材及焊后热处理仍须正式确认。"
+            ),
         }
     if design_temperature_c >= 400.0 or "耐热" in text:
         return {
             "code": "AS15CRMO",
-            "material": "15CrMo合金钢无缝钢管（程序初选；产品标准与高温许用应力待复核）",
+            "material": (
+                "15CrMo合金钢无缝钢管"
+                "（GB/T 9948-2025产品路线，程序初选）"
+            ),
             "material_grade": "15CrMo",
-            "product_standard": "产品标准待项目材料规范确认",
-            "product_standard_identity_candidate": False,
+            "product_standard": "GB/T 9948-2025",
+            "product_standard_identity_candidate": True,
             "product_standard_scope_established": False,
             "product_standard_evidence": (
-                _pipe_product_standard_evidence("")
+                _pipe_product_standard_evidence("GB/T 9948-2025")
             ),
             "corrosion_allowance_mm": 1.5,
             "roughness_mm": 0.045,
             "wall_table_preference": "table1",
             "selection_basis": "high_temperature_route",
+            "compatibility_warning": (
+                "高温材料路线须复核蠕变、长期许用应力、热处理和焊接工艺。"
+            ),
         }
     return {
         "code": "CS20",
@@ -7136,6 +7831,10 @@ def _programmatic_pipe_material(
         "roughness_mm": 0.045,
         "wall_table_preference": "table1",
         "selection_basis": "registered_carbon_steel_economic_baseline",
+        "compatibility_warning": (
+            "20钢为普通非强腐蚀介质的程序经济基线；腐蚀速率、含水酸气、"
+            "氯离子、氧含量和冲蚀条件未闭合时不得视为正式材料确认。"
+        ),
     }
 
 
@@ -7149,12 +7848,25 @@ def _pipe_manufacturing_route(
         product_standard_scope_established = bool(
             material.get("product_standard_scope_established")
         )
+        lined_route = material.get("code") == "LINED_CS_PTFE"
         return {
             **material,
             "large_bore_welded_route": False,
-            "equipment_type": "无缝钢制工艺管道",
-            "manufacturing_method": "无缝钢管",
-            "route_code": "SEAMLESS",
+            "equipment_type": (
+                "钢衬PTFE耐蚀工艺管道"
+                if lined_route
+                else "无缝钢制工艺管道"
+            ),
+            "manufacturing_method": (
+                "无缝钢基管+PTFE衬里"
+                if lined_route
+                else "无缝钢管"
+            ),
+            "route_code": (
+                "SEAMLESS_CS_PTFE_LINED"
+                if lined_route
+                else "SEAMLESS"
+            ),
             "material_route_label": material["material_grade"],
             "screening_weld_factor": 1.0,
             "product_standard_scope_established": (
@@ -7250,8 +7962,17 @@ def _select_verified_pipe_wall(
 def _select_verified_pn(
     store: dict[str, Any],
     design_pressure_mpa_gauge: float,
+    *,
+    internal_temperature_derating_factor: float = 1.0,
 ) -> dict[str, Any]:
-    required_pn = max(16.0, design_pressure_mpa_gauge * 10.0)
+    derating_factor = max(
+        0.05,
+        min(1.0, float(internal_temperature_derating_factor)),
+    )
+    required_pn = max(
+        16.0,
+        design_pressure_mpa_gauge * 10.0 / derating_factor,
+    )
     candidates = [
         record
         for record in store["pn_records"]
@@ -7265,8 +7986,916 @@ def _select_verified_pn(
         "selector_required_pn_number": required_pn,
         "engineering_policy_floor_pn": 16.0,
         "pressure_to_pn_screening_factor": 10.0,
-        "selection_provenance": "SELECTOR_RULE/PN_SERIES_MAPPING_ONLY",
+        "internal_temperature_derating_factor": derating_factor,
+        "selection_provenance": (
+            "VERIFIED_GBT1048_PN_SERIES/"
+            "INTERNAL_FORMULA_FALLBACK_TEMPERATURE_SCREEN"
+        ),
     }
+
+
+def _interpolate_pipe_temperature_factor(
+    points: list[list[float]],
+    temperature_c: float,
+) -> float:
+    ordered = sorted(
+        (float(point[0]), float(point[1]))
+        for point in points
+        if isinstance(point, list) and len(point) == 2
+    )
+    if not ordered:
+        return 0.5
+    if temperature_c <= ordered[0][0]:
+        return ordered[0][1]
+    if temperature_c >= ordered[-1][0]:
+        return ordered[-1][1]
+    for (left_t, left_f), (right_t, right_f) in zip(
+        ordered,
+        ordered[1:],
+    ):
+        if left_t <= temperature_c <= right_t:
+            fraction = (
+                (temperature_c - left_t) / (right_t - left_t)
+                if right_t > left_t
+                else 0.0
+            )
+            return left_f + fraction * (right_f - left_f)
+    return ordered[-1][1]
+
+
+def _pipe_wall_fallback_calculation(
+    *,
+    record: dict[str, Any],
+    material: dict[str, Any],
+    design_pressure_mpa_gauge: float,
+    design_temperature_c: float,
+    outer_diameter_mm: float,
+    corrosion_allowance_mm: float,
+    corrosion_allowance_origin: str,
+) -> dict[str, Any]:
+    """Calculate a transparent nominal-wall screening requirement.
+
+    Direct project inputs win.  Missing code-table inputs fall back to the
+    registered internal screening policy and remain loudly non-formal.
+    """
+
+    material_code = str(material.get("code") or "CS20")
+    properties = PIPE_INTERNAL_FALLBACK_POLICY[
+        "material_screening_properties"
+    ].get(
+        material_code,
+        PIPE_INTERNAL_FALLBACK_POLICY[
+            "material_screening_properties"
+        ]["CS20"],
+    )
+    yield_strength = float(properties["yield_strength_20c_mpa"])
+    tensile_strength = float(properties["tensile_strength_20c_mpa"])
+    screening_temperature_range = [
+        float(value)
+        for value in properties.get(
+            "screening_temperature_range_c",
+            [
+                properties["temperature_factor_points"][0][0],
+                properties["temperature_factor_points"][-1][0],
+            ],
+        )
+    ]
+    temperature_profile_outside_range = not (
+        screening_temperature_range[0]
+        <= design_temperature_c
+        <= screening_temperature_range[1]
+    )
+    temperature_factor = _interpolate_pipe_temperature_factor(
+        list(properties["temperature_factor_points"]),
+        design_temperature_c,
+    )
+    supplied_allowable = finite_number(record.get("allowable_stress_mpa"))
+    if supplied_allowable is not None and supplied_allowable > 0.0:
+        allowable_stress_mpa = supplied_allowable
+        allowable_stress_origin = "PROJECT_OR_USER_PROVIDED"
+    else:
+        allowable_stress_mpa = min(
+            (2.0 / 3.0) * yield_strength * temperature_factor,
+            (1.0 / 3.0) * tensile_strength,
+        )
+        allowable_stress_origin = "INTERNAL_FORMULA_FALLBACK_WARNING"
+
+    supplied_weld_factor = finite_number(
+        record.get("weld_efficiency", record.get("weld_factor"))
+    )
+    if (
+        supplied_weld_factor is not None
+        and 0.0 < supplied_weld_factor <= 1.0
+    ):
+        weld_factor = supplied_weld_factor
+        weld_factor_origin = "PROJECT_OR_USER_PROVIDED"
+    else:
+        weld_factor = float(material["screening_weld_factor"])
+        weld_factor_origin = "INTERNAL_ROUTE_FALLBACK_WARNING"
+
+    supplied_tolerance = finite_number(
+        record.get(
+            "mill_negative_tolerance_fraction",
+            record.get("wall_negative_tolerance_fraction"),
+        )
+    )
+    if (
+        supplied_tolerance is not None
+        and 0.0 <= supplied_tolerance < 0.5
+    ):
+        mill_tolerance = supplied_tolerance
+        mill_tolerance_origin = "PROJECT_OR_USER_PROVIDED"
+    else:
+        mill_tolerance = float(
+            PIPE_INTERNAL_FALLBACK_POLICY[
+                "default_mill_negative_tolerance_fraction"
+            ]
+        )
+        mill_tolerance_origin = "INTERNAL_FORMULA_FALLBACK_WARNING"
+
+    additions: dict[str, tuple[float, str]] = {}
+    for field_id, policy_key in (
+        ("erosion_allowance_mm", "default_erosion_allowance_mm"),
+        (
+            "thread_groove_allowance_mm",
+            "default_thread_groove_allowance_mm",
+        ),
+        ("forming_allowance_mm", "default_forming_allowance_mm"),
+    ):
+        supplied = finite_number(record.get(field_id))
+        if supplied is not None and supplied >= 0.0:
+            additions[field_id] = (supplied, "PROJECT_OR_USER_PROVIDED")
+        else:
+            additions[field_id] = (
+                float(PIPE_INTERNAL_FALLBACK_POLICY[policy_key]),
+                "INTERNAL_FORMULA_FALLBACK_WARNING",
+            )
+
+    pressure_wall = (
+        design_pressure_mpa_gauge
+        * outer_diameter_mm
+        / (
+            2.0 * allowable_stress_mpa * weld_factor
+            + design_pressure_mpa_gauge
+        )
+    )
+    total_addition = (
+        corrosion_allowance_mm
+        + sum(value for value, _origin in additions.values())
+    )
+    required_nominal_wall = (
+        (pressure_wall + total_addition) / (1.0 - mill_tolerance)
+    )
+    fallback_inputs = sorted(
+        field_id
+        for field_id, origin in {
+            "allowable_stress_mpa": allowable_stress_origin,
+            "weld_factor": weld_factor_origin,
+            "mill_negative_tolerance_fraction": mill_tolerance_origin,
+            **{
+                field_id: origin
+                for field_id, (_value, origin) in additions.items()
+            },
+        }.items()
+        if "FALLBACK" in origin
+    )
+    if temperature_profile_outside_range:
+        fallback_inputs.append(
+            "design_temperature_outside_internal_profile_range"
+        )
+        fallback_inputs.sort()
+    result = {
+        "policy_id": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+        "formula": PIPE_INTERNAL_FALLBACK_POLICY["wall_formula"],
+        "allowable_stress_formula": (
+            PIPE_INTERNAL_FALLBACK_POLICY["allowable_stress_formula"]
+        ),
+        "design_pressure_mpa_gauge": design_pressure_mpa_gauge,
+        "design_temperature_c": design_temperature_c,
+        "formula_outer_diameter_mm": outer_diameter_mm,
+        "material_code": material_code,
+        "material_profile_revision": properties.get("profile_revision"),
+        "material_profile_grade": properties.get("grade"),
+        "material_profile_product_standard": properties.get(
+            "product_standard"
+        ),
+        "yield_strength_20c_mpa": yield_strength,
+        "tensile_strength_20c_mpa": tensile_strength,
+        "strength_values_origin": (
+            "VERSIONED_INTERNAL_SCREENING_PROFILE_NOT_STANDARD_TABLE"
+        ),
+        "temperature_factor_points": properties[
+            "temperature_factor_points"
+        ],
+        "screening_temperature_range_c": screening_temperature_range,
+        "temperature_profile_outside_range": (
+            temperature_profile_outside_range
+        ),
+        "temperature_factor_interpolation_status": (
+            "CLAMPED_OUTSIDE_PROFILE_RANGE_WARNING"
+            if temperature_profile_outside_range
+            else "LINEAR_INTERPOLATION_WITHIN_INTERNAL_PROFILE"
+        ),
+        "temperature_derating_factor": temperature_factor,
+        "allowable_stress_mpa": allowable_stress_mpa,
+        "allowable_stress_origin": allowable_stress_origin,
+        "weld_factor": weld_factor,
+        "weld_factor_origin": weld_factor_origin,
+        "mill_negative_tolerance_fraction": mill_tolerance,
+        "mill_negative_tolerance_origin": mill_tolerance_origin,
+        "pressure_wall_mm_before_allowances": pressure_wall,
+        "corrosion_allowance_mm": corrosion_allowance_mm,
+        "corrosion_allowance_origin": corrosion_allowance_origin,
+        **{
+            field_id: value
+            for field_id, (value, _origin) in additions.items()
+        },
+        "addition_origins": {
+            field_id: origin
+            for field_id, (_value, origin) in additions.items()
+        },
+        "total_addition_mm": total_addition,
+        "required_nominal_wall_mm": required_nominal_wall,
+        "fallback_inputs": fallback_inputs,
+        "status": (
+            "INTERNAL_FORMULA_FALLBACK_WARNING"
+            if fallback_inputs
+            else "CALCULATED_FROM_PROJECT_PROVIDED_CODE_INPUTS"
+        ),
+        "formal_design_evidence": False,
+        "warning": PIPE_INTERNAL_FALLBACK_POLICY["claim_boundary"],
+    }
+    result["calculation_sha256"] = _canonical_sha256(result)
+    return result
+
+
+def _pipe_total_line_hydraulic_fallback(
+    *,
+    record: dict[str, Any],
+    hydraulic: dict[str, Any],
+) -> dict[str, Any]:
+    """Return total-line or explicit 100 m reference pressure-drop screening."""
+
+    line_length = finite_number(
+        record.get(
+            "line_length_m",
+            record.get("straight_length_m", record.get("pipe_length_m")),
+        )
+    )
+    if line_length is not None and line_length > 0.0:
+        calculation_length = line_length
+        length_origin = "PROJECT_OR_USER_PROVIDED"
+        status = "CALCULATED_PRELIMINARY_TOTAL_LINE_PRESSURE_DROP"
+    else:
+        calculation_length = float(
+            PIPE_INTERNAL_FALLBACK_POLICY["reference_line_length_m"]
+        )
+        length_origin = "INTERNAL_100M_REFERENCE_FALLBACK_WARNING"
+        status = "REFERENCE_100M_FALLBACK_NOT_ACTUAL_TOTAL_LINE"
+    equivalent_length = finite_number(record.get("equivalent_length_m"))
+    fittings_k = finite_number(
+        record.get(
+            "fittings_total_k",
+            record.get("local_resistance_coefficient_sum"),
+        )
+    )
+    elevation_change = finite_number(
+        record.get("elevation_change_m")
+    )
+    equivalent_length = (
+        equivalent_length
+        if equivalent_length is not None and equivalent_length >= 0.0
+        else 0.0
+    )
+    fittings_k = (
+        fittings_k
+        if fittings_k is not None and fittings_k >= 0.0
+        else 0.0
+    )
+    elevation_change = elevation_change if elevation_change is not None else 0.0
+    gradient = finite_number(
+        hydraulic.get("pressure_gradient_kpa_per_100m")
+    )
+    density = finite_number(hydraulic.get("density_kg_m3"))
+    velocity = finite_number(hydraulic.get("actual_velocity_m_s"))
+    distributed_drop = (
+        gradient * (calculation_length + equivalent_length) / 100.0
+        if gradient is not None
+        else None
+    )
+    local_drop = (
+        fittings_k * density * velocity**2 / 2.0 / 1000.0
+        if density is not None and velocity is not None
+        else None
+    )
+    static_drop = (
+        density * 9.80665 * elevation_change / 1000.0
+        if density is not None
+        else None
+    )
+    terms = (distributed_drop, local_drop, static_drop)
+    total_drop = (
+        sum(float(value) for value in terms)
+        if all(value is not None for value in terms)
+        else None
+    )
+    missing_physical_inputs = [
+        field_id
+        for field_id, provided in (
+            ("line_length_m", line_length is not None and line_length > 0.0),
+            (
+                "equivalent_length_m_or_fittings_total_k",
+                "equivalent_length_m" in record
+                or "fittings_total_k" in record
+                or "local_resistance_coefficient_sum" in record,
+            ),
+            ("elevation_change_m", "elevation_change_m" in record),
+        )
+        if not provided
+    ]
+    result = {
+        "policy_id": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+        "status": status,
+        "formula": (
+            "dP_total=dP_gradient*(L+Leq)/100"
+            "+sumK*rho*v^2/2/1000+rho*g*dZ/1000"
+        ),
+        "calculation_length_m": calculation_length,
+        "line_length_origin": length_origin,
+        "equivalent_length_m": equivalent_length,
+        "fittings_total_k": fittings_k,
+        "elevation_change_m": elevation_change,
+        "distributed_pressure_drop_kpa": distributed_drop,
+        "local_pressure_drop_kpa": local_drop,
+        "static_pressure_change_kpa": static_drop,
+        "total_pressure_drop_kpa": total_drop,
+        "missing_physical_inputs": missing_physical_inputs,
+        "formal_design_evidence": False,
+        "warning": (
+            "未提供实际管长时，100 m仅是可比参考段，不能冒充全线压降；"
+            "未提供管件K值/当量长度或标高差时相应项按0保底并明确列为缺口。"
+        ),
+    }
+    result["calculation_sha256"] = _canonical_sha256(result)
+    return result
+
+
+def _pipe_component_class_candidate(
+    *,
+    material: dict[str, Any],
+    selected_dn: int,
+    pn_text: str,
+    outer_diameter_mm: float,
+    wall_thickness_mm: float,
+    corrosion_allowance_mm: float,
+) -> dict[str, Any]:
+    material_code = str(material.get("code") or "CS20")
+    material_defaults = {
+        "CS20": {
+            "fitting": "20钢对焊管件",
+            "flange": "锻钢带颈对焊RF法兰",
+            "gasket": "304/柔性石墨缠绕垫（带内外环）",
+            "fastener": "35CrMoA全螺纹螺柱+30CrMo螺母",
+            "valve_body": "WCB铸钢阀体",
+        },
+        "SS304": {
+            "fitting": "S30408（06Cr19Ni10）不锈钢对焊管件",
+            "flange": "06Cr19Ni10不锈钢锻制带颈对焊RF法兰",
+            "gasket": "304/柔性石墨缠绕垫（304内外环）",
+            "fastener": "A2-70不锈钢螺柱螺母组",
+            "valve_body": "CF8不锈钢阀体",
+        },
+        "SS316L": {
+            "fitting": "S31603不锈钢对焊管件",
+            "flange": "S31603锻制带颈对焊RF法兰",
+            "gasket": "316L/柔性石墨缠绕垫（316L内外环）",
+            "fastener": "A4-80不锈钢螺柱螺母组",
+            "valve_body": "CF3M不锈钢阀体",
+        },
+        "LT16MNDG": {
+            "fitting": "LF415K2低温钢对焊管件（冲击等级同主管）",
+            "flange": "LF415K2低温锻钢带颈对焊RF法兰",
+            "gasket": "304/低温柔性石墨缠绕垫（带内外环）",
+            "fastener": "35CrMoA螺柱+30CrMo螺母（低温冲击验收待确认）",
+            "valve_body": "LCB低温铸钢阀体",
+        },
+        "AS15CRMO": {
+            "fitting": "15CrMo合金钢对焊管件",
+            "flange": "15CrMo锻制带颈对焊RF法兰",
+            "gasket": "304/柔性石墨缠绕垫（带内外环）",
+            "fastener": "25Cr2MoVA螺柱+35CrMo螺母",
+            "valve_body": "WC6合金钢阀体",
+        },
+        "LINED_CS_PTFE": {
+            "fitting": "20钢基体PTFE衬里弯头/三通/异径管",
+            "flange": "钢制整体松套衬里法兰（密封面PTFE覆盖）",
+            "gasket": "膨体PTFE垫片",
+            "fastener": "35CrMoA全螺纹螺柱+30CrMo螺母",
+            "valve_body": "钢衬PTFE全通径阀体",
+        },
+    }
+    defaults = material_defaults.get(
+        material_code,
+        material_defaults["CS20"],
+    )
+    result = {
+        "schema": "programmatic-piping-class-candidate-v1",
+        "policy_id": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+        "status": "PROGRAM_SELECTED_INTERNAL_FALLBACK_CLASS_CANDIDATE",
+        "formal_project_piping_class": False,
+        "dn": selected_dn,
+        "pressure_series": pn_text,
+        "corrosion_allowance_mm": corrosion_allowance_mm,
+        "components": {
+            "pipe": (
+                f"{material['material_grade']}，OD"
+                f"{outer_diameter_mm:g}×{wall_thickness_mm:g} mm，"
+                f"DN{selected_dn}，对焊"
+            ),
+            "elbow": f"{defaults['fitting']}，90°长半径，DN{selected_dn}",
+            "tee": f"{defaults['fitting']}，等径三通，DN{selected_dn}",
+            "reducer": (
+                f"{defaults['fitting']}，偏心异径管优先用于泵吸入口，"
+                "其余位置按布置选择同心/偏心"
+            ),
+            "flange": f"{defaults['flange']}，DN{selected_dn}，{pn_text}",
+            "gasket": f"{defaults['gasket']}，DN{selected_dn}，{pn_text}",
+            "fastener": defaults["fastener"],
+            "manual_isolation_valve": (
+                f"{defaults['valve_body']}闸阀，DN{selected_dn}，{pn_text}"
+            ),
+            "check_valve": (
+                f"{defaults['valve_body']}止回阀，DN{selected_dn}，{pn_text}"
+            ),
+        },
+        "branch_explanation": (
+            f"材料分支={material_code}；连接分支=BW/RF；"
+            f"压力系列={pn_text}；主管DN={selected_dn}。"
+        ),
+        "warning": (
+            "这些是程序为保证一览表不留空而生成的具体内部等级候选；"
+            "支管表、异径组合、元件壁厚、法兰温压额定值、垫片兼容性和"
+            "阀门功能仍须由项目管道等级表或厂家数据替换/确认。"
+        ),
+    }
+    result["candidate_sha256"] = _canonical_sha256(result)
+    return result
+
+
+def _pipe_material_parameter_ledger(
+    *,
+    record: dict[str, Any],
+    material: dict[str, Any],
+    design_temperature_c: float,
+    wall_calculation: dict[str, Any],
+    corrosion_allowance_origin: str,
+    hydraulic_roughness_mm: float,
+    hydraulic_roughness_origin: str,
+    hydraulic_property_inputs: dict[str, Any],
+    piping_class_candidate: dict[str, Any],
+    standard_table_route: dict[str, Any],
+) -> dict[str, Any]:
+    """Expose every material-controlled value and the rule that supplied it."""
+
+    service_inputs = {
+        "medium_name": (
+            record.get("medium_name") or record.get("main_medium")
+        ),
+        "composition": record.get("composition"),
+        "corrosivity": record.get("corrosivity"),
+        "cleanliness": record.get("cleanliness"),
+        "chloride_concentration": (
+            record.get("chloride_concentration")
+            or record.get("chloride_ppm")
+        ),
+        "ph": record.get("ph"),
+        "design_life_years": record.get("design_life_years"),
+        "corrosion_rate_mm_per_year": record.get(
+            "corrosion_rate_mm_per_year"
+        ),
+    }
+    result = {
+        "schema": "pipe-material-parameter-ledger-v1",
+        "status": (
+            "PROGRAM_MATERIAL_CHAIN_SELECTED_WITH_STANDARD_NUMERIC_GATE"
+        ),
+        "selection_priority": [
+            {
+                "priority": 1,
+                "source": "USER_OR_PROJECT_VERIFIED_INPUT",
+                "rule": (
+                    "用户/项目给出的牌号、产品标准、许用应力、负偏差、"
+                    "焊接系数、腐蚀裕量和粗糙度经校验后优先。"
+                ),
+            },
+            {
+                "priority": 2,
+                "source": "QA_PROMOTED_EXACT_STANDARD_CELL",
+                "rule": (
+                    "必须绑定材料牌号+产品形态+厚度分档+设计温度的精确表格"
+                    "单元格，且numeric_reuse_allowed=true。"
+                ),
+            },
+            {
+                "priority": 3,
+                "source": "VERSIONED_INTERNAL_SCREENING_PROFILE",
+                "rule": (
+                    "前两级缺失时采用有版本号的内置参数；值、公式和警告"
+                    "全部输出，只能用于程序初筛。"
+                ),
+            },
+        ],
+        "selected_material": {
+            "material_code": material.get("code"),
+            "material_description": material.get("material"),
+            "material_grade": material.get("material_grade"),
+            "product_standard": material.get("product_standard"),
+            "manufacturing_route_code": material.get("route_code"),
+            "manufacturing_method": material.get(
+                "manufacturing_method"
+            ),
+            "selection_basis": material.get("selection_basis"),
+            "compatibility_warning": material.get(
+                "compatibility_warning"
+            ),
+        },
+        "service_inputs_used_for_material_selection": service_inputs,
+        "standard_table_route": standard_table_route,
+        "strength_and_temperature_values": {
+            "design_temperature_c": design_temperature_c,
+            "yield_strength_20c_mpa": wall_calculation[
+                "yield_strength_20c_mpa"
+            ],
+            "tensile_strength_20c_mpa": wall_calculation[
+                "tensile_strength_20c_mpa"
+            ],
+            "strength_values_origin": wall_calculation[
+                "strength_values_origin"
+            ],
+            "temperature_factor_points": wall_calculation[
+                "temperature_factor_points"
+            ],
+            "screening_temperature_range_c": wall_calculation[
+                "screening_temperature_range_c"
+            ],
+            "temperature_profile_outside_range": wall_calculation[
+                "temperature_profile_outside_range"
+            ],
+            "temperature_derating_factor": wall_calculation[
+                "temperature_derating_factor"
+            ],
+            "allowable_stress_formula": wall_calculation[
+                "allowable_stress_formula"
+            ],
+            "allowable_stress_mpa": wall_calculation[
+                "allowable_stress_mpa"
+            ],
+            "allowable_stress_origin": wall_calculation[
+                "allowable_stress_origin"
+            ],
+            "material_profile_revision": wall_calculation[
+                "material_profile_revision"
+            ],
+        },
+        "wall_and_manufacturing_values": {
+            "weld_factor": wall_calculation["weld_factor"],
+            "weld_factor_origin": wall_calculation[
+                "weld_factor_origin"
+            ],
+            "mill_negative_tolerance_fraction": wall_calculation[
+                "mill_negative_tolerance_fraction"
+            ],
+            "mill_negative_tolerance_origin": wall_calculation[
+                "mill_negative_tolerance_origin"
+            ],
+            "corrosion_allowance_mm": wall_calculation[
+                "corrosion_allowance_mm"
+            ],
+            "corrosion_allowance_origin": (
+                corrosion_allowance_origin
+            ),
+            "erosion_allowance_mm": wall_calculation[
+                "erosion_allowance_mm"
+            ],
+            "thread_groove_allowance_mm": wall_calculation[
+                "thread_groove_allowance_mm"
+            ],
+            "forming_allowance_mm": wall_calculation[
+                "forming_allowance_mm"
+            ],
+            "total_addition_mm": wall_calculation[
+                "total_addition_mm"
+            ],
+        },
+        "hydraulic_material_values": {
+            "absolute_roughness_mm": hydraulic_roughness_mm,
+            "absolute_roughness_origin": hydraulic_roughness_origin,
+            "density_kg_m3": hydraulic_property_inputs[
+                "density_kg_m3"
+            ],
+            "density_origin": hydraulic_property_inputs[
+                "density_origin"
+            ],
+            "dynamic_viscosity_mpa_s": hydraulic_property_inputs[
+                "dynamic_viscosity_mpa_s"
+            ],
+            "dynamic_viscosity_origin": hydraulic_property_inputs[
+                "dynamic_viscosity_origin"
+            ],
+            "hydraulic_default_package_id": (
+                PIPE_HYDRAULIC_DEFAULT_POLICY_ID
+            ),
+        },
+        "component_material_chain": piping_class_candidate[
+            "components"
+        ],
+        "general_material_rules": [
+            (
+                "腐蚀裕量不是材料的固定常数：应由介质组成/浓度、温度、"
+                "流速、腐蚀速率和设计寿命确定；默认值只是保底候选。"
+            ),
+            (
+                "许用应力随牌号、产品形态、厚度分档和温度变化；"
+                "不得只按材料名称套一个常数。"
+            ),
+            (
+                "壁厚负偏差取决于实际管材产品标准及规格分档；"
+                "通用12.5%仅在精确公差表缺失时保底。"
+            ),
+            (
+                "焊接接头系数必须与无缝/焊管路线、焊缝形式、"
+                "无损检测比例和验收等级一致。"
+            ),
+            (
+                "粗糙度随材料、制造方法、内表面状态、腐蚀结垢和衬里改变；"
+                "材料默认粗糙度仅用于初始压降筛查。"
+            ),
+            (
+                "主管、管件、法兰、垫片、紧固件和阀体需形成温压及"
+                "电偶腐蚀相容的材料链，不能只选主管。"
+            ),
+            (
+                "低温分支校核最低设计金属温度和冲击韧性；高温分支"
+                "校核蠕变、组织劣化、热处理及高温焊接强度降低。"
+            ),
+            (
+                "标准表向上选档形成的裕量与腐蚀/冲蚀/加工附加量"
+                "分别列账，不叠加无来源的统一安全系数。"
+            ),
+        ],
+        "program_generated": True,
+        "formal_design_evidence": False,
+        "warning": (
+            "本账本把程序采用的每个值公开；其中任何标为内部曲线、"
+            "默认参数包或标准数值复用受阻的值，都要求用户确认或替换后重算。"
+        ),
+    }
+    result["ledger_sha256"] = _canonical_sha256(result)
+    return result
+
+
+def _pipe_standard_bundle(
+    *,
+    material: dict[str, Any],
+    material_standard_table_route: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema": "programmatic-pipe-standard-bundle-v1",
+        "design_code": {
+            "identity": "GB/T 20801.1-2025",
+            "role": "工业压力管道设计规范身份候选",
+            "status": "CURRENT_IDENTITY_VERIFIED_SCOPE_AND_CLAUSES_OPEN",
+            "official_registry_url": (
+                "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?"
+                "hcno=02B92F024E3208D2CEA17BDF0F2743A0"
+            ),
+        },
+        "dimension_standard": {
+            "identity": "GB/T 17395-2024",
+            "role": "钢管尺寸、外形、重量及允许偏差",
+            "status": "VERIFIED_RECORD_SELECTED_SEPARATELY",
+        },
+        "pipe_product_standard": {
+            "identity": material.get("product_standard"),
+            "role": "管材产品标准候选",
+            "status": (
+                "IDENTITY_CANDIDATE_PRODUCT_SCOPE_OPEN"
+                if material.get("product_standard_identity_candidate")
+                else "OPEN_PROJECT_SPECIFICATION"
+            ),
+        },
+        "material_allowable_stress_table": {
+            "identity": "GB/T 20801.1-2025 附录B 表B.1",
+            "role": "材料牌号、产品形态、厚度和温度对应的许用应力检索路线",
+            "status": material_standard_table_route["status"],
+            "route_sha256": material_standard_table_route[
+                "route_sha256"
+            ],
+            "standard_numeric_value_adopted": (
+                material_standard_table_route[
+                    "standard_numeric_value_adopted"
+                ]
+            ),
+        },
+        "fitting_standard": {
+            "identity": "GB/T 12459-2025",
+            "role": "钢制对焊管件类型与参数；不得作为钢管产品标准",
+            "status": "IDENTITY_CANDIDATE",
+        },
+        "nominal_pressure_standard": {
+            "identity": "GB/T 1048-2019",
+            "role": "PN定义和系列选择；不等于元件温压额定值",
+            "status": "VERIFIED_SERIES_RECORD_SELECTED",
+        },
+        "flange_component_selector": {
+            "identity": "HG/T 20592～20635系列",
+            "role": "法兰、垫片和紧固件终端选择器资产族",
+            "status": "EXACT_PART_YEAR_AND_TABLE_BOUND_IN_COMPONENT_SELECTOR",
+        },
+        "claim_boundary": (
+            "标准包表示程序采用和候选的各标准角色；只有带记录哈希的表格"
+            "单元格可视为已检索记录，标准身份不能代替条文适用性审查。"
+        ),
+    }
+
+
+def _pipe_selection_margin_structure(
+    *,
+    required_inner_diameter_mm: float,
+    selected_inner_diameter_mm: float,
+    selected_wall_thickness_mm: float,
+    wall_calculation: dict[str, Any],
+    selected_pn_number: float,
+    internal_pt_capacity_mpa: float,
+    design_pressure_mpa_gauge: float,
+) -> dict[str, Any]:
+    formula_nominal_wall = float(
+        wall_calculation["required_nominal_wall_mm"]
+    )
+    handling_minimum = float(
+        wall_calculation["handling_minimum_wall_mm"]
+    )
+    governing_minimum = max(formula_nominal_wall, handling_minimum)
+    standardization_margin = (
+        selected_wall_thickness_mm - governing_minimum
+    )
+    total_margin_over_formula = (
+        selected_wall_thickness_mm - formula_nominal_wall
+    )
+    mill_tolerance = float(
+        wall_calculation["mill_negative_tolerance_fraction"]
+    )
+    total_addition = float(wall_calculation["total_addition_mm"])
+    pressure_resisting_wall_after_tolerance_and_allowances = max(
+        0.0,
+        selected_wall_thickness_mm * (1.0 - mill_tolerance)
+        - total_addition,
+    )
+    allowable_stress = float(
+        wall_calculation["allowable_stress_mpa"]
+    )
+    weld_factor = float(wall_calculation["weld_factor"])
+    outer_diameter = float(
+        wall_calculation["formula_outer_diameter_mm"]
+    )
+    pressure_capacity = (
+        2.0
+        * allowable_stress
+        * weld_factor
+        * pressure_resisting_wall_after_tolerance_and_allowances
+        / (
+            outer_diameter
+            - pressure_resisting_wall_after_tolerance_and_allowances
+        )
+        if (
+            pressure_resisting_wall_after_tolerance_and_allowances > 0.0
+            and outer_diameter
+            > pressure_resisting_wall_after_tolerance_and_allowances
+        )
+        else 0.0
+    )
+    hydraulic_diameter_margin = (
+        selected_inner_diameter_mm - required_inner_diameter_mm
+    )
+    hydraulic_area_margin_percent = (
+        (
+            (selected_inner_diameter_mm / required_inner_diameter_mm) ** 2
+            - 1.0
+        )
+        * 100.0
+        if required_inner_diameter_mm > 0.0
+        else None
+    )
+    result = {
+        "schema": "pipe-selection-margin-structure-v1",
+        "policy_id": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+        "status": "PROGRAM_CALCULATED_SELECTION_MARGIN_STRUCTURE",
+        "selection_steps": [
+            {
+                "step": 1,
+                "name": "pressure_required_wall",
+                "value_mm": wall_calculation[
+                    "pressure_wall_mm_before_allowances"
+                ],
+            },
+            {
+                "step": 2,
+                "name": "explicit_allowances",
+                "value_mm": total_addition,
+                "breakdown": {
+                    "corrosion_allowance_mm": wall_calculation[
+                        "corrosion_allowance_mm"
+                    ],
+                    "erosion_allowance_mm": wall_calculation[
+                        "erosion_allowance_mm"
+                    ],
+                    "thread_groove_allowance_mm": wall_calculation[
+                        "thread_groove_allowance_mm"
+                    ],
+                    "forming_allowance_mm": wall_calculation[
+                        "forming_allowance_mm"
+                    ],
+                },
+            },
+            {
+                "step": 3,
+                "name": "negative_tolerance_compensated_nominal_wall",
+                "value_mm": formula_nominal_wall,
+            },
+            {
+                "step": 4,
+                "name": "handling_or_manufacturing_minimum",
+                "value_mm": handling_minimum,
+                "origin": wall_calculation[
+                    "handling_minimum_wall_origin"
+                ],
+            },
+            {
+                "step": 5,
+                "name": "governing_minimum_before_standardization",
+                "value_mm": governing_minimum,
+                "governing_branch": wall_calculation[
+                    "governing_wall_requirement"
+                ],
+            },
+            {
+                "step": 6,
+                "name": "selected_standard_nominal_wall",
+                "value_mm": selected_wall_thickness_mm,
+            },
+        ],
+        "wall_margin": {
+            "formula_required_nominal_wall_mm": formula_nominal_wall,
+            "handling_minimum_wall_mm": handling_minimum,
+            "governing_minimum_wall_mm": governing_minimum,
+            "selected_standard_wall_mm": selected_wall_thickness_mm,
+            "standardization_roundup_margin_mm": (
+                standardization_margin
+            ),
+            "total_margin_over_formula_requirement_mm": (
+                total_margin_over_formula
+            ),
+            "pressure_resisting_wall_after_tolerance_and_allowances_mm": (
+                pressure_resisting_wall_after_tolerance_and_allowances
+            ),
+            "internal_formula_pressure_capacity_mpa": pressure_capacity,
+            "internal_formula_pressure_margin_mpa": (
+                pressure_capacity - design_pressure_mpa_gauge
+            ),
+        },
+        "hydraulic_margin": {
+            "required_inner_diameter_mm": required_inner_diameter_mm,
+            "selected_inner_diameter_mm": selected_inner_diameter_mm,
+            "diameter_margin_mm": hydraulic_diameter_margin,
+            "flow_area_margin_percent": hydraulic_area_margin_percent,
+        },
+        "pressure_series_margin": {
+            "selected_pn_number": selected_pn_number,
+            "internal_temperature_derated_capacity_mpa": (
+                internal_pt_capacity_mpa
+            ),
+            "design_pressure_mpa_gauge": design_pressure_mpa_gauge,
+            "internal_screening_margin_mpa": (
+                internal_pt_capacity_mpa
+                - design_pressure_mpa_gauge
+            ),
+        },
+        "thickness_structure_evidence": (
+            _gbt20801_material_source_index().get(
+                "thickness_margin_figure"
+            )
+        ),
+        "double_counting_guard": (
+            "腐蚀、冲蚀、加工附加量和负偏差分别列账；不再额外叠加一个"
+            "无来源的统一安全系数。标准档位向上选择形成的裕量单独报告。"
+        ),
+        "warning": (
+            "裕量为程序初筛账本；若许用应力、负偏差、焊接系数或材料"
+            "温压表来自内置保底，裕量不能视为规范验收结论。"
+        ),
+    }
+    result["margin_structure_sha256"] = _canonical_sha256(result)
+    return result
 
 
 def build_programmatic_pipe_specification(
@@ -7287,15 +8916,48 @@ def build_programmatic_pipe_specification(
     internal_viscosity_estimate = (
         viscosity_diagnostic.get("internal_correlation_used") is True
     )
-    selected_dn_value = finite_number(_match_value(match_result, "selected_dn"))
-    initial_outer_diameter = finite_number(
-        _match_value(match_result, "selected_outer_diameter_mm")
+    hydraulic_preselection = (
+        dict(record.get("pipe_hydraulic_preselection") or {})
+        if isinstance(record.get("pipe_hydraulic_preselection"), dict)
+        else {}
     )
-    initial_wall = finite_number(
-        _match_value(match_result, "selected_wall_thickness_mm")
+    minimum_placeholder_applied = (
+        hydraulic_preselection.get("status")
+        == "PROVISIONAL_MINIMUM_COMPLETE_SPEC_PLACEHOLDER_MISSING_PROCESS_STATE"
     )
-    required_inner_diameter = finite_number(
-        _match_value(match_result, "required_inner_diameter_mm")
+    selected_dn_value = (
+        finite_number(_match_value(match_result, "selected_dn"))
+        or finite_number(hydraulic_preselection.get("selected_dn_candidate"))
+    )
+    initial_outer_diameter = (
+        finite_number(
+            _match_value(match_result, "selected_outer_diameter_mm")
+        )
+        or finite_number(
+            hydraulic_preselection.get(
+                "selected_catalog_outer_diameter_mm"
+            )
+        )
+    )
+    initial_wall = (
+        finite_number(
+            _match_value(match_result, "selected_wall_thickness_mm")
+        )
+        or finite_number(
+            hydraulic_preselection.get(
+                "provisional_wall_thickness_mm"
+            )
+        )
+    )
+    required_inner_diameter = (
+        finite_number(
+            _match_value(match_result, "required_inner_diameter_mm")
+        )
+        or finite_number(
+            hydraulic_preselection.get(
+                "placeholder_required_inner_diameter_mm"
+            )
+        )
     )
     matcher_design_pressure = finite_number(
         _match_value(match_result, "design_pressure_mpa")
@@ -7356,6 +9018,12 @@ def build_programmatic_pipe_specification(
         if matcher_design_pressure is not None
         else finite_number(record.get("design_pressure_mpa"))
     )
+    if design_pressure is None and minimum_placeholder_applied:
+        design_pressure = finite_number(
+            hydraulic_preselection.get(
+                "placeholder_design_pressure_mpa_gauge"
+            )
+        )
     if (
         (design_pressure is None or design_pressure <= 0.0)
         and pressure_basis == "absolute"
@@ -7366,8 +9034,21 @@ def build_programmatic_pipe_specification(
     design_temperature = finite_number(
         _match_value(match_result, "design_temperature_c")
     )
+    if design_temperature is None and minimum_placeholder_applied:
+        design_temperature = finite_number(
+            hydraulic_preselection.get(
+                "placeholder_design_temperature_c"
+            )
+        )
     preliminary_material = str(_match_value(match_result, "material") or "")
     dn_standard_record = _pipe_dn_standard_catalog_record(match_result)
+    if dn_standard_record is None and isinstance(
+        hydraulic_preselection.get("selected_catalog_record"),
+        dict,
+    ):
+        dn_standard_record = dict(
+            hydraulic_preselection["selected_catalog_record"]
+        )
     required = {
         "selected_dn": selected_dn_value,
         "initial_outer_diameter_mm": initial_outer_diameter,
@@ -7405,25 +9086,73 @@ def build_programmatic_pipe_specification(
 
     store = load_verified_pipe_standard_store()
     selected_dn = int(round(selected_dn_value))
+    service_material_context = " ".join(
+        item
+        for item in (
+            str(record.get("medium_name") or record.get("main_medium") or ""),
+            json.dumps(
+                record.get("composition") or [],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            str(record.get("corrosivity") or ""),
+            str(record.get("cleanliness") or ""),
+        )
+        if item
+    )
     material = _pipe_manufacturing_route(
         _programmatic_pipe_material(
-            str(record.get("medium_name") or ""),
+            service_material_context,
             preliminary_material,
             design_temperature,
         ),
         selected_dn,
     )
-    corrosion_allowance = float(material["corrosion_allowance_mm"])
-    allowable_stress_mpa = 120.0
-    weld_factor = float(material["screening_weld_factor"])
-    pressure_wall_mm = (
-        design_pressure
-        * initial_outer_diameter
-        / (2.0 * allowable_stress_mpa * weld_factor + design_pressure)
+    material_standard_table_route = (
+        _pipe_material_standard_table_route(
+            str(material.get("code") or "CS20")
+        )
+    )
+    supplied_corrosion_allowance = finite_number(
+        record.get("corrosion_allowance_mm")
+    )
+    if (
+        supplied_corrosion_allowance is not None
+        and supplied_corrosion_allowance >= 0.0
+    ):
+        corrosion_allowance = supplied_corrosion_allowance
+        corrosion_allowance_origin = "PROJECT_OR_USER_PROVIDED"
+    else:
+        corrosion_allowance = float(material["corrosion_allowance_mm"])
+        corrosion_allowance_origin = (
+            "MATERIAL_SERVICE_ROUTE_DEFAULT_WARNING"
+        )
+    wall_fallback = _pipe_wall_fallback_calculation(
+        record=record,
+        material=material,
+        design_pressure_mpa_gauge=design_pressure,
+        design_temperature_c=design_temperature,
+        outer_diameter_mm=initial_outer_diameter,
+        corrosion_allowance_mm=corrosion_allowance,
+        corrosion_allowance_origin=corrosion_allowance_origin,
+    )
+    handling_wall_origin = (
+        "PROJECT_OR_USER_PROVIDED"
+        if record.get("selected_wall_thickness_mm") not in (None, "")
+        else "MATCHER_REGISTERED_HANDLING_MINIMUM_FALLBACK_WARNING"
+    )
+    wall_fallback["handling_minimum_wall_mm"] = initial_wall
+    wall_fallback["handling_minimum_wall_origin"] = handling_wall_origin
+    wall_fallback["governing_wall_requirement"] = (
+        "handling_or_manufacturing_minimum"
+        if initial_wall
+        >= float(wall_fallback["required_nominal_wall_mm"])
+        else "pressure_formula_and_allowances"
     )
     minimum_preliminary_wall = max(
         initial_wall,
-        pressure_wall_mm + corrosion_allowance,
+        float(wall_fallback["required_nominal_wall_mm"]),
     )
     wall = _select_verified_pipe_wall(
         store,
@@ -7432,9 +9161,58 @@ def build_programmatic_pipe_specification(
         required_inner_diameter_mm=required_inner_diameter,
         table_preference=str(material["wall_table_preference"]),
     )
-    pn = _select_verified_pn(store, design_pressure)
     outer_diameter = float(wall["outer_diameter_mm"])
     wall_thickness = float(wall["wall_thickness_mm"])
+    if abs(outer_diameter - initial_outer_diameter) > 1.0e-9:
+        wall_fallback = _pipe_wall_fallback_calculation(
+            record=record,
+            material=material,
+            design_pressure_mpa_gauge=design_pressure,
+            design_temperature_c=design_temperature,
+            outer_diameter_mm=outer_diameter,
+            corrosion_allowance_mm=corrosion_allowance,
+            corrosion_allowance_origin=corrosion_allowance_origin,
+        )
+        wall_fallback["handling_minimum_wall_mm"] = initial_wall
+        wall_fallback["handling_minimum_wall_origin"] = (
+            handling_wall_origin
+        )
+        wall_fallback["governing_wall_requirement"] = (
+            "handling_or_manufacturing_minimum"
+            if initial_wall
+            >= float(wall_fallback["required_nominal_wall_mm"])
+            else "pressure_formula_and_allowances"
+        )
+        final_required_wall = max(
+            initial_wall,
+            float(wall_fallback["required_nominal_wall_mm"]),
+        )
+        if wall_thickness + 1.0e-9 < final_required_wall:
+            wall = _select_verified_pipe_wall(
+                store,
+                initial_outer_diameter_mm=outer_diameter,
+                minimum_wall_thickness_mm=final_required_wall,
+                required_inner_diameter_mm=required_inner_diameter,
+                table_preference=str(material["wall_table_preference"]),
+            )
+            outer_diameter = float(wall["outer_diameter_mm"])
+            wall_thickness = float(wall["wall_thickness_mm"])
+    minimum_preliminary_wall = max(
+        initial_wall,
+        float(wall_fallback["required_nominal_wall_mm"]),
+    )
+    allowable_stress_mpa = float(wall_fallback["allowable_stress_mpa"])
+    weld_factor = float(wall_fallback["weld_factor"])
+    pressure_wall_mm = float(
+        wall_fallback["pressure_wall_mm_before_allowances"]
+    )
+    pn = _select_verified_pn(
+        store,
+        design_pressure,
+        internal_temperature_derating_factor=float(
+            wall_fallback["temperature_derating_factor"]
+        ),
+    )
     inner_diameter = outer_diameter - 2.0 * wall_thickness
     od_match_tolerance_mm = max(0.5, initial_outer_diameter * 0.005)
     od_difference_mm = outer_diameter - initial_outer_diameter
@@ -7491,8 +9269,24 @@ def build_programmatic_pipe_specification(
     }
 
     flow_m3_h = finite_number(record.get("flow_m3_h"))
-    density_kg_m3 = finite_number(record.get("density_kg_m3"))
-    viscosity_mpa_s = finite_number(record.get("dynamic_viscosity_mpa_s"))
+    hydraulic_property_inputs = _pipe_hydraulic_property_inputs(
+        record=record
+    )
+    density_kg_m3 = float(
+        hydraulic_property_inputs["density_kg_m3"]
+    )
+    viscosity_mpa_s = float(
+        hydraulic_property_inputs["dynamic_viscosity_mpa_s"]
+    )
+    supplied_roughness = finite_number(record.get("roughness_mm"))
+    if supplied_roughness is not None and supplied_roughness >= 0.0:
+        hydraulic_roughness_mm = supplied_roughness
+        hydraulic_roughness_origin = "PROJECT_OR_USER_PROVIDED"
+    else:
+        hydraulic_roughness_mm = float(material["roughness_mm"])
+        hydraulic_roughness_origin = (
+            "MATERIAL_ROUTE_DEFAULT_WARNING"
+        )
     phase_text = str(record.get("phase") or "").strip().casefold()
     two_phase_screening = phase_text in {
         "two_phase",
@@ -7510,7 +9304,7 @@ def build_programmatic_pipe_specification(
             inner_diameter_mm=inner_diameter,
             density_kg_m3=density_kg_m3,
             dynamic_viscosity_mpa_s=viscosity_mpa_s,
-            roughness_mm=float(material["roughness_mm"]),
+            roughness_mm=hydraulic_roughness_mm,
         )
         if flow_m3_h is not None and flow_m3_h > 0.0
         else {
@@ -7551,6 +9345,9 @@ def build_programmatic_pipe_specification(
         and pressure_gradient_kpa_100m
         <= PIPE_PRESSURE_GRADIENT_SCREEN_KPA_PER_100M + 1.0e-9
     )
+    hydraulic_default_used = bool(
+        hydraulic_property_inputs.get("default_fields")
+    )
     if two_phase_screening:
         friction_branch = (
             "homogeneous_two_phase_preliminary_screening:"
@@ -7576,6 +9373,18 @@ def build_programmatic_pipe_specification(
             "BLOCKED_FINAL_WALL_HYDRAULIC_SCREEN:"
             f"velocity={actual_velocity}:"
             f"gradient={pressure_gradient_kpa_100m}"
+        )
+    elif hydraulic_default_used:
+        friction_branch = (
+            "default_hydraulic_parameter_package_warning:"
+            + friction_branch
+        )
+        hydraulic_status = (
+            "CALCULATED_PER_100M_WITH_DEFAULT_HYDRAULIC_"
+            "PARAMETER_PACKAGE_WARNING"
+        )
+        hydraulic_acceptance_status = (
+            "PRELIMINARY_SCREEN_ONLY_DEFAULT_PROPERTIES_WARNING"
         )
     elif internal_viscosity_estimate:
         friction_branch = (
@@ -7608,6 +9417,49 @@ def build_programmatic_pipe_specification(
     piping_class_candidate_code = (
         f"{material['code']}-{pn_text}-BW-CA{corrosion_allowance:g}"
     )
+    piping_class_candidate = _pipe_component_class_candidate(
+        material=material,
+        selected_dn=selected_dn,
+        pn_text=pn_text,
+        outer_diameter_mm=outer_diameter,
+        wall_thickness_mm=wall_thickness,
+        corrosion_allowance_mm=corrosion_allowance,
+    )
+    material_parameter_ledger = _pipe_material_parameter_ledger(
+        record=record,
+        material=material,
+        design_temperature_c=design_temperature,
+        wall_calculation=wall_fallback,
+        corrosion_allowance_origin=corrosion_allowance_origin,
+        hydraulic_roughness_mm=hydraulic_roughness_mm,
+        hydraulic_roughness_origin=hydraulic_roughness_origin,
+        hydraulic_property_inputs=hydraulic_property_inputs,
+        piping_class_candidate=piping_class_candidate,
+        standard_table_route=material_standard_table_route,
+    )
+    standard_bundle = _pipe_standard_bundle(
+        material=material,
+        material_standard_table_route=material_standard_table_route,
+    )
+    temperature_derating_factor = float(
+        wall_fallback["temperature_derating_factor"]
+    )
+    internal_pt_capacity_mpa = (
+        pn_value / 10.0 * temperature_derating_factor
+    )
+    wall_fallback.pop("calculation_sha256", None)
+    wall_fallback["calculation_sha256"] = _canonical_sha256(
+        wall_fallback
+    )
+    selection_margin_structure = _pipe_selection_margin_structure(
+        required_inner_diameter_mm=required_inner_diameter,
+        selected_inner_diameter_mm=inner_diameter,
+        selected_wall_thickness_mm=wall_thickness,
+        wall_calculation=wall_fallback,
+        selected_pn_number=pn_value,
+        internal_pt_capacity_mpa=internal_pt_capacity_mpa,
+        design_pressure_mpa_gauge=design_pressure,
+    )
     if design_temperature < 5.0:
         insulation_spec = (
             "50 mm硬质聚氨酯保冷层+0.6 mm铝合金外护（程序初选）"
@@ -7630,7 +9482,7 @@ def build_programmatic_pipe_specification(
         heat_tracing_spec = "不设伴热（程序初选）"
     protective_layer = (
         "酸洗钝化（程序初选）"
-        if material["code"] == "SS316L"
+        if material["code"] in {"SS304", "SS316L"}
         else "Sa2.5表面处理+环氧富锌底漆/环氧面漆（程序初选）"
     )
 
@@ -7643,7 +9495,9 @@ def build_programmatic_pipe_specification(
         "reynolds_number": reynolds_number,
         "darcy_friction_factor": darcy_friction_factor,
         "friction_branch": friction_branch,
-        "roughness_mm": material["roughness_mm"],
+        "roughness_mm": hydraulic_roughness_mm,
+        "roughness_origin": hydraulic_roughness_origin,
+        "property_input_ledger": hydraulic_property_inputs,
         "pressure_gradient_kpa_per_100m": pressure_gradient_kpa_100m,
         "status": hydraulic_status,
         "hydraulic_acceptance_status": hydraulic_acceptance_status,
@@ -7670,13 +9524,28 @@ def build_programmatic_pipe_specification(
         "phase": record.get("phase"),
         "two_phase_screening": two_phase_screening,
         "two_phase_viscosity_screening_basis": two_phase_viscosity_basis,
+        "density_origin": hydraulic_property_inputs["density_origin"],
         "viscosity_origin": (
-            "INTERNAL_CORRELATION_ESTIMATE"
-            if internal_viscosity_estimate
-            else "ASPEN_OR_DIRECT_PROCESS_PROPERTY"
+            "DEFAULT_HYDRAULIC_PARAMETER_PACKAGE_WARNING"
+            if "dynamic_viscosity_mpa_s"
+            in hydraulic_property_inputs["default_fields"]
+            else (
+                "INTERNAL_CORRELATION_ESTIMATE"
+                if internal_viscosity_estimate
+                else "ASPEN_OR_DIRECT_PROCESS_PROPERTY"
+            )
         ),
         "viscosity_fallback_diagnostic": viscosity_diagnostic,
         "formal_exclusions": [
+            *(
+                [
+                    "aspen_or_lab_density_confirmation",
+                    "aspen_or_lab_viscosity_confirmation",
+                    "phase_and_state_condition_confirmation",
+                ]
+                if hydraulic_property_inputs["default_fields"]
+                else []
+            ),
             *(
                 [
                     "aspen_or_lab_viscosity_confirmation",
@@ -7699,29 +9568,38 @@ def build_programmatic_pipe_specification(
             ),
         ],
     }
+    total_line_hydraulic = _pipe_total_line_hydraulic_fallback(
+        record=record,
+        hydraulic=hydraulic_basis,
+    )
+    hydraulic_basis["total_line_screening"] = total_line_hydraulic
+    hydraulic_basis["length_basis"] = (
+        "actual_or_user_line_length"
+        if total_line_hydraulic["line_length_origin"]
+        == "PROJECT_OR_USER_PROVIDED"
+        else "internal_100m_reference_fallback_not_actual_total"
+    )
     hydraulic_sha256 = _canonical_sha256(hydraulic_basis)
     wall_basis = {
-        "formula": "t=P*Do/(2*S*E+P)+CA",
-        "design_pressure_mpa_gauge": design_pressure,
+        **wall_fallback,
         "outer_diameter_mm": outer_diameter,
-        "formula_outer_diameter_mm": initial_outer_diameter,
         "selected_metric_outer_diameter_mm": outer_diameter,
         "cross_standard_outer_diameter_difference_mm": od_difference_mm,
-        "allowable_stress_mpa": allowable_stress_mpa,
-        "weld_factor": weld_factor,
-        "pressure_wall_mm_before_ca": pressure_wall_mm,
-        "corrosion_allowance_mm": corrosion_allowance,
         "minimum_preliminary_wall_mm": minimum_preliminary_wall,
         "selected_wall_thickness_mm": wall_thickness,
         "status": (
-            "INTERNAL_PRESSURE_FORMULA_SCREENING_ONLY_"
+            "INTERNAL_FORMULA_FALLBACK_PRESSURE_WALL_SCREENING_"
             "TWO_PHASE_HYDRAULICS_OPEN"
             if two_phase_screening
             else (
                 (
-                    "INTERNAL_SCREENING_EXTERNAL_PRESSURE_FORMAL_GATE_OPEN"
+                    "INTERNAL_FORMULA_FALLBACK_EXTERNAL_PRESSURE_FORMAL_GATE_OPEN"
                     if external_pressure_branch
-                    else "PRELIMINARY_INTERNAL_PRESSURE_SCREEN"
+                    else (
+                        "INTERNAL_FORMULA_FALLBACK_WARNING"
+                        if wall_fallback["fallback_inputs"]
+                        else "PROJECT_INPUT_PRELIMINARY_INTERNAL_PRESSURE_SCREEN"
+                    )
                 )
                 if wall_thickness + 1.0e-9 >= minimum_preliminary_wall
                 else "FAIL_PRELIMINARY_SCREENING"
@@ -7733,8 +9611,7 @@ def build_programmatic_pipe_specification(
         "vacuum_margin_kpa": vacuum_margin_kpa,
         "vacuum_threshold_kpa": vacuum_threshold_kpa,
         "formal_exclusions": [
-            "mill_negative_tolerance",
-            "code_allowable_stress_at_temperature",
+            "formal_code_clause_and_material_table_acceptance",
             "external_pressure",
             "cyclic_and_local_loads",
         ],
@@ -7750,8 +9627,9 @@ def build_programmatic_pipe_specification(
         f"（non-SCH，跨标准OD差={od_difference_mm:+g} mm）；"
         f"PN系列候选{pn_text}；连接候选=对焊（BW）；"
         f"CA候选={corrosion_allowance:g} mm；"
-        f"候选管道等级代码={piping_class_candidate_code}；"
-        "正式管道等级=OPEN_PROJECT_AUTHORITY_GATE"
+        f"程序已选管道等级候选={piping_class_candidate_code}"
+        "（含管件/法兰/垫片/紧固件/阀门基线）；"
+        "正式项目管道等级批准=OPEN_PROJECT_AUTHORITY_GATE"
         + (
             f"，内压0.1 MPa(g)初筛/全真空外压"
             f"{external_design_pressure_mpa:g} MPa待校核"
@@ -7772,7 +9650,43 @@ def build_programmatic_pipe_specification(
         )
     )
 
-    if internal_viscosity_estimate:
+    if minimum_placeholder_applied:
+        designation += (
+            "；最高级警告：Aspen 当前流股没有可用正流量、相态、压力或温度，"
+            "本候选使用程序登记的最低完整规格占位分支（DN25、0.1 MPa(g)、"
+            "40 ℃、20钢路线）；仅用于保证设备选型一览表有具体且可追溯的程序"
+            "候选，水力计算未执行，禁止直接采购、施工或报审"
+        )
+    if wall_fallback["fallback_inputs"]:
+        designation += (
+            "；强警告：壁厚使用内置公式保底，退化输入="
+            + ",".join(wall_fallback["fallback_inputs"])
+            + "；公式、代入值和来源已随结果输出"
+        )
+    if (
+        material_standard_table_route["status"]
+        == "STANDARD_TABLE_FOUND_NUMERIC_REUSE_BLOCKED"
+    ):
+        designation += (
+            "；材料表检索：已找到GB/T 20801.1-2025附录B候选页，"
+            "但精确牌号×厚度×温度数值复用被QA门禁阻止；本次许用应力"
+            "采用有版本号的内置筛查曲线并报警"
+        )
+    if (
+        total_line_hydraulic["status"]
+        == "REFERENCE_100M_FALLBACK_NOT_ACTUAL_TOTAL_LINE"
+    ):
+        designation += (
+            "；强警告：未取得实际长度/管件/标高，压降仅为100 m参考段，"
+            "不是实际全线压降"
+        )
+    if hydraulic_property_inputs["default_fields"]:
+        designation += (
+            "；强警告：水力学缺失值已由默认参数包补齐="
+            + ",".join(hydraulic_property_inputs["default_fields"])
+            + "；默认物性、采用分支和适用边界已随结果输出"
+        )
+    elif internal_viscosity_estimate:
         designation += (
             "；强警告：黏度为程序内置关联式估算，非Aspen提取值；雷诺数与"
             "压降仅供单相初筛，必须由Aspen物性或实验数据复核"
@@ -7828,13 +9742,109 @@ def build_programmatic_pipe_specification(
         "selected_wall_thickness_mm": {
             "value": wall_thickness,
             "unit": "mm",
-            "state": "PROGRAM_PRELIMINARY_METRIC_OD_WALL_CANDIDATE",
+            "state": (
+                "PROGRAM_SELECTED_WALL_WITH_INTERNAL_FORMULA_WARNING"
+                if wall_fallback["fallback_inputs"]
+                else "PROGRAM_SELECTED_WALL_FROM_PROJECT_CODE_INPUTS"
+            ),
             "evidence_class": "J",
             "promotion_cap": "TYPE_SCREENING",
             "provenance": (
                 "GB/T_17395_VERIFIED_DIMENSION_RECORD/"
-                "SELECTOR_RULE/METRIC_OD_WALL_CANDIDATE"
+                f"{PIPE_INTERNAL_FALLBACK_POLICY_ID}/"
+                "NOMINAL_WALL_UPWARD_SELECTION"
             ),
+            "warning": wall_fallback["warning"],
+        },
+        "required_nominal_wall_thickness_mm": {
+            "value": wall_fallback["required_nominal_wall_mm"],
+            "unit": "mm",
+            "state": wall_fallback["status"],
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+            "formula": wall_fallback["formula"],
+            "fallback_inputs": wall_fallback["fallback_inputs"],
+            "calculation_sha256": wall_fallback["calculation_sha256"],
+            "warning": wall_fallback["warning"],
+        },
+        "wall_calculation_branch": {
+            "value": (
+                "内置公式保底→显式附加量→负偏差补偿→制造/搬运最低厚度"
+                "→从已验证公制OD×t表向上选壁厚→报告剩余裕量"
+                if wall_fallback["fallback_inputs"]
+                else (
+                    "项目输入→压力壁厚公式→显式附加量→制造/搬运最低厚度"
+                    "→标准公称壁厚向上选择→报告剩余裕量"
+                )
+            ),
+            "unit": None,
+            "state": wall_fallback["status"],
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+        },
+        "selection_margin_structure": {
+            "value": selection_margin_structure,
+            "unit": None,
+            "state": selection_margin_structure["status"],
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+            "warning": selection_margin_structure["warning"],
+        },
+        "wall_selection_margin_mm": {
+            "value": selection_margin_structure["wall_margin"][
+                "total_margin_over_formula_requirement_mm"
+            ],
+            "unit": "mm",
+            "state": "PROGRAM_CALCULATED_SELECTION_MARGIN",
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+            "warning": selection_margin_structure["warning"],
+        },
+        "hydraulic_diameter_margin_mm": {
+            "value": selection_margin_structure["hydraulic_margin"][
+                "diameter_margin_mm"
+            ],
+            "unit": "mm",
+            "state": "PROGRAM_CALCULATED_SELECTION_MARGIN",
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+        },
+        "pressure_series_margin_mpa": {
+            "value": selection_margin_structure[
+                "pressure_series_margin"
+            ]["internal_screening_margin_mpa"],
+            "unit": "MPa",
+            "state": "INTERNAL_FORMULA_FALLBACK_WARNING",
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+            "warning": selection_margin_structure["warning"],
+        },
+        "allowable_stress_mpa": {
+            "value": allowable_stress_mpa,
+            "unit": "MPa",
+            "state": wall_fallback["allowable_stress_origin"],
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+            "warning": wall_fallback["warning"],
+        },
+        "mill_negative_tolerance_fraction": {
+            "value": wall_fallback[
+                "mill_negative_tolerance_fraction"
+            ],
+            "unit": None,
+            "state": wall_fallback[
+                "mill_negative_tolerance_origin"
+            ],
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
         },
         "inner_diameter_mm": {"value": inner_diameter, "unit": "mm"},
         "wall_series": {
@@ -7897,6 +9907,63 @@ def build_programmatic_pipe_specification(
             "evidence_class": "J",
             "promotion_cap": "TYPE_SCREENING",
             "provenance": "SELECTOR_RULE/ENGINEERING_MATERIAL_ROUTE_CANDIDATE",
+            "warning": material.get("compatibility_warning"),
+        },
+        "material_compatibility_status": {
+            "value": (
+                "PROGRAM_ROUTE_SELECTED_FORMAL_COMPATIBILITY_OPEN"
+            ),
+            "unit": None,
+            "state": "INTERNAL_MATERIAL_ROUTE_FALLBACK_WARNING",
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": material["selection_basis"],
+            "warning": material.get("compatibility_warning"),
+        },
+        "material_parameter_ledger": {
+            "value": material_parameter_ledger,
+            "unit": None,
+            "state": material_parameter_ledger["status"],
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": (
+                "MATERIAL_SELECTION_CHAIN/"
+                f"{material_parameter_ledger['ledger_sha256']}"
+            ),
+            "warning": material_parameter_ledger["warning"],
+        },
+        "material_selection_chain": {
+            "value": material_parameter_ledger["selection_priority"],
+            "unit": None,
+            "state": "PROGRAM_EXPLICIT_THREE_LEVEL_SOURCE_PRIORITY",
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+        },
+        "standard_material_table_route": {
+            "value": material_standard_table_route,
+            "unit": None,
+            "state": material_standard_table_route["status"],
+            "evidence_class": "S1-S2",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": material_standard_table_route[
+                "route_sha256"
+            ],
+            "warning": material_standard_table_route[
+                "claim_boundary"
+            ],
+        },
+        "general_material_selection_rules": {
+            "value": material_parameter_ledger[
+                "general_material_rules"
+            ],
+            "unit": None,
+            "state": "PROGRAM_RULE_SET_EXPOSED",
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": material_parameter_ledger[
+                "ledger_sha256"
+            ],
         },
         "manufacturing_method": {
             "value": material["manufacturing_method"],
@@ -7954,10 +10021,50 @@ def build_programmatic_pipe_specification(
         "corrosion_allowance_mm": {
             "value": corrosion_allowance,
             "unit": "mm",
-            "state": "PROGRAM_PRELIMINARY_CORROSION_ALLOWANCE_CANDIDATE",
+            "state": corrosion_allowance_origin,
             "evidence_class": "J",
             "promotion_cap": "TYPE_SCREENING",
-            "provenance": "SELECTOR_RULE/ENGINEERING_DEFAULT_CANDIDATE",
+            "provenance": corrosion_allowance_origin,
+            "warning": (
+                "腐蚀裕量需由介质、温度、流速、腐蚀速率与设计寿命确认；"
+                "材料路线默认值不是材料固有常数。"
+                if "WARNING" in corrosion_allowance_origin
+                else None
+            ),
+        },
+        "absolute_roughness_mm": {
+            "value": hydraulic_roughness_mm,
+            "unit": "mm",
+            "state": hydraulic_roughness_origin,
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": hydraulic_roughness_origin,
+        },
+        "hydraulic_property_input_ledger": {
+            "value": hydraulic_property_inputs,
+            "unit": None,
+            "state": hydraulic_property_inputs["status"],
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": hydraulic_property_inputs[
+                "ledger_sha256"
+            ],
+            "warning": hydraulic_property_inputs["warning"],
+        },
+        "hydraulic_default_parameter_package": {
+            "value": PIPE_HYDRAULIC_DEFAULT_POLICY,
+            "unit": None,
+            "state": (
+                "DEFAULT_PACKAGE_USED_WARNING"
+                if hydraulic_property_inputs["default_fields"]
+                else "DEFAULT_PACKAGE_AVAILABLE_NOT_USED"
+            ),
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_HYDRAULIC_DEFAULT_POLICY_ID,
+            "warning": PIPE_HYDRAULIC_DEFAULT_POLICY[
+                "claim_boundary"
+            ],
         },
         "pressure_class": {
             "value": pn_text,
@@ -7972,6 +10079,23 @@ def build_programmatic_pipe_specification(
             "claim_boundary": (
                 "PN series designation candidate only; not a verified "
                 "pressure-temperature rating or component pressure class."
+            ),
+        },
+        "pressure_temperature_screening": {
+            "value": (
+                f"{pn_text}；内置温度折减系数="
+                f"{temperature_derating_factor:.4g}；"
+                f"保底筛查承压={internal_pt_capacity_mpa:.6g} MPa"
+            ),
+            "unit": None,
+            "state": "INTERNAL_FORMULA_FALLBACK_WARNING",
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+            "formula": "P_screen=(PN/10)*fT",
+            "warning": (
+                "该温压折减只用于在缺少元件材料温压表时避免空白；"
+                "不能代替法兰、阀门、管件和垫片各自的正式P-T额定值。"
             ),
         },
         "piping_class_candidate_code": {
@@ -7989,18 +10113,55 @@ def build_programmatic_pipe_specification(
                 "piping material class."
             ),
         },
-        "piping_class": {
-            "value": "OPEN_PROJECT_AUTHORITY_GATE",
+        "piping_class_component_schedule": {
+            "value": piping_class_candidate,
             "unit": None,
-            "state": "OPEN_PROJECT_AUTHORITY_GATE",
-            "evidence_class": "U",
-            "promotion_cap": "NOT_PROMOTABLE",
-            "provenance": "PROJECT_AUTHORITY_REQUIRED",
+            "state": piping_class_candidate["status"],
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+            "warning": piping_class_candidate["warning"],
+        },
+        "piping_class": {
+            "value": (
+                f"程序预选 {piping_class_candidate_code}"
+                "（正式项目等级批准待完成）"
+            ),
+            "unit": None,
+            "state": "PROGRAM_SELECTED_INTERNAL_FALLBACK_CLASS_CANDIDATE",
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
             "candidate_code": piping_class_candidate_code,
             "warning": (
-                "正式管道等级必须由项目管道材料等级表批准；程序候选代码"
-                f"{piping_class_candidate_code}不得冒充正式等级。"
+                f"程序已具体选择{piping_class_candidate_code}并展开元件基线，"
+                "但正式管道等级仍必须由项目管道材料等级表批准。"
             ),
+        },
+        "standard_identity": {
+            "value": [
+                "GB/T 20801.1-2025",
+                "GB/T 17395-2024",
+                str(material["product_standard"]),
+                "GB/T 12459-2025",
+                "GB/T 1048-2019",
+                "HG/T 20592～20635系列",
+            ],
+            "unit": None,
+            "state": "PROGRAM_ASSEMBLED_STANDARD_ROLE_BUNDLE",
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": "PROGRAMMATIC_PIPE_STANDARD_BUNDLE",
+            "warning": standard_bundle["claim_boundary"],
+        },
+        "standard_bundle": {
+            "value": standard_bundle,
+            "unit": None,
+            "state": "PROGRAM_ASSEMBLED_STANDARD_ROLE_BUNDLE",
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": "PROGRAMMATIC_PIPE_STANDARD_BUNDLE",
+            "warning": standard_bundle["claim_boundary"],
         },
         "design_pressure_mpa": {"value": design_pressure, "unit": "MPa(g)"},
         "design_pressure_basis": {
@@ -8068,6 +10229,51 @@ def build_programmatic_pipe_specification(
         "pressure_gradient_kpa_per_100m": {
             "value": pressure_gradient_kpa_100m,
             "unit": "kPa/100m",
+        },
+        "total_line_pressure_drop_kpa": {
+            "value": total_line_hydraulic["total_pressure_drop_kpa"],
+            "unit": "kPa",
+            "state": total_line_hydraulic["status"],
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+            "formula": total_line_hydraulic["formula"],
+            "warning": total_line_hydraulic["warning"],
+        },
+        "total_line_hydraulic_branch": {
+            "value": (
+                "实际长度/当量长度/K值/标高→全线压降初算"
+                if total_line_hydraulic["line_length_origin"]
+                == "PROJECT_OR_USER_PROVIDED"
+                else "缺实际路线→100 m参考段+局阻0+标高0保底"
+            ),
+            "unit": None,
+            "state": total_line_hydraulic["status"],
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+            "warning": total_line_hydraulic["warning"],
+        },
+        "line_length_m": {
+            "value": total_line_hydraulic["calculation_length_m"],
+            "unit": "m",
+            "state": total_line_hydraulic["line_length_origin"],
+            "evidence_class": "J",
+            "promotion_cap": "TYPE_SCREENING",
+            "provenance": PIPE_INTERNAL_FALLBACK_POLICY_ID,
+            "warning": total_line_hydraulic["warning"],
+        },
+        "hydraulic_missing_physical_inputs": {
+            "value": total_line_hydraulic["missing_physical_inputs"],
+            "unit": None,
+            "state": (
+                "OPEN_PHYSICAL_ROUTE_INPUTS"
+                if total_line_hydraulic["missing_physical_inputs"]
+                else "PHYSICAL_ROUTE_INPUTS_AVAILABLE"
+            ),
+            "evidence_class": "U",
+            "promotion_cap": "NOT_PROMOTABLE",
+            "provenance": "PROJECT_ROUTE_INPUT_AUDIT",
         },
         "pressure_gradient_screen_limit_kpa_per_100m": {
             "value": PIPE_PRESSURE_GRADIENT_SCREEN_KPA_PER_100M,
@@ -8273,16 +10479,46 @@ def build_programmatic_pipe_specification(
         field.setdefault("state", "PROGRAM_PRELIMINARY_SELECTED")
         field.setdefault("evidence_class", "J")
         field.setdefault("promotion_cap", "TYPE_SCREENING")
+    input_source_kind = str(
+        record.get("_pipe_input_source_kind") or "ASPEN_EXPORT"
+    ).strip().upper()
+    source_binding = {
+        "input_source_kind": input_source_kind,
+        "source_path": str(source_file),
+        "source_sha256": source_sha256,
+        "aspen_export_path": (
+            str(source_file)
+            if input_source_kind == "ASPEN_EXPORT"
+            else None
+        ),
+        "aspen_export_sha256": (
+            source_sha256
+            if input_source_kind == "ASPEN_EXPORT"
+            else None
+        ),
+        "manual_input_record_sha256": (
+            source_sha256
+            if input_source_kind == "MANUAL_INPUT"
+            else None
+        ),
+    }
     base = {
         "schema": "programmatic-pipe-specification-v1",
-        "version": "1.2.0",
+        "version": "1.4.0",
         "status": "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
-        "selection_scope": "IDENTITY_AND_PRELIMINARY_GEOMETRY_ONLY",
+        "selection_scope": (
+            "CONCRETE_MINIMUM_SPEC_PLACEHOLDER_NO_HYDRAULIC_SIZING"
+            if minimum_placeholder_applied
+            else "PRELIMINARY_LINE_CLASS_GEOMETRY_AND_HYDRAULIC_SCREENING"
+        ),
         "deterministic": True,
         "llm_used": False,
         "program_generated": True,
         "stream_id": stream_id,
         "designation": designation,
+        "minimum_process_state_placeholder_applied": (
+            minimum_placeholder_applied
+        ),
         "manufacturing_route": {
             "route_code": material["route_code"],
             "large_bore_welded_route": material[
@@ -8309,7 +10545,30 @@ def build_programmatic_pipe_specification(
         ],
         "fields": fields,
         "hydraulic_calculation": hydraulic_basis,
+        "total_line_hydraulic_screening": total_line_hydraulic,
         "pressure_wall_screening": wall_basis,
+        "selection_margin_structure": selection_margin_structure,
+        "material_parameter_ledger": material_parameter_ledger,
+        "material_standard_table_route": (
+            material_standard_table_route
+        ),
+        "piping_class_candidate": piping_class_candidate,
+        "standard_bundle": standard_bundle,
+        "hydraulic_property_input_ledger": (
+            hydraulic_property_inputs
+        ),
+        "hydraulic_default_parameter_package": {
+            **PIPE_HYDRAULIC_DEFAULT_POLICY,
+            "policy_sha256": _canonical_sha256(
+                PIPE_HYDRAULIC_DEFAULT_POLICY
+            ),
+        },
+        "internal_fallback_policy": {
+            **PIPE_INTERNAL_FALLBACK_POLICY,
+            "policy_sha256": _canonical_sha256(
+                PIPE_INTERNAL_FALLBACK_POLICY
+            ),
+        },
         "cross_standard_pairing": cross_standard_pairing,
         "standard_selections": {
             "dn": {
@@ -8352,12 +10611,16 @@ def build_programmatic_pipe_specification(
                 "pressure_to_pn_screening_factor": pn[
                     "pressure_to_pn_screening_factor"
                 ],
+                "internal_temperature_derating_factor": pn[
+                    "internal_temperature_derating_factor"
+                ],
                 "selection_provenance": pn["selection_provenance"],
                 "claim_boundary": (
-                    "PN series designation candidate only. The P(g)*10 mapping "
-                    "and PN16 floor are selector policy, not a GB/T 1048 "
-                    "pressure-temperature rating. Product-standard, material, "
-                    "temperature and component verification remain open."
+                    "PN series designation candidate only. The P(g)*10/fT "
+                    "mapping and PN16 floor are internal selector fallback "
+                    "policy, not a GB/T 1048 pressure-temperature rating. "
+                    "Product-standard, material, temperature and component "
+                    "verification remain open."
                 ),
             },
             "wall": {
@@ -8423,8 +10686,7 @@ def build_programmatic_pipe_specification(
             },
         },
         "source_binding": {
-            "aspen_export_path": str(source_file),
-            "aspen_export_sha256": source_sha256,
+            **source_binding,
             "input_fields": {
                 "flow_m3_h": flow_m3_h,
                 "density_kg_m3": density_kg_m3,
@@ -8475,22 +10737,77 @@ def build_programmatic_pipe_specification(
                 "pipe_hydraulic_preselection": record.get(
                     "pipe_hydraulic_preselection"
                 ),
+                "minimum_process_state_placeholder_applied": (
+                    minimum_placeholder_applied
+                ),
                 "manufacturing_route": material["route_code"],
                 "design_temperature_c": design_temperature,
+                "line_length_m": record.get("line_length_m"),
+                "equivalent_length_m": record.get(
+                    "equivalent_length_m"
+                ),
+                "fittings_total_k": record.get("fittings_total_k"),
+                "elevation_change_m": record.get("elevation_change_m"),
             },
         },
         "formal_readiness": {
             "status": "BLOCKED_PRELIMINARY_ONLY",
             "open_gates": [
                 "project_authority_piping_class",
+                *(
+                    [
+                        "positive_process_flow",
+                        "phase_and_state_condition",
+                        "aspen_or_project_pressure_and_temperature",
+                        "replace_minimum_complete_spec_placeholder",
+                    ]
+                    if minimum_placeholder_applied
+                    else []
+                ),
                 "coherent_product_standard_dn_od_wall_mapping",
                 "pipe_product_standard_scope_and_manufacturability",
                 *material["manufacturing_open_gates"],
                 "schedule_or_metric_series_project_acceptance",
-                "project_line_length_and_fittings",
+                *(
+                    ["project_line_length_fittings_and_elevation"]
+                    if total_line_hydraulic["missing_physical_inputs"]
+                    else []
+                ),
                 "pressure_drop_acceptance",
                 "material_compatibility_and_corrosion_study",
-                "code_wall_thickness_and_negative_tolerance",
+                "formal_code_wall_clause_and_material_table_acceptance",
+                *(
+                    ["exact_annex_b_material_thickness_temperature_cell"]
+                    if not material_standard_table_route[
+                        "standard_numeric_value_adopted"
+                    ]
+                    else []
+                ),
+                *(
+                    [
+                        "aspen_or_lab_density_and_viscosity_confirmation",
+                        "hydraulic_phase_and_state_confirmation",
+                    ]
+                    if hydraulic_property_inputs["default_fields"]
+                    else []
+                ),
+                *(
+                    ["corrosion_rate_design_life_and_allowance_confirmation"]
+                    if "WARNING" in corrosion_allowance_origin
+                    else []
+                ),
+                *(
+                    ["actual_internal_surface_roughness_confirmation"]
+                    if "WARNING" in hydraulic_roughness_origin
+                    else []
+                ),
+                *(
+                    ["material_temperature_profile_range_resolution"]
+                    if wall_fallback[
+                        "temperature_profile_outside_range"
+                    ]
+                    else []
+                ),
                 "pressure_temperature_rating",
                 *(
                     ["external_pressure_buckling_ovality_and_stiffening"]
@@ -8581,7 +10898,27 @@ def apply_programmatic_pipe_specification(
             source_path = str(PIPE_STANDARD_DB_PATH)
             formula = (
                 "GB/T_17395_verified_metric_dimension_record/"
+                f"{PIPE_INTERNAL_FALLBACK_POLICY_ID}/"
                 "program_preliminary_non_SCH_policy"
+            )
+        elif field_id in {
+            "required_nominal_wall_thickness_mm",
+            "wall_calculation_branch",
+            "allowable_stress_mpa",
+            "mill_negative_tolerance_fraction",
+            "pressure_temperature_screening",
+            "selection_margin_structure",
+            "wall_selection_margin_mm",
+            "hydraulic_diameter_margin_mm",
+            "pressure_series_margin_mpa",
+        }:
+            source_path = (
+                f"source_code:{SCRIPT_PATH.as_posix()}#"
+                f"{PIPE_INTERNAL_FALLBACK_POLICY_ID}"
+            )
+            formula = str(
+                descriptor.get("formula")
+                or PIPE_INTERNAL_FALLBACK_POLICY["wall_formula"]
             )
         elif field_id in {
             "selected_dn",
@@ -8599,7 +10936,11 @@ def apply_programmatic_pipe_specification(
                 "GB/T_1048_verified_PN_series_mapping_only/"
                 "program_screening_threshold"
             )
-        elif field_id == "piping_class_candidate_code":
+        elif field_id in {
+            "piping_class_candidate_code",
+            "piping_class",
+            "piping_class_component_schedule",
+        }:
             source_path = (
                 f"programmatic_pipe_specification:{pipe_specification_sha256}"
             )
@@ -8607,11 +10948,44 @@ def apply_programmatic_pipe_specification(
                 "SELECTOR_RULE/"
                 "PROGRAM_ASSEMBLED_PRELIMINARY_LINE_CLASS"
             )
-        elif field_id == "piping_class":
+        elif field_id in {
+            "material_parameter_ledger",
+            "material_selection_chain",
+            "general_material_selection_rules",
+        }:
             source_path = (
                 f"programmatic_pipe_specification:{pipe_specification_sha256}"
             )
-            formula = "PROJECT_AUTHORITY_REQUIRED/no_program_formal_class"
+            formula = "MATERIAL_SELECTION_AND_PARAMETER_LEDGER"
+        elif field_id == "standard_material_table_route":
+            source_path = str(GBT20801_SOURCE_TABLES_PATH)
+            formula = (
+                "GB/T_20801_1_2025_ANNEX_B_QA_GATED_TABLE_ROUTE"
+            )
+        elif field_id in {
+            "hydraulic_property_input_ledger",
+            "hydraulic_default_parameter_package",
+            "absolute_roughness_mm",
+        }:
+            source_path = (
+                f"source_code:{SCRIPT_PATH.as_posix()}#"
+                f"{PIPE_HYDRAULIC_DEFAULT_POLICY_ID}"
+            )
+            formula = "PHASE_AWARE_HYDRAULIC_DEFAULT_INPUT_POLICY"
+        elif field_id in {
+            "total_line_pressure_drop_kpa",
+            "total_line_hydraulic_branch",
+            "line_length_m",
+            "hydraulic_missing_physical_inputs",
+        }:
+            source_path = (
+                f"source_code:{SCRIPT_PATH.as_posix()}#"
+                f"{PIPE_INTERNAL_FALLBACK_POLICY_ID}"
+            )
+            formula = str(
+                descriptor.get("formula")
+                or "total_line_Darcy_local_static_fallback"
+            )
         elif field_id in {
             "actual_velocity_m_s",
             "reynolds_number",
@@ -8630,11 +11004,7 @@ def apply_programmatic_pipe_specification(
         descriptor_state = str(
             descriptor.get("state") or "PROGRAM_PRELIMINARY_SELECTED"
         )
-        evidence_scope = (
-            "PROJECT_AUTHORITY_GATE"
-            if field_id == "piping_class"
-            else "PROGRAMMATIC_PRELIMINARY_PIPE_SELECTION"
-        )
+        evidence_scope = "PROGRAMMATIC_PRELIMINARY_PIPE_SELECTION"
         chain.append(
             lineage(
                 target_field=field_id,
@@ -8711,11 +11081,82 @@ def apply_programmatic_pipe_model_boundary(
         if isinstance(match_result.get("model_recommendation"), dict)
         else {}
     )
+    synthesized_candidate = False
+    if not model:
+        leading_candidate: dict[str, Any] = {
+            "candidate_id": (
+                "PROGRAMMATIC-PIPE-"
+                + (
+                    specification_sha256[:12]
+                    if specification_sha256
+                    else "UNHASHED"
+                )
+            ),
+            "candidate_name": equipment_type,
+            "recommended_type": equipment_type,
+            "designation": designation,
+            "status": "PRELIMINARY_PROGRAMMATIC_PIPE_ROUTE_SELECTED",
+            "candidate_eligibility": (
+                "IDENTITY_AND_PRELIMINARY_GEOMETRY_ONLY"
+            ),
+            "eligible_for_formal_selection": False,
+            "formal_model": False,
+            "specification": {},
+        }
+        model = {
+            "status": "PIPE_ROUTE_SELECTED_FORMAL_DESIGN_BLOCKED",
+            "recommended_type": equipment_type,
+            "candidates": [leading_candidate],
+            "leading_candidate": leading_candidate,
+            "screening_candidate_count": 1,
+            "formal_ready_candidate_count": 0,
+            "selection_execution": {
+                "status": (
+                    "TYPE_AND_GEOMETRY_SELECTED_PIPE_DESIGN_BLOCKED"
+                ),
+                "execution_scope": (
+                    "PIPE_ROUTE_DN_AND_METRIC_GEOMETRY_SCREENING_ONLY"
+                ),
+                "formal_selection_executed": False,
+            },
+        }
+        match_result["model_recommendation"] = model
+        match_result["underlying_match_status"] = match_result.get("status")
+        match_result["status"] = (
+            "PROVISIONAL_PROGRAMMATIC_PIPE_ROUTE_SELECTED"
+        )
+        synthesized_candidate = True
     leading = (
         model.get("leading_candidate")
         if isinstance(model.get("leading_candidate"), dict)
         else None
     )
+    if leading is None:
+        leading = {
+            "candidate_id": (
+                "PROGRAMMATIC-PIPE-"
+                + (
+                    specification_sha256[:12]
+                    if specification_sha256
+                    else "UNHASHED"
+                )
+            ),
+            "candidate_name": equipment_type,
+            "recommended_type": equipment_type,
+            "designation": designation,
+            "status": "PRELIMINARY_PROGRAMMATIC_PIPE_ROUTE_SELECTED",
+            "specification": {},
+        }
+        model.setdefault("candidates", []).insert(0, leading)
+        model["leading_candidate"] = leading
+        model["screening_candidate_count"] = len(
+            [
+                item
+                for item in model.get("candidates", [])
+                if isinstance(item, dict)
+            ]
+        )
+        synthesized_candidate = True
     if isinstance(leading, dict):
         leading["designation"] = designation
         leading["candidate_name"] = equipment_type
@@ -8729,6 +11170,7 @@ def apply_programmatic_pipe_model_boundary(
         )
         leading["eligible_for_formal_selection"] = False
         leading["formal_model"] = False
+        leading["synthesized_after_input_block"] = synthesized_candidate
         leading["missing_gates"] = list(
             pipe_specification.get("formal_readiness", {}).get(
                 "open_gates",
@@ -8761,13 +11203,27 @@ def apply_programmatic_pipe_model_boundary(
         "selection_basis": (
             "deterministic_programmatic_pipe_specification"
         ),
-        "default_applied": False,
+        "default_applied": bool(
+            pipe_specification.get(
+                "minimum_process_state_placeholder_applied"
+            )
+        ),
         "evidence_class": "J",
         "provisional": True,
         "rule_id": "PIPE_HYDRAULIC_AND_MANUFACTURING_SCREEN_V1",
         "assumption": (
-            "管型、制造路线、DN及公制OD×t由程序完成预筛；正式管道"
-            "等级、产品标准适用性、全线压降、应力和项目审批仍未闭合。"
+            (
+                "Aspen 未给出可用正流量/相态/压力/温度；程序采用登记的"
+                "DN25 最低完整规格占位分支。候选是具体的，但水力与正式"
+                "设计全部未闭合。"
+            )
+            if pipe_specification.get(
+                "minimum_process_state_placeholder_applied"
+            )
+            else (
+                "管型、制造路线、DN及公制OD×t由程序完成预筛；正式管道"
+                "等级、产品标准适用性、全线压降、应力和项目审批仍未闭合。"
+            )
         ),
         "terminal_scope": (
             "IDENTITY_AND_PRELIMINARY_GEOMETRY_ONLY"

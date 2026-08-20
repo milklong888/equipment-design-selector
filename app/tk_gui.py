@@ -17,6 +17,7 @@ except ImportError:  # The normal file picker remains available in source-only e
     COPY = DND_FILES = REFUSE_DROP = TkinterDnD = None
 
 import aspen_pfd
+import aspen_suite
 import derivation_workbench
 import result_presentation
 import llm_bridge
@@ -25,7 +26,7 @@ import user_guide
 
 
 COLORS = {
-    "canvas": "#F1F4F7",
+    "canvas": "#F3F6F8",
     "panel": "#FFFFFF",
     "ink": "#17212B",
     "muted": "#5D6B78",
@@ -35,7 +36,8 @@ COLORS = {
     "safe": "#1F7A55",
     "warn": "#A86713",
     "bad": "#B13A3A",
-    "soft": "#EAF1F4",
+    "soft": "#EAF2F4",
+    "surface_muted": "#F7F9FA",
 }
 
 
@@ -98,12 +100,14 @@ UI_OPTION_LABELS: dict[str, str] = {
     "same_duty_performance_map": "同工况完整性能图",
     "mock": "离线模拟（不联网）",
     "openai": "OpenAI 官方接口",
+    "deepseek": "DeepSeek 官方接口",
     "openai_compatible": "OpenAI 兼容接口",
     "local_openai_compatible": "本机 OpenAI 兼容接口",
     "chat_completions": "Chat Completions（传统兼容）",
     "responses": "Responses（推理模型）",
     "ambiguity_resolution": "模糊项判断",
     "audit": "结果审核",
+    "engineering_choice": "设备型式、材料与零部件受控选择",
     "kg_retrieval_planning": "知识检索规划",
     "semantic_extraction": "语义信息提取",
     "textual_condition_judgment": "文字工况判断",
@@ -430,7 +434,9 @@ class EquipmentDesignTkApp:
         self.last_deterministic_result: dict[str, Any] | None = None
         self.last_manual: dict[str, Any] | None = None
         self.last_source_input: dict[str, Any] | None = None
+        self.last_source_context: dict[str, Any] | None = None
         self.llm_proposal: dict[str, Any] | None = None
+        self.llm_proposal_context: dict[str, Any] | None = None
         self._tested_llm_connection_fingerprint: str | None = None
         self._applied_llm_settings: dict[str, Any] | None = None
         self._applied_llm_settings_fingerprint: str | None = None
@@ -457,6 +463,7 @@ class EquipmentDesignTkApp:
         self._active_pfd_block_id: str | None = None
         self.pfd_parameter_window: tk.Toplevel | None = None
         self.field_vars: dict[str, tk.StringVar] = {}
+        self.field_widgets: dict[str, tk.Widget] = {}
         self.manual_value_cache: dict[str, dict[str, str]] = {}
         self._rendered_selection_id: str | None = None
         self.selection_by_display = {row["display_name"]: row for row in self.catalog["selections"]}
@@ -464,9 +471,11 @@ class EquipmentDesignTkApp:
         self._configure_root()
         self._configure_styles()
         self._build_header()
+        self._build_workflow_strip()
         self._build_workspace()
         self._set_default_selection()
-        self.root.bind("<F1>", lambda _event: self._show_user_guide())
+        self._bind_shortcuts()
+        self._set_workflow_step(1, "选择 Aspen 导入或手动输入，程序不会在选中文件后自动运行。")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _enable_drag_and_drop(self) -> bool:
@@ -489,8 +498,14 @@ class EquipmentDesignTkApp:
             except tk.TclError:
                 pass
         self.root.title("设备设计图谱与脚本")
-        self.root.geometry("1480x900")
-        self.root.minsize(1180, 740)
+        screen_width = max(960, int(self.root.winfo_screenwidth()))
+        screen_height = max(720, int(self.root.winfo_screenheight()))
+        width = min(1480, max(1080, screen_width - 48))
+        height = min(900, max(720, screen_height - 80))
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+        self.root.minsize(min(1100, width), min(720, height))
         self.root.configure(bg=COLORS["canvas"])
         self.root.option_add("*Font", "{Microsoft YaHei UI} 10")
 
@@ -499,9 +514,31 @@ class EquipmentDesignTkApp:
         style.theme_use("clam")
         style.configure("App.TFrame", background=COLORS["canvas"])
         style.configure("Panel.TFrame", background=COLORS["panel"])
+        style.configure(
+            "Panel.TLabelframe",
+            background=COLORS["panel"],
+            bordercolor=COLORS["line"],
+            lightcolor=COLORS["line"],
+            darkcolor=COLORS["line"],
+            borderwidth=1,
+            relief="solid",
+        )
+        style.configure(
+            "Panel.TLabelframe.Label",
+            background=COLORS["panel"],
+            foreground=COLORS["ink"],
+            font=("Microsoft YaHei UI", 10, "bold"),
+        )
         style.configure("Header.TFrame", background=COLORS["ink"])
-        style.configure("HeaderTitle.TLabel", background=COLORS["ink"], foreground="#FFFFFF", font=("Microsoft YaHei UI", 20, "bold"))
+        style.configure("HeaderTitle.TLabel", background=COLORS["ink"], foreground="#FFFFFF", font=("Microsoft YaHei UI", 18, "bold"))
         style.configure("HeaderSub.TLabel", background=COLORS["ink"], foreground="#B9C4CE", font=("Microsoft YaHei UI", 9))
+        style.configure("Workflow.TFrame", background="#E9EFF2")
+        style.configure("WorkflowTitle.TLabel", background="#E9EFF2", foreground=COLORS["ink"], font=("Microsoft YaHei UI", 10, "bold"))
+        style.configure("WorkflowState.TLabel", background="#E9EFF2", foreground=COLORS["muted"], font=("Microsoft YaHei UI", 9))
+        style.configure("WorkflowStep.Pending.TLabel", background="#E9EFF2", foreground="#6F7E89", padding=(9, 6), font=("Microsoft YaHei UI", 9))
+        style.configure("WorkflowStep.Active.TLabel", background=COLORS["accent"], foreground="#FFFFFF", padding=(10, 6), font=("Microsoft YaHei UI", 9, "bold"))
+        style.configure("WorkflowStep.Done.TLabel", background="#DDEDE5", foreground=COLORS["safe"], padding=(9, 6), font=("Microsoft YaHei UI", 9, "bold"))
+        style.configure("WorkflowArrow.TLabel", background="#E9EFF2", foreground="#8A98A3", font=("Microsoft YaHei UI", 11))
         style.configure("Section.TLabel", background=COLORS["panel"], foreground=COLORS["ink"], font=("Microsoft YaHei UI", 14, "bold"))
         style.configure("Body.TLabel", background=COLORS["panel"], foreground=COLORS["muted"])
         style.configure("Field.TLabel", background=COLORS["panel"], foreground=COLORS["ink"])
@@ -510,13 +547,19 @@ class EquipmentDesignTkApp:
         style.configure("RecommendedBadge.TLabel", background="#FFF1D8", foreground="#8A580B", padding=(7, 3), font=("Microsoft YaHei UI", 8))
         style.configure("OptionalBadge.TLabel", background="#E8F1F3", foreground=COLORS["accent_dark"], padding=(7, 3), font=("Microsoft YaHei UI", 8))
         style.configure("AdvancedBadge.TLabel", background="#ECEFF2", foreground=COLORS["muted"], padding=(7, 3), font=("Microsoft YaHei UI", 8))
-        style.configure("Status.TLabel", background="#24323E", foreground="#E7EEF4", padding=(10, 5), font=("Microsoft YaHei UI", 9))
-        style.configure("Header.TButton", background="#24323E", foreground="#E7EEF4", padding=(10, 5), borderwidth=0, font=("Microsoft YaHei UI", 9))
+        style.configure("Status.TLabel", background="#24323E", foreground="#E7EEF4", padding=(9, 5), font=("Microsoft YaHei UI", 9))
+        style.configure("Header.TButton", background="#24323E", foreground="#E7EEF4", padding=(10, 5), borderwidth=0, focuscolor="#79C8D4", focusthickness=2, font=("Microsoft YaHei UI", 9))
         style.map("Header.TButton", background=[("active", "#314454")], foreground=[("active", "#FFFFFF")])
-        style.configure("Primary.TButton", background=COLORS["accent"], foreground="#FFFFFF", padding=(14, 9), borderwidth=0, font=("Microsoft YaHei UI", 10, "bold"))
-        style.map("Primary.TButton", background=[("active", COLORS["accent_dark"]), ("disabled", "#91A0AA")])
-        style.configure("Secondary.TButton", background="#E6EDF1", foreground=COLORS["ink"], padding=(12, 8), borderwidth=0)
-        style.map("Secondary.TButton", background=[("active", "#D5E0E6")])
+        style.configure("Primary.TButton", background=COLORS["accent"], foreground="#FFFFFF", padding=(14, 9), borderwidth=0, focuscolor="#79C8D4", focusthickness=2, font=("Microsoft YaHei UI", 10, "bold"))
+        style.map("Primary.TButton", background=[("active", COLORS["accent_dark"]), ("focus", "#0E6071"), ("disabled", "#91A0AA")])
+        style.configure("Secondary.TButton", background="#E6EDF1", foreground=COLORS["ink"], padding=(12, 8), borderwidth=0, focuscolor=COLORS["accent"], focusthickness=2)
+        style.map("Secondary.TButton", background=[("active", "#D5E0E6"), ("focus", "#DFEAEE")])
+        style.configure("Compact.TButton", background="#F7FAFB", foreground=COLORS["ink"], padding=(10, 6), borderwidth=0, focuscolor=COLORS["accent"], focusthickness=2)
+        style.map(
+            "Compact.TButton",
+            background=[("active", "#DCE9ED"), ("focus", "#E8F2F4"), ("disabled", "#E3E8EB")],
+            foreground=[("disabled", "#87949D")],
+        )
         style.layout(
             "Toggle.TCheckbutton",
             [("Checkbutton.padding", {"sticky": "nswe", "children": [("Checkbutton.label", {"sticky": "nswe"})]})],
@@ -533,26 +576,259 @@ class EquipmentDesignTkApp:
             background=[("active", "#E8F1F3"), ("selected", "#DCECEF")],
             foreground=[("selected", COLORS["accent_dark"])],
         )
-        style.configure("TNotebook", background=COLORS["canvas"], borderwidth=0)
-        style.configure("TNotebook.Tab", padding=(18, 10), font=("Microsoft YaHei UI", 10))
-        style.map("TNotebook.Tab", background=[("selected", COLORS["panel"])], foreground=[("selected", COLORS["accent_dark"])])
-        style.configure("TEntry", padding=6)
-        style.configure("TCombobox", padding=5)
+        style.configure(
+            "TNotebook",
+            background=COLORS["canvas"],
+            bordercolor=COLORS["canvas"],
+            lightcolor=COLORS["canvas"],
+            darkcolor=COLORS["canvas"],
+            borderwidth=0,
+            relief="flat",
+            tabmargins=(0, 0, 0, 0),
+        )
+        style.configure(
+            "TNotebook.Tab",
+            background="#E5EAED",
+            foreground=COLORS["muted"],
+            padding=(16, 9),
+            borderwidth=0,
+            bordercolor="#E5EAED",
+            lightcolor="#E5EAED",
+            darkcolor="#E5EAED",
+            relief="flat",
+            font=("Microsoft YaHei UI", 10),
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", COLORS["panel"]), ("active", "#EEF3F5")],
+            foreground=[("selected", COLORS["accent_dark"]), ("active", COLORS["ink"])],
+            bordercolor=[("selected", COLORS["panel"]), ("active", "#EEF3F5")],
+            lightcolor=[("selected", COLORS["panel"])],
+            darkcolor=[("selected", COLORS["panel"])],
+        )
+        style.configure(
+            "Inner.TNotebook",
+            background=COLORS["panel"],
+            bordercolor=COLORS["panel"],
+            lightcolor=COLORS["panel"],
+            darkcolor=COLORS["panel"],
+            borderwidth=0,
+            relief="flat",
+        )
+        style.configure(
+            "Inner.TNotebook.Tab",
+            background="#EEF2F4",
+            foreground=COLORS["muted"],
+            padding=(13, 8),
+            borderwidth=0,
+            bordercolor="#EEF2F4",
+            lightcolor="#EEF2F4",
+            darkcolor="#EEF2F4",
+            relief="flat",
+            font=("Microsoft YaHei UI", 9),
+        )
+        style.map(
+            "Inner.TNotebook.Tab",
+            background=[("selected", "#DDECEF"), ("active", "#E7EFF2")],
+            foreground=[("selected", COLORS["accent_dark"]), ("active", COLORS["ink"])],
+            bordercolor=[("selected", "#DDECEF"), ("active", "#E7EFF2")],
+            lightcolor=[("selected", "#DDECEF")],
+            darkcolor=[("selected", "#DDECEF")],
+        )
+        style.configure("Treeview", rowheight=28, bordercolor=COLORS["line"], lightcolor=COLORS["line"], darkcolor=COLORS["line"])
+        style.configure("Treeview.Heading", font=("Microsoft YaHei UI", 9, "bold"), padding=(7, 7))
+        style.configure("TEntry", padding=7, fieldbackground="#FFFFFF", bordercolor=COLORS["line"])
+        style.map("TEntry", bordercolor=[("focus", COLORS["accent"])])
+        style.configure("TCombobox", padding=6, fieldbackground="#FFFFFF", bordercolor=COLORS["line"])
+        style.map("TCombobox", bordercolor=[("focus", COLORS["accent"])])
+        style.configure("Horizontal.TProgressbar", background=COLORS["accent"], troughcolor="#D5E0E5")
 
     def _build_header(self) -> None:
-        header = ttk.Frame(self.root, style="Header.TFrame", padding=(26, 18))
+        header = ttk.Frame(self.root, style="Header.TFrame", padding=(22, 11))
         header.pack(fill="x")
+        header.columnconfigure(0, weight=1)
         title = ttk.Frame(header, style="Header.TFrame")
-        title.pack(side="left", fill="x", expand=True)
+        title.grid(row=0, column=0, sticky="w")
         ttk.Label(title, text="设备设计图谱与脚本", style="HeaderTitle.TLabel").pack(anchor="w")
-        ttk.Label(title, text="DETERMINISTIC EQUIPMENT DESIGN · KNOWLEDGE GRAPH · CONTROLLED REVIEW", style="HeaderSub.TLabel").pack(anchor="w", pady=(4, 0))
+        ttk.Label(title, text="确定性选型 · 可追溯公式 · 知识检索 · Agent 受控协同", style="HeaderSub.TLabel").pack(anchor="w", pady=(2, 0))
         status = ttk.Frame(header, style="Header.TFrame")
-        status.pack(side="right")
+        status.grid(row=0, column=1, sticky="e", padx=(16, 0))
+        self.header_status_frame = status
         ttk.Label(status, text=f"规则 {self.catalog.get('rule_version', '—')}", style="Status.TLabel").pack(side="left", padx=4)
-        com_text = "Aspen COM 可选 / 可用" if self.com["available"] else "Aspen COM 可选 / 未检测"
+        com_text = "Aspen COM 可用" if self.com["available"] else "Aspen COM 未连接"
         ttk.Label(status, text=com_text, style="Status.TLabel").pack(side="left", padx=4)
-        ttk.Label(status, text="LLM 可选", style="Status.TLabel").pack(side="left", padx=4)
-        ttk.Button(status, text="使用说明", style="Header.TButton", command=self._show_user_guide).pack(side="left", padx=(4, 0))
+        ttk.Label(status, text="Agent 可选", style="Status.TLabel").pack(side="left", padx=4)
+        help_button = ttk.Button(status, text="使用说明  F1", style="Header.TButton", command=self._show_user_guide)
+        help_button.pack(side="left", padx=(4, 0))
+
+    def _build_workflow_strip(self) -> None:
+        strip = ttk.Frame(self.root, style="Workflow.TFrame", padding=(18, 8))
+        strip.pack(fill="x")
+        strip.columnconfigure(0, weight=1)
+        self.workflow_strip = strip
+        workflow = ttk.Frame(strip, style="Workflow.TFrame")
+        workflow.grid(row=0, column=0, sticky="w")
+        ttk.Label(workflow, text="当前流程", style="WorkflowTitle.TLabel").pack(side="left", padx=(0, 10))
+        self.workflow_step_labels: dict[int, ttk.Label] = {}
+        for index, label in enumerate(("输入", "确定性计算", "审核与调整", "导出"), start=1):
+            step = ttk.Label(
+                workflow,
+                text=f"{index}  {label}",
+                style="WorkflowStep.Pending.TLabel",
+            )
+            step.pack(side="left")
+            self.workflow_step_labels[index] = step
+            if index < 4:
+                ttk.Label(workflow, text="›", style="WorkflowArrow.TLabel").pack(side="left", padx=3)
+        self.workflow_state_var = tk.StringVar(value="就绪")
+        self.workflow_state_label = ttk.Label(
+            strip,
+            textvariable=self.workflow_state_var,
+            style="WorkflowState.TLabel",
+        )
+        self.workflow_state_label.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(5, 0))
+
+        quick = ttk.Frame(strip, style="Workflow.TFrame")
+        quick.grid(row=0, column=1, sticky="e", padx=(16, 0))
+        self.workflow_quick_frame = quick
+        self.activity_progress = ttk.Progressbar(quick, mode="indeterminate", length=64)
+        self.activity_progress.pack(side="left", padx=(0, 7))
+        open_button = ttk.Button(
+            quick,
+            text="导入 Aspen",
+            style="Compact.TButton",
+            command=self._shortcut_open_aspen,
+        )
+        open_button.pack(side="left", padx=2)
+        run_button = ttk.Button(
+            quick,
+            text="运行当前",
+            style="Primary.TButton",
+            command=self._run_current_context,
+        )
+        run_button.pack(side="left", padx=2)
+        self.quick_save_button = ttk.Button(
+            quick,
+            text="保存",
+            style="Compact.TButton",
+            command=self._save_result,
+        )
+        self.quick_save_button.pack(side="left", padx=2)
+        self.quick_save_button.state(["disabled"])
+        self.quick_export_button = ttk.Button(
+            quick,
+            text="导出报告",
+            style="Compact.TButton",
+            command=self._export_report,
+        )
+        self.quick_export_button.pack(side="left", padx=(2, 0))
+        self.quick_export_button.state(["disabled"])
+        self._attach_tooltip(open_button, "选择 Aspen 文件（Ctrl+O）")
+        self._attach_tooltip(run_button, "运行当前入口（Ctrl+Enter）")
+        self._attach_tooltip(self.quick_save_button, "保存机器结果（Ctrl+S）")
+        self._attach_tooltip(self.quick_export_button, "导出可读报告与哈希清单（Ctrl+Shift+S）")
+
+    def _attach_tooltip(self, widget: tk.Widget, text: str) -> None:
+        """Show compact keyboard/help hints without crowding the command bar."""
+
+        state: dict[str, Any] = {"after": None, "window": None}
+
+        def hide(_event: Any = None) -> None:
+            after_id = state.get("after")
+            if after_id is not None:
+                try:
+                    widget.after_cancel(after_id)
+                except tk.TclError:
+                    pass
+                state["after"] = None
+            window = state.get("window")
+            if window is not None:
+                try:
+                    window.destroy()
+                except tk.TclError:
+                    pass
+                state["window"] = None
+
+        def show() -> None:
+            state["after"] = None
+            if not widget.winfo_exists() or state.get("window") is not None:
+                return
+            window = tk.Toplevel(widget)
+            state["window"] = window
+            window.wm_overrideredirect(True)
+            window.wm_geometry(
+                f"+{widget.winfo_rootx()}+{widget.winfo_rooty() + widget.winfo_height() + 7}"
+            )
+            tk.Label(
+                window,
+                text=text,
+                bg="#17212B",
+                fg="#FFFFFF",
+                padx=9,
+                pady=6,
+                relief="flat",
+                font=("Microsoft YaHei UI", 9),
+            ).pack()
+
+        def schedule(_event: Any = None) -> None:
+            hide()
+            state["after"] = widget.after(500, show)
+
+        widget.bind("<Enter>", schedule, add="+")
+        widget.bind("<Leave>", hide, add="+")
+        widget.bind("<ButtonPress>", hide, add="+")
+        widget.bind("<FocusIn>", schedule, add="+")
+        widget.bind("<FocusOut>", hide, add="+")
+
+    def _set_workflow_step(self, step: int, message: str | None = None) -> None:
+        current = max(1, min(4, int(step)))
+        for index, label in self.workflow_step_labels.items():
+            if index < current:
+                style = "WorkflowStep.Done.TLabel"
+            elif index == current:
+                style = "WorkflowStep.Active.TLabel"
+            else:
+                style = "WorkflowStep.Pending.TLabel"
+            label.configure(style=style)
+        if message is not None:
+            self.workflow_state_var.set(message)
+
+    def _bind_shortcuts(self) -> None:
+        self.root.bind("<F1>", lambda _event: self._show_user_guide())
+        self.root.bind("<Control-o>", self._shortcut_open_aspen)
+        self.root.bind("<Control-Return>", self._run_current_context)
+        self.root.bind("<Control-s>", lambda _event: self._save_result())
+        self.root.bind("<Control-Shift-S>", lambda _event: self._export_report())
+        self.root.bind("<Control-f>", self._focus_manual_filter)
+        self.root.bind("<Control-r>", lambda _event: self._recalculate_derivation_equipment())
+        self.root.bind("<Alt-Key-1>", lambda _event: self.tabs.select(self.aspen_tab))
+        self.root.bind("<Alt-Key-2>", lambda _event: self.tabs.select(self.manual_tab))
+        self.root.bind("<Alt-Key-3>", lambda _event: self.tabs.select(self.llm_tab))
+        self.root.bind("<Alt-Key-4>", lambda _event: self.tabs.select(self.knowledge_tab))
+
+    def _shortcut_open_aspen(self, _event: Any = None) -> str:
+        if hasattr(self, "aspen_tab"):
+            self.tabs.select(self.aspen_tab)
+        self._choose_aspen()
+        return "break"
+
+    def _run_current_context(self, _event: Any = None) -> str:
+        selected = self.tabs.select()
+        if selected == str(self.aspen_tab):
+            self._run_aspen()
+        elif selected == str(self.llm_tab):
+            self._run_llm()
+        elif selected == str(self.knowledge_tab):
+            self._search_knowledge()
+        else:
+            self._run_manual()
+        return "break"
+
+    def _focus_manual_filter(self, _event: Any = None) -> str:
+        self.tabs.select(self.manual_tab)
+        self.manual_filter_entry.focus_set()
+        self.manual_filter_entry.selection_range(0, "end")
+        return "break"
 
     def _show_user_guide(self) -> None:
         existing = getattr(self, "guide_window", None)
@@ -606,9 +882,10 @@ class EquipmentDesignTkApp:
 
     def _build_workspace(self) -> None:
         paned = ttk.Panedwindow(self.root, orient="horizontal")
-        paned.pack(fill="both", expand=True, padx=18, pady=18)
-        left = ttk.Frame(paned, style="Panel.TFrame", padding=16)
-        right = ttk.Frame(paned, style="Panel.TFrame", padding=18)
+        paned.pack(fill="both", expand=True, padx=14, pady=14)
+        self.workspace_paned = paned
+        left = ttk.Frame(paned, style="Panel.TFrame", padding=14)
+        right = ttk.Frame(paned, style="Panel.TFrame", padding=16)
         paned.add(left, weight=2)
         paned.add(right, weight=3)
         self.tabs = ttk.Notebook(left)
@@ -618,6 +895,17 @@ class EquipmentDesignTkApp:
         self._build_llm_tab()
         self._build_knowledge_tab()
         self._build_results(right)
+        self.root.after_idle(self._set_initial_workspace_split)
+
+    def _set_initial_workspace_split(self) -> None:
+        """Give inputs and results a useful first-view width; users may still drag it."""
+
+        paned = getattr(self, "workspace_paned", None)
+        if paned is None or not paned.winfo_exists():
+            return
+        width = paned.winfo_width()
+        if width > 700:
+            paned.sashpos(0, max(470, int(width * 0.47)))
 
     def _tab(self) -> ttk.Frame:
         return ttk.Frame(self.tabs, style="Panel.TFrame", padding=18)
@@ -628,8 +916,9 @@ class EquipmentDesignTkApp:
 
     def _build_aspen_tab(self) -> None:
         tab = self._tab()
+        self.aspen_tab = tab
         self.tabs.add(tab, text="01  Aspen 文件")
-        self._intro(tab, "Aspen 文件自动导入", "COM 是可选能力。可用时对源文件做只读复制，在独立子进程中遍历模块、流股、单位、状态和连接，并逐台匹配；不可用时直接选择其他页。")
+        self._intro(tab, "Aspen 文件自动导入", "单个案例和批量队列都使用只读副本、独立 COM 子进程和逐案例证据目录。批量模式严格串行；某个 BKP 失败后会记录原因并继续下一个。")
         file_row = ttk.Frame(tab, style="Panel.TFrame")
         file_row.pack(fill="x", pady=(0, 14))
         self.aspen_path = tk.StringVar()
@@ -659,7 +948,7 @@ class EquipmentDesignTkApp:
             self.aspen_drop_label.dnd_bind("<<DropEnter>>", self._on_aspen_drop_enter)
             self.aspen_drop_label.dnd_bind("<<DropLeave>>", self._on_aspen_drop_leave)
             self.aspen_drop_label.dnd_bind("<<Drop>>", self._on_aspen_drop)
-        ttk.Button(file_row, text="选择文件", style="Secondary.TButton", command=self._choose_aspen).pack(side="right")
+        ttk.Button(file_row, text="选择单个文件", style="Secondary.TButton", command=self._choose_aspen).pack(side="right")
         grid = ttk.Frame(tab, style="Panel.TFrame")
         grid.pack(fill="x")
         grid.columnconfigure(1, weight=1)
@@ -667,6 +956,8 @@ class EquipmentDesignTkApp:
         self.aspen_atmospheric = tk.StringVar(value="")
         self.aspen_timeout = tk.StringVar(value="900")
         self.aspen_run = tk.BooleanVar(value=True)
+        self.aspen_ensure_transport = tk.BooleanVar(value=True)
+        self.aspen_suite_require_clean = tk.BooleanVar(value=False)
         self.aspen_basis_combo = TranslatedCombobox(
             grid,
             textvariable=self.aspen_basis,
@@ -688,15 +979,79 @@ class EquipmentDesignTkApp:
         )
         self._labeled_widget(grid, 2, "COM 运行超时 / s", ttk.Entry(grid, textvariable=self.aspen_timeout))
         ttk.Checkbutton(grid, text="打开后重新运行并采集原始历史证据", variable=self.aspen_run).grid(row=3, column=1, sticky="w", pady=8)
+        ttk.Checkbutton(
+            grid,
+            text="缺少流股黏度时，在隔离副本中请求输运物性并随重跑校验",
+            variable=self.aspen_ensure_transport,
+        ).grid(row=4, column=1, sticky="w", pady=8)
         note = "COM 当前可用，但不影响其他入口。" if self.com["available"] else "未检测到可用 COM；手动输入、LLM 辅助和图谱查询仍可使用。"
-        ttk.Label(tab, text=note, style="Muted.TLabel", wraplength=700).pack(anchor="w", pady=(16, 10))
-        self.aspen_button = ttk.Button(tab, text="自动遍历并匹配", style="Primary.TButton", command=self._run_aspen)
-        self.aspen_button.pack(fill="x", pady=(8, 0))
+        ttk.Label(tab, text=note, style="Muted.TLabel", wraplength=700).pack(anchor="w", pady=(10, 8))
+        action_row = ttk.Frame(tab, style="Panel.TFrame")
+        action_row.pack(fill="x")
+        action_row.columnconfigure(0, weight=1)
+        action_row.columnconfigure(1, weight=1)
+        self.aspen_button = ttk.Button(action_row, text="处理当前单个文件", style="Primary.TButton", command=self._run_aspen)
+        self.aspen_button.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        self.aspen_suite_button = ttk.Button(action_row, text="按队列顺序批量处理", style="Primary.TButton", command=self._run_aspen_suite)
+        self.aspen_suite_button.grid(row=0, column=1, sticky="ew", padx=(5, 0))
+
+        suite_frame = ttk.LabelFrame(tab, text="BKP 批量队列", style="Panel.TLabelframe", padding=8)
+        suite_frame.pack(fill="both", expand=True, pady=(10, 0))
+        suite_toolbar = ttk.Frame(suite_frame, style="Panel.TFrame")
+        suite_toolbar.pack(fill="x", pady=(0, 6))
+        ttk.Button(
+            suite_toolbar,
+            text="添加多个文件",
+            style="Secondary.TButton",
+            command=self._choose_aspen_suite_files,
+        ).pack(side="left")
+        ttk.Button(
+            suite_toolbar,
+            text="导入 JSON 清单",
+            style="Secondary.TButton",
+            command=self._choose_aspen_suite_manifest,
+        ).pack(side="left", padx=6)
+        ttk.Button(
+            suite_toolbar,
+            text="清空",
+            style="Secondary.TButton",
+            command=self._clear_aspen_suite,
+        ).pack(side="left")
+        ttk.Checkbutton(
+            suite_toolbar,
+            text="总报告按“正式流程基础”验收",
+            variable=self.aspen_suite_require_clean,
+        ).pack(side="right")
+        self.aspen_suite_cases: list[dict[str, Any]] = []
+        self.aspen_suite_report: dict[str, Any] = {}
+        self.aspen_suite_tree = ttk.Treeview(
+            suite_frame,
+            columns=("index", "file", "group", "status"),
+            show="headings",
+            height=5,
+            selectmode="browse",
+        )
+        self.aspen_suite_tree.heading("index", text="#")
+        self.aspen_suite_tree.heading("file", text="Aspen 文件")
+        self.aspen_suite_tree.heading("group", text="案例组")
+        self.aspen_suite_tree.heading("status", text="处理/证据状态")
+        self.aspen_suite_tree.column("index", width=38, stretch=False, anchor="center")
+        self.aspen_suite_tree.column("file", width=220, stretch=True)
+        self.aspen_suite_tree.column("group", width=120, stretch=True)
+        self.aspen_suite_tree.column("status", width=170, stretch=True)
+        self.aspen_suite_tree.pack(fill="both", expand=True)
+        self.aspen_suite_tree.bind("<Double-1>", self._open_aspen_suite_case)
+        ttk.Label(
+            suite_frame,
+            text="双击已完成行可载入该案例的设备、管线、PFD 和详细计算链。",
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(5, 0))
         self.aspen_progress = ttk.Label(tab, text="", style="Muted.TLabel")
         self.aspen_progress.pack(anchor="w", pady=8)
 
     def _build_manual_tab(self) -> None:
         tab = self._tab()
+        self.manual_tab = tab
         self.tabs.add(tab, text="02  手动输入")
         self._intro(tab, "用工况和目标条件选设备", "填写入口流股或 Aspen 可导出的物性，再填写要达到的目标条件。算法只推导它真正覆盖的设备参数；材料、结构等不指定时保留为可选推荐或明确缺口。")
         select_frame = ttk.Frame(tab, style="Panel.TFrame")
@@ -706,6 +1061,53 @@ class EquipmentDesignTkApp:
         self.manual_combo = ttk.Combobox(select_frame, textvariable=self.manual_selection, values=list(self.selection_by_display), state="readonly")
         self.manual_combo.pack(fill="x")
         self.manual_combo.bind("<<ComboboxSelected>>", lambda _event: self._render_manual_fields())
+        filter_frame = ttk.Frame(tab, style="Panel.TFrame")
+        filter_frame.pack(fill="x", pady=(0, 10))
+        self.manual_filter_query = tk.StringVar()
+        self.manual_filter_entry = ttk.Entry(
+            filter_frame,
+            textvariable=self.manual_filter_query,
+        )
+        self.manual_filter_entry.pack(side="left", fill="x", expand=True)
+        self.manual_filter_entry.bind(
+            "<KeyRelease>",
+            lambda _event: self._schedule_manual_filter(),
+        )
+        HoverHelp(
+            self.manual_filter_entry,
+            "按字段中文名、字段 ID 或分组筛选。快捷键 Ctrl+F。",
+        )
+        self.manual_view_filter = tk.StringVar(value="all")
+        self.manual_filter_combo = TranslatedCombobox(
+            filter_frame,
+            textvariable=self.manual_view_filter,
+            values=("all", "required", "missing", "changed"),
+            option_labels={
+                "all": "全部默认字段",
+                "required": "只看主计算必填",
+                "missing": "只看待补字段",
+                "changed": "只看已修改",
+            },
+            state="readonly",
+            width=17,
+        )
+        self.manual_filter_combo.pack(side="left", padx=(8, 0))
+        self.manual_filter_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self._render_manual_fields(),
+        )
+        ttk.Button(
+            filter_frame,
+            text="清除筛选",
+            style="Compact.TButton",
+            command=self._clear_manual_filter,
+        ).pack(side="left", padx=(8, 0))
+        self.manual_field_count_var = tk.StringVar(value="")
+        ttk.Label(
+            tab,
+            textvariable=self.manual_field_count_var,
+            style="Muted.TLabel",
+        ).pack(anchor="e", pady=(0, 5))
         guide_row = ttk.Frame(tab, style="Panel.TFrame")
         guide_row.pack(fill="x", pady=(0, 8))
         ttk.Label(
@@ -720,11 +1122,11 @@ class EquipmentDesignTkApp:
             variable=self.manual_advanced,
             command=self._render_manual_fields,
         ).pack(side="right")
-        requirement_bar = tk.Frame(tab, bg="#FFF8E8", padx=11, pady=9)
-        requirement_bar.pack(fill="x", pady=(0, 10))
+        self.manual_requirement_bar = tk.Frame(tab, bg="#FFF8E8", padx=11, pady=9)
+        self.manual_requirement_bar.pack(fill="x", pady=(0, 10))
         self.manual_requirement_summary_var = tk.StringVar(value="正在读取输入分层……")
-        tk.Label(
-            requirement_bar,
+        self.manual_requirement_label = tk.Label(
+            self.manual_requirement_bar,
             textvariable=self.manual_requirement_summary_var,
             bg="#FFF8E8",
             fg="#67490B",
@@ -732,9 +1134,10 @@ class EquipmentDesignTkApp:
             anchor="w",
             wraplength=620,
             font=("Microsoft YaHei UI", 9),
-        ).pack(side="left", fill="x", expand=True)
+        )
+        self.manual_requirement_label.pack(side="left", fill="x", expand=True)
         self.manual_expand_button = ttk.Button(
-            requirement_bar,
+            self.manual_requirement_bar,
             text="展开候选/证据项",
             style="Secondary.TButton",
             command=self._toggle_manual_advanced,
@@ -755,6 +1158,7 @@ class EquipmentDesignTkApp:
 
     def _build_llm_tab(self) -> None:
         tab = self._tab()
+        self.llm_tab = tab
         self.tabs.add(tab, text="03  Agent 协同")
         self._intro(
             tab,
@@ -764,7 +1168,11 @@ class EquipmentDesignTkApp:
         grid = ttk.Frame(tab, style="Panel.TFrame")
         grid.pack(fill="x")
         grid.columnconfigure(1, weight=1)
-        provider_ids = [item["id"] for item in self.llm_provider_registry.get("providers", [])]
+        provider_ids = [
+            item["id"]
+            for item in self.llm_provider_registry.get("providers", [])
+            if item.get("id") != "mock"
+        ]
         self.llm_enabled = tk.BooleanVar(value=True)
         self.llm_knowledge_enabled = tk.BooleanVar(value=True)
         self.llm_provider = tk.StringVar(value="openai_compatible")
@@ -779,7 +1187,7 @@ class EquipmentDesignTkApp:
             value=os.environ.get("EQUIPMENT_DESIGN_LLM_REASONING_EFFORT", "medium")
         )
         self.llm_disable_response_storage = tk.BooleanVar(value=True)
-        self.llm_injection_point = tk.StringVar(value="audit")
+        self.llm_injection_point = tk.StringVar(value="engineering_choice")
         self.llm_context_scope = tk.StringVar(value="minimum")
         provider = TranslatedCombobox(
             grid,
@@ -790,7 +1198,8 @@ class EquipmentDesignTkApp:
         self.llm_provider_combo = provider
         provider.bind("<<ComboboxSelected>>", lambda _event: self._sync_llm_provider())
         self._labeled_widget(grid, 0, "服务接口", provider)
-        self._labeled_widget(grid, 1, "API Base URL", ttk.Entry(grid, textvariable=self.llm_base))
+        self.llm_base_entry = ttk.Entry(grid, textvariable=self.llm_base)
+        self._labeled_widget(grid, 1, "API Base URL", self.llm_base_entry)
         self._labeled_widget(grid, 2, "模型 ID", ttk.Entry(grid, textvariable=self.llm_model))
         self._labeled_widget(
             grid,
@@ -890,7 +1299,8 @@ class EquipmentDesignTkApp:
         ttk.Label(
             tab,
             text=(
-                "模型只可使用已登记条件、补算配方和候选引用；数值、单位、压力基准、证据与型号状态由程序锁定。"
+                "自定义 URL 请选择“OpenAI 兼容接口”；官方接口地址固定。模型只可使用已登记条件、"
+                "补算配方和候选引用；数值、单位、压力基准、证据与型号状态由程序锁定。"
             ),
             style="Muted.TLabel",
             wraplength=720,
@@ -952,6 +1362,21 @@ class EquipmentDesignTkApp:
         )
         if isinstance(definition, dict):
             self.llm_base.set(str(definition.get("default_base_url", self.llm_base.get())))
+            if selected in {"openai", "deepseek"}:
+                self.llm_base_entry.state(["disabled"])
+            else:
+                self.llm_base_entry.state(["!disabled"])
+            default_model = str(definition.get("default_model_id") or "").strip()
+            if default_model:
+                self.llm_model.set(default_model)
+            default_wire_api = str(definition.get("default_wire_api") or "").strip()
+            if default_wire_api:
+                self.llm_wire_api.set(default_wire_api)
+            default_reasoning_effort = str(
+                definition.get("default_reasoning_effort") or ""
+            ).strip()
+            if default_reasoning_effort:
+                self.llm_reasoning_effort.set(default_reasoning_effort)
 
     @staticmethod
     def _llm_settings_sha256(value: Mapping[str, Any]) -> str:
@@ -959,16 +1384,18 @@ class EquipmentDesignTkApp:
         return hashlib.sha256(payload).hexdigest().upper()
 
     def _llm_connection_config(self) -> dict[str, Any]:
+        enabled = bool(self.llm_enabled.get())
+        provider = self.llm_provider.get().strip()
         return {
-            "enabled": bool(self.llm_enabled.get()),
-            "provider": self.llm_provider.get().strip(),
+            "enabled": enabled,
+            "provider": provider,
             "base_url": self.llm_base.get().strip(),
             "model": self.llm_model.get().strip(),
             "timeout_s": self.llm_timeout.get().strip(),
             "wire_api": self.llm_wire_api.get().strip(),
             "reasoning_effort": self.llm_reasoning_effort.get().strip(),
             "disable_response_storage": bool(self.llm_disable_response_storage.get()),
-            "api_key": self.llm_key.get(),
+            "api_key": self.llm_key.get() if enabled and provider != "mock" else "",
         }
 
     def _collect_llm_settings(self) -> dict[str, Any]:
@@ -1039,6 +1466,10 @@ class EquipmentDesignTkApp:
         def done(response: dict[str, Any]) -> None:
             if connection_fingerprint != self._llm_settings_sha256(self._llm_connection_config()):
                 self.llm_connection_state.set("连接状态：测试期间设置已改变；测试结果已作废")
+                self._set_workflow_step(
+                    3 if self.last_result else 1,
+                    "模型设置已改变；请按当前设置重新测试。",
+                )
                 return
             value = response.get("value", {}) if isinstance(response.get("value"), Mapping) else {}
             connected = bool(response.get("ok")) and value.get("status") == "CONNECTED"
@@ -1046,12 +1477,20 @@ class EquipmentDesignTkApp:
                 self._tested_llm_connection_fingerprint = None
                 detail = str(response.get("error") or value.get("message") or "未知错误")
                 self.llm_connection_state.set(f"连接状态：失败 · {detail}")
+                self._set_workflow_step(
+                    3 if self.last_result else 1,
+                    "模型连接测试失败；确定性功能不受影响。",
+                )
                 messagebox.showerror("连接测试失败", detail, parent=self.root)
                 return
             self._tested_llm_connection_fingerprint = connection_fingerprint
             self.llm_apply_settings_button.state(["!disabled"])
             self.llm_connection_state.set(
                 f"连接状态：成功 · {value.get('provider', config['provider'])} / {value.get('model_id', config['model'])}；等待应用设置"
+            )
+            self._set_workflow_step(
+                3 if self.last_result else 1,
+                "模型连接已验证；应用设置后才能开始 Agent 协同。",
             )
             messagebox.showinfo("连接测试成功", value.get("message", "连接成功，模型可调用。"), parent=self.root)
 
@@ -1060,6 +1499,7 @@ class EquipmentDesignTkApp:
             "测试模型连接中…",
             lambda: self.api.test_llm_connection(config),
             done,
+            workflow_step=3 if self.last_result else 1,
         )
 
     def _apply_llm_settings(self) -> None:
@@ -1080,6 +1520,7 @@ class EquipmentDesignTkApp:
 
     def _build_knowledge_tab(self) -> None:
         tab = self._tab()
+        self.knowledge_tab = tab
         self.tabs.add(tab, text="KG  知识图谱")
         self._intro(tab, "知识图谱与 Skill 入口", "先从目录选择设备族和字段，不需要记 canonical 名称；也可以直接输入自然语言。工作区优先用向量索引，独立 EXE 使用随包图谱。")
         catalog_frame = ttk.Frame(tab, style="Panel.TFrame")
@@ -1263,10 +1704,15 @@ class EquipmentDesignTkApp:
 
     def _build_results(self, parent: ttk.Frame) -> None:
         ttk.Label(parent, text="匹配与推导结果", style="Section.TLabel").pack(anchor="w")
-        ttk.Label(parent, text="DETERMINISTIC RESULT", style="Muted.TLabel").pack(anchor="w", pady=(2, 14))
+        ttk.Label(
+            parent,
+            text="程序分支、输入来源、公式链和待闭合项均随结果保留",
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(2, 14))
         summary = ttk.Frame(parent, style="Panel.TFrame")
         summary.pack(fill="x")
         self.summary_vars: dict[str, tk.StringVar] = {}
+        self.summary_value_labels: dict[str, tk.Label] = {}
         for column, label in enumerate(("状态", "设备族", "型号状态", "待闭合")):
             cell = tk.Frame(summary, bg="#F5F8FA", highlightbackground=COLORS["line"], highlightthickness=1, padx=9, pady=8)
             cell.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 4, 0))
@@ -1274,7 +1720,9 @@ class EquipmentDesignTkApp:
             tk.Label(cell, text=label, bg="#F5F8FA", fg=COLORS["muted"], font=("Microsoft YaHei UI", 8)).pack(anchor="w")
             variable = tk.StringVar(value="—")
             self.summary_vars[label] = variable
-            tk.Label(cell, textvariable=variable, bg="#F5F8FA", fg=COLORS["ink"], font=("Microsoft YaHei UI", 10, "bold"), wraplength=105, justify="left").pack(anchor="w", pady=(4, 0))
+            value_label = tk.Label(cell, textvariable=variable, bg="#F5F8FA", fg=COLORS["ink"], font=("Microsoft YaHei UI", 10, "bold"), wraplength=105, justify="left")
+            value_label.pack(anchor="w", pady=(4, 0))
+            self.summary_value_labels[label] = value_label
         ttk.Label(parent, text="多选时保留共同上位设备族 / 型式与候选集；证据唯一闭合后才下钻。", style="Muted.TLabel", wraplength=500).pack(anchor="w", pady=(12, 12))
         device_row = ttk.Frame(parent, style="Panel.TFrame")
         device_row.pack(fill="x", pady=(0, 8))
@@ -1285,35 +1733,71 @@ class EquipmentDesignTkApp:
         self.result_device_combo.bind("<<ComboboxSelected>>", lambda _event: self._render_selected_presentation())
         self.result_tabs = ttk.Notebook(parent)
         self.result_tabs.pack(fill="both", expand=True, pady=(6, 0))
+
         pfd_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
+        selection_group = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
+        calculation_group = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
+        agent_group = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
+
+        self.selection_tabs = ttk.Notebook(selection_group, style="Inner.TNotebook")
+        self.selection_tabs.pack(fill="both", expand=True)
+        self.calculation_tabs = ttk.Notebook(calculation_group, style="Inner.TNotebook")
+        self.calculation_tabs.pack(fill="both", expand=True)
+        self.agent_result_tabs = ttk.Notebook(agent_group, style="Inner.TNotebook")
+        self.agent_result_tabs.pack(fill="both", expand=True)
+
         derivation_panel = ttk.Frame(
-            self.result_tabs,
+            self.calculation_tabs,
             style="Panel.TFrame",
             padding=1,
         )
-        customer_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
-        parameter_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
-        candidate_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
-        issue_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
-        equation_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
-        organized_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
-        raw_panel = ttk.Frame(self.result_tabs, style="Panel.TFrame", padding=1)
+        customer_panel = ttk.Frame(self.selection_tabs, style="Panel.TFrame", padding=1)
+        branch_panel = ttk.Frame(self.selection_tabs, style="Panel.TFrame", padding=1)
+        parameter_panel = ttk.Frame(self.selection_tabs, style="Panel.TFrame", padding=1)
+        candidate_panel = ttk.Frame(self.selection_tabs, style="Panel.TFrame", padding=1)
+        issue_panel = ttk.Frame(self.calculation_tabs, style="Panel.TFrame", padding=1)
+        equation_panel = ttk.Frame(self.calculation_tabs, style="Panel.TFrame", padding=1)
+        llm_result_panel = ttk.Frame(self.agent_result_tabs, style="Panel.TFrame", padding=1)
+        organized_panel = ttk.Frame(self.agent_result_tabs, style="Panel.TFrame", padding=1)
+        raw_panel = ttk.Frame(self.agent_result_tabs, style="Panel.TFrame", padding=1)
         self.pfd_panel = pfd_panel
+        self.customer_panel = customer_panel
+        self.branch_panel = branch_panel
         self.derivation_panel = derivation_panel
         self.parameter_panel = parameter_panel
+        self.candidate_panel = candidate_panel
         self.issue_panel = issue_panel
-        self.result_tabs.add(pfd_panel, text="PFD 流程图")
-        self.result_tabs.add(
-            derivation_panel,
-            text="推导流程（可修改）",
-        )
-        self.result_tabs.add(customer_panel, text="客户交付")
-        self.result_tabs.add(parameter_panel, text="参数卡")
-        self.result_tabs.add(candidate_panel, text="候选型号")
-        self.result_tabs.add(issue_panel, text="校核与缺口")
-        self.result_tabs.add(equation_panel, text="公式链")
-        self.result_tabs.add(organized_panel, text="Agent 组织答案")
-        self.result_tabs.add(raw_panel, text="机器 JSON")
+        self.equation_panel = equation_panel
+        self.llm_result_panel = llm_result_panel
+        self.organized_panel = organized_panel
+        self.raw_panel = raw_panel
+        self.result_tabs.add(pfd_panel, text="1  流程")
+        self.result_tabs.add(selection_group, text="2  选型结果")
+        self.result_tabs.add(calculation_group, text="3  计算与校核")
+        self.result_tabs.add(agent_group, text="4  Agent 与数据")
+        self.selection_tabs.add(customer_panel, text="客户交付")
+        self.selection_tabs.add(branch_panel, text="分支选择")
+        self.selection_tabs.add(parameter_panel, text="参数卡")
+        self.selection_tabs.add(candidate_panel, text="候选型号")
+        self.calculation_tabs.add(derivation_panel, text="推导与调整")
+        self.calculation_tabs.add(issue_panel, text="校核与缺口")
+        self.calculation_tabs.add(equation_panel, text="公式链")
+        self.agent_result_tabs.add(llm_result_panel, text="大模型调控")
+        self.agent_result_tabs.add(organized_panel, text="Agent 组织答案")
+        self.agent_result_tabs.add(raw_panel, text="机器 JSON")
+        self._result_panel_locations = {
+            str(pfd_panel): (pfd_panel, None),
+            str(customer_panel): (selection_group, self.selection_tabs),
+            str(branch_panel): (selection_group, self.selection_tabs),
+            str(parameter_panel): (selection_group, self.selection_tabs),
+            str(candidate_panel): (selection_group, self.selection_tabs),
+            str(derivation_panel): (calculation_group, self.calculation_tabs),
+            str(issue_panel): (calculation_group, self.calculation_tabs),
+            str(equation_panel): (calculation_group, self.calculation_tabs),
+            str(llm_result_panel): (agent_group, self.agent_result_tabs),
+            str(organized_panel): (agent_group, self.agent_result_tabs),
+            str(raw_panel): (agent_group, self.agent_result_tabs),
+        }
 
         pfd_toolbar = ttk.Frame(pfd_panel, style="Panel.TFrame", padding=(8, 7))
         pfd_toolbar.pack(fill="x")
@@ -1334,7 +1818,7 @@ class EquipmentDesignTkApp:
         ttk.Label(pfd_toolbar, textvariable=self.pfd_status_var, style="Muted.TLabel").pack(side="right")
         self.pfd_view = pfd_canvas.PFDCanvasView(
             pfd_panel,
-            on_block_open=self._open_pfd_block,
+            on_block_open=self._open_pfd_block_from_canvas,
             on_block_menu=self._show_pfd_block_menu,
             on_stream_open=self._open_pfd_stream,
             on_stream_menu=self._show_pfd_stream_menu,
@@ -1556,6 +2040,11 @@ class EquipmentDesignTkApp:
         self.derivation_detail_text.configure(state="disabled")
 
         customer_columns = ("section", "field", "value", "unit", "state", "gate", "profile")
+        ttk.Label(
+            customer_panel,
+            text="横向拖动可查看全部列；双击任意行可阅读并复制完整值。",
+            style="Muted.TLabel",
+        ).pack(fill="x", padx=8, pady=(8, 5))
         self.customer_tree = ttk.Treeview(customer_panel, columns=customer_columns, show="headings", height=18)
         customer_headings = {
             "section": "分区", "field": "字段", "value": "值", "unit": "单位",
@@ -1571,18 +2060,93 @@ class EquipmentDesignTkApp:
         customer_y.pack(side="right", fill="y")
         customer_x.pack(side="bottom", fill="x")
         self.customer_tree.pack(side="left", fill="both", expand=True)
+        self._bind_tree_row_details(self.customer_tree, "客户交付字段")
+
+        branch_notice = ttk.Label(
+            branch_panel,
+            text=(
+                "这里显示程序实际选了什么、读取了哪些条件、走了哪个分支、"
+                "哪些分支被排除或因条件不足保持待核；连接口小部件也逐项列出。"
+            ),
+            style="Muted.TLabel",
+            wraplength=820,
+        )
+        branch_notice.pack(anchor="w", padx=10, pady=(9, 6))
+        self.branch_output_text = tk.Text(
+            branch_panel,
+            height=18,
+            wrap="word",
+            bg="#F8FAFB",
+            fg=COLORS["ink"],
+            relief="solid",
+            borderwidth=1,
+            font=("Microsoft YaHei UI", 9),
+            padx=12,
+            pady=10,
+        )
+        branch_y = ttk.Scrollbar(
+            branch_panel,
+            orient="vertical",
+            command=self.branch_output_text.yview,
+        )
+        self.branch_output_text.configure(yscrollcommand=branch_y.set)
+        branch_y.pack(side="right", fill="y")
+        self.branch_output_text.pack(
+            side="left", fill="both", expand=True, padx=(8, 0), pady=(0, 8)
+        )
+        self.branch_output_text.insert(
+            "1.0", "运行后显示自然语言分支选择和部件选择账本。"
+        )
+        self.branch_output_text.configure(state="disabled")
+
+        llm_notice = ttk.Label(
+            llm_result_panel,
+            text=(
+                "这里单独披露大模型的条件判断、补值/分支建议、程序校验结果、"
+                "实际带入重算的内容和失败回退；没有调用时会明确写“未调用”。"
+            ),
+            style="Muted.TLabel",
+            wraplength=820,
+        )
+        llm_notice.pack(anchor="w", padx=10, pady=(9, 6))
+        self.llm_result_text = tk.Text(
+            llm_result_panel,
+            height=18,
+            wrap="word",
+            bg="#EEF8FB",
+            fg=COLORS["ink"],
+            relief="solid",
+            borderwidth=1,
+            font=("Microsoft YaHei UI", 9),
+            padx=12,
+            pady=10,
+        )
+        llm_y = ttk.Scrollbar(
+            llm_result_panel,
+            orient="vertical",
+            command=self.llm_result_text.yview,
+        )
+        self.llm_result_text.configure(yscrollcommand=llm_y.set)
+        llm_y.pack(side="right", fill="y")
+        self.llm_result_text.pack(
+            side="left", fill="both", expand=True, padx=(8, 0), pady=(0, 8)
+        )
+        self.llm_result_text.insert(
+            "1.0", "本次大模型调控结果会显示在这里。"
+        )
+        self.llm_result_text.configure(state="disabled")
 
         parameter_columns = ("group", "parameter", "symbol", "value", "unit", "source", "state")
         parameter_toolbar = ttk.Frame(parameter_panel, style="Panel.TFrame", padding=(8, 7))
         parameter_toolbar.pack(fill="x")
         ttk.Label(
             parameter_toolbar,
-            text="PFD 设备补录只写独立参数层，不改 Aspen 源文件；重算后仍按证据门停在相应状态。",
+            text="PFD 左键会打开预填参数；修改只写独立参数层，不改 Aspen 源文件，重算仍受证据门约束。",
             style="Muted.TLabel",
         ).pack(side="left", fill="x", expand=True)
         self.pfd_parameter_button = ttk.Button(
             parameter_toolbar,
-            text="补充/修改本设备参数并重算",
+            text="编辑预填参数并重算",
             style="Secondary.TButton",
             command=lambda: self._open_pfd_parameter_editor(self._active_pfd_block_id or ""),
         )
@@ -1603,6 +2167,7 @@ class EquipmentDesignTkApp:
         parameter_y.pack(side="right", fill="y")
         parameter_x.pack(side="bottom", fill="x")
         self.parameter_tree.pack(side="left", fill="both", expand=True)
+        self._bind_tree_row_details(self.parameter_tree, "参数卡字段")
 
         candidate_columns = ("rank", "kind", "designation", "status", "score", "predicates", "missing")
         self.candidate_tree = ttk.Treeview(candidate_panel, columns=candidate_columns, show="headings", height=18)
@@ -1620,6 +2185,7 @@ class EquipmentDesignTkApp:
         candidate_y.pack(side="right", fill="y")
         candidate_x.pack(side="bottom", fill="x")
         self.candidate_tree.pack(side="left", fill="both", expand=True)
+        self._bind_tree_row_details(self.candidate_tree, "候选型号")
 
         self.issue_text = tk.Text(issue_panel, height=18, wrap="word", bg="#F8FAFB", fg=COLORS["ink"], relief="solid", borderwidth=1, font=("Microsoft YaHei UI", 9), padx=12, pady=10)
         issue_scroll = ttk.Scrollbar(issue_panel, orient="vertical", command=self.issue_text.yview)
@@ -1660,8 +2226,8 @@ class EquipmentDesignTkApp:
         organized_notice = ttk.Label(
             organized_panel,
             text=(
-                "固定顺序：结论 → 计算 → 候选/修改方案 → 强制警告 → "
-                "待补证据 → 下一步。接入大模型后只能整理表达，不能改程序事实。"
+                "固定顺序：基本信息 → 分支选择与大模型调控 → 详细计算链条 → "
+                "候选/修改方案 → 强制警告 → 待补证据 → 下一步。"
             ),
             style="Muted.TLabel",
             wraplength=780,
@@ -1718,6 +2284,128 @@ class EquipmentDesignTkApp:
         self.open_button.state(["disabled"])
         self.status_var = tk.StringVar(value="就绪")
         ttk.Label(actions, textvariable=self.status_var, style="Muted.TLabel").pack(side="right")
+
+    def _select_result_panel(self, panel: tk.Widget) -> None:
+        location = self._result_panel_locations.get(str(panel))
+        if location is None:
+            return
+        top_level, inner = location
+        self.result_tabs.select(top_level)
+        if inner is not None:
+            inner.select(panel)
+
+    def _bind_tree_row_details(self, tree: ttk.Treeview, title: str) -> None:
+        tree.bind(
+            "<Double-1>",
+            lambda _event: self._show_tree_row_details(tree, title),
+            add="+",
+        )
+        tree.bind(
+            "<Return>",
+            lambda _event: self._show_tree_row_details(tree, title),
+            add="+",
+        )
+
+    def _show_tree_row_details(self, tree: ttk.Treeview, title: str) -> str:
+        selected = tree.selection()
+        if not selected:
+            return "break"
+        item = tree.item(selected[0])
+        values = list(item.get("values") or [])
+        columns = list(tree.cget("columns"))
+        pairs: list[tuple[str, str]] = []
+        for index, column in enumerate(columns):
+            heading = str(tree.heading(column, "text") or column)
+            value = str(values[index]) if index < len(values) else "—"
+            pairs.append((heading, value or "—"))
+        detail = "\n\n".join(f"{heading}\n{value}" for heading, value in pairs)
+
+        existing = getattr(self, "tree_detail_window", None)
+        if existing is not None and existing.winfo_exists():
+            existing.destroy()
+        window = tk.Toplevel(self.root)
+        self.tree_detail_window = window
+        window.title(title)
+        window.geometry("660x480")
+        window.minsize(520, 360)
+        window.configure(bg=COLORS["canvas"])
+        window.transient(self.root)
+
+        heading_frame = ttk.Frame(
+            window,
+            style="Header.TFrame",
+            padding=(20, 12),
+        )
+        heading_frame.pack(fill="x")
+        ttk.Label(
+            heading_frame,
+            text=title,
+            style="HeaderTitle.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            heading_frame,
+            text="完整值只读展示；复制不会修改程序结果。",
+            style="HeaderSub.TLabel",
+        ).pack(anchor="w", pady=(2, 0))
+
+        body = ttk.Frame(
+            window,
+            style="Panel.TFrame",
+            padding=(16, 14),
+        )
+        body.pack(fill="both", expand=True, padx=14, pady=(14, 8))
+        scroll = ttk.Scrollbar(body, orient="vertical")
+        text = tk.Text(
+            body,
+            wrap="word",
+            yscrollcommand=scroll.set,
+            bg=COLORS["panel"],
+            fg=COLORS["ink"],
+            relief="flat",
+            borderwidth=0,
+            padx=8,
+            pady=6,
+            spacing3=4,
+            font=("Microsoft YaHei UI", 10),
+        )
+        scroll.configure(command=text.yview)
+        scroll.pack(side="right", fill="y")
+        text.pack(side="left", fill="both", expand=True)
+        for index, (field_name, value) in enumerate(pairs):
+            text.insert("end", field_name + "\n", "field")
+            text.insert("end", value + ("\n\n" if index < len(pairs) - 1 else ""))
+        text.tag_configure(
+            "field",
+            foreground=COLORS["accent_dark"],
+            font=("Microsoft YaHei UI", 9, "bold"),
+        )
+        text.configure(state="disabled")
+
+        footer = ttk.Frame(
+            window,
+            style="App.TFrame",
+            padding=(14, 2, 14, 12),
+        )
+        footer.pack(fill="x")
+
+        def copy_all() -> None:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(detail)
+
+        ttk.Button(
+            footer,
+            text="复制全部",
+            style="Secondary.TButton",
+            command=copy_all,
+        ).pack(side="left")
+        ttk.Button(
+            footer,
+            text="关闭",
+            style="Primary.TButton",
+            command=window.destroy,
+        ).pack(side="right")
+        window.bind("<Escape>", lambda _event: window.destroy())
+        return "break"
 
     @staticmethod
     def _labeled_widget(parent: ttk.Frame, row: int, label: str, widget: tk.Widget) -> None:
@@ -1779,6 +2467,24 @@ class EquipmentDesignTkApp:
             lines.append("通常是输出：只有已有同工况权威结果时才在“高级项”里填写并用于交叉核对。")
         return "\n".join(lines)
 
+    def _schedule_manual_filter(self) -> None:
+        previous = getattr(self, "_manual_filter_after_id", None)
+        if previous is not None:
+            try:
+                self.root.after_cancel(previous)
+            except (tk.TclError, ValueError):
+                pass
+        self._manual_filter_after_id = self.root.after(
+            160,
+            self._render_manual_fields,
+        )
+
+    def _clear_manual_filter(self) -> None:
+        self.manual_filter_query.set("")
+        self.manual_view_filter.set("all")
+        self._render_manual_fields()
+        self.manual_filter_entry.focus_set()
+
     def _toggle_manual_advanced(self) -> None:
         self.manual_advanced.set(not self.manual_advanced.get())
         self._render_manual_fields()
@@ -1815,6 +2521,14 @@ class EquipmentDesignTkApp:
         gate = str(evidence.get("gate") or "同设备正式计算、软件或厂家证据及独立审核")
         evidence_text = "正式证据必需（不影响基础计算）：" + gate
         self.manual_requirement_summary_var.set("\n".join((primary_text, candidate_text, evidence_text)))
+        if primary_missing:
+            bar_bg, bar_fg = "#FCE8E6", "#8A2E2E"
+        elif candidate_gaps:
+            bar_bg, bar_fg = "#FFF4D6", "#6D4B0B"
+        else:
+            bar_bg, bar_fg = "#E4F1E9", "#1F6548"
+        self.manual_requirement_bar.configure(bg=bar_bg)
+        self.manual_requirement_label.configure(bg=bar_bg, fg=bar_fg)
         self.manual_expand_button.configure(
             text="收起高级项" if self.manual_advanced.get() else "展开候选/证据项"
         )
@@ -1824,6 +2538,7 @@ class EquipmentDesignTkApp:
         for child in self.field_frame.winfo_children():
             child.destroy()
         self.field_vars = {}
+        self.field_widgets = {}
         selection = self._selection()
         selection_id = str(selection["selection_id"])
         self._rendered_selection_id = selection_id
@@ -1844,12 +2559,52 @@ class EquipmentDesignTkApp:
             "正式证据（正式定型必需，基础计算可选）": 8,
         }
         indexed_fields = list(enumerate(selection.get("fields", [])))
-        visible_fields = [
+        base_visible_fields = [
             (index, field)
             for index, field in indexed_fields
             if field.get("manual_default_visible") or self.manual_advanced.get() and field.get("manual_role") in {"known_result", "advanced_evidence", "advanced_design_input"}
         ]
+        view_filter = self.manual_view_filter.get() if hasattr(self, "manual_view_filter") else "all"
+        query = self.manual_filter_query.get().strip().casefold() if hasattr(self, "manual_filter_query") else ""
+
+        def field_value(field: Mapping[str, Any]) -> str:
+            return str(cached.get(str(field["name"]), field.get("default", ""))).strip()
+
+        def include_by_view(field: Mapping[str, Any]) -> bool:
+            if view_filter == "required":
+                return bool(field.get("primary_calculation_required"))
+            if view_filter == "missing":
+                expected = bool(
+                    field.get("primary_calculation_required")
+                    or field.get("candidate_closure_required")
+                    or field.get("formal_evidence_input")
+                )
+                return expected and field_value(field) == ""
+            if view_filter == "changed":
+                value = field_value(field)
+                default = str(field.get("default", "")).strip()
+                return value != "" and value != default
+            return True
+
+        def include_by_query(field: Mapping[str, Any]) -> bool:
+            if not query:
+                return True
+            haystack = " ".join(
+                str(field.get(key) or "")
+                for key in ("label", "name", "manual_group_title", "group_title", "unit")
+            ).casefold()
+            return query in haystack
+
+        visible_fields = [
+            (index, field)
+            for index, field in base_visible_fields
+            if include_by_view(field) and include_by_query(field)
+        ]
         visible_fields.sort(key=lambda item: (group_order.get(str(item[1].get("manual_group_title", "其他可选输入")), 99), item[0]))
+        if hasattr(self, "manual_field_count_var"):
+            self.manual_field_count_var.set(
+                f"当前显示 {len(visible_fields)} / {len(base_visible_fields)} 个字段"
+            )
         group_notes = {
             "工艺任务": "用于识别设备和服务，可以留空的项目不会阻断计算。",
             "入口流股 / Aspen 物性": "优先填 Aspen 或可靠工艺数据；软件不会用设备公式猜物性。",
@@ -1888,6 +2643,7 @@ class EquipmentDesignTkApp:
             else:
                 widget = ttk.Entry(self.field_frame, textvariable=variable)
             widget.grid(row=grid_row, column=1, sticky="ew", pady=6)
+            self.field_widgets[str(field["name"])] = widget
             role = str(field.get("manual_role", "optional_input"))
             if field.get("primary_calculation_required"):
                 badge_text, badge_style = "主计算必填", "RequiredBadge.TLabel"
@@ -1921,8 +2677,35 @@ class EquipmentDesignTkApp:
             help_control.grid(row=grid_row, column=3, sticky="e", padx=(4, 0), pady=6)
             HoverHelp(help_control, self._manual_help_text(field))
             grid_row += 1
+        if not visible_fields:
+            ttk.Label(
+                self.field_frame,
+                text="没有符合当前筛选条件的字段。可清除筛选或展开高级项。",
+                style="Muted.TLabel",
+            ).grid(row=0, column=0, columnspan=4, sticky="w", pady=18)
         self._update_manual_requirement_summary()
         self.field_canvas.yview_moveto(0)
+
+    def _focus_first_missing_manual_field(self) -> str | None:
+        selection = self._selection()
+        values = self._collect_manual()
+        status = self.core.manual_requirement_status(selection, values)
+        missing = status.get("primary_calculation", {}).get("missing_fields", [])
+        if not missing:
+            return None
+        first = missing[0] if isinstance(missing[0], Mapping) else {}
+        field_name = str(first.get("name") or first.get("field_id") or "")
+        if field_name not in self.field_widgets:
+            self.manual_view_filter.set("required")
+            self.manual_filter_query.set("")
+            self._render_manual_fields()
+        widget = self.field_widgets.get(field_name)
+        if widget is not None:
+            self.root.update_idletasks()
+            height = max(1, self.field_frame.winfo_height())
+            self.field_canvas.yview_moveto(max(0.0, min(1.0, widget.winfo_y() / height)))
+            widget.focus_set()
+        return str(first.get("label") or field_name or "必填字段")
 
     def _collect_manual(self) -> dict[str, Any]:
         self._stash_manual_values()
@@ -1947,6 +2730,109 @@ class EquipmentDesignTkApp:
         if path:
             self._set_aspen_file(path, source="选择")
 
+    def _choose_aspen_suite_files(self) -> None:
+        paths = filedialog.askopenfilenames(
+            title="添加 Aspen 批量案例",
+            filetypes=[("Aspen files", "*.bkp *.apw *.inp"), ("All files", "*.*")],
+        )
+        if paths:
+            self._add_aspen_suite_cases([
+                {
+                    "id": Path(path).stem,
+                    "source_path": str(Path(path).expanduser().resolve()),
+                    "group": "",
+                }
+                for path in paths
+            ])
+
+    def _choose_aspen_suite_manifest(self) -> None:
+        manifest_path = filedialog.askopenfilename(
+            title="选择 Aspen BKP 批量 JSON 清单",
+            filetypes=[("JSON manifest", "*.json"), ("All files", "*.*")],
+        )
+        if not manifest_path:
+            return
+        try:
+            cases, _manifest = aspen_suite.resolve_cases({
+                "manifest_path": manifest_path,
+                "pressure_basis": self.aspen_basis.get(),
+                "atmospheric_pressure_mpa": self.aspen_atmospheric.get(),
+                "timeout_s": self.aspen_timeout.get(),
+                "run": self.aspen_run.get(),
+                "ensure_stream_transport": self.aspen_ensure_transport.get(),
+            })
+        except Exception as exc:
+            messagebox.showerror("清单无法导入", str(exc), parent=self.root)
+            return
+        self._add_aspen_suite_cases([
+            {
+                "id": Path(str(case["source_path"])).stem,
+                "source_path": case["source_path"],
+                "group": case.get("group"),
+                "sha256": case.get("expected_sha256"),
+                "pressure_basis": case["pressure_basis"],
+                "atmospheric_pressure_mpa": case.get("atmospheric_pressure_mpa"),
+                "timeout_s": case["timeout_s"],
+                "run": case["run"],
+                "ensure_stream_transport": case["ensure_stream_transport"],
+                "known_run_status": case.get("known_run_status"),
+                "formal_delivery_status": case.get("formal_delivery_status"),
+            }
+            for case in cases
+        ])
+
+    def _add_aspen_suite_cases(self, cases: list[dict[str, Any]]) -> None:
+        existing = {
+            str(Path(str(case.get("source_path") or "")).resolve()).casefold()
+            for case in self.aspen_suite_cases
+        }
+        added = 0
+        for case in cases:
+            source = Path(str(case.get("source_path") or "")).expanduser().resolve()
+            key = str(source).casefold()
+            if key in existing:
+                continue
+            if source.suffix.casefold() not in {".bkp", ".apw", ".inp"}:
+                continue
+            self.aspen_suite_cases.append({**case, "source_path": str(source)})
+            existing.add(key)
+            added += 1
+        self.aspen_suite_report = {}
+        self._refresh_aspen_suite_tree()
+        self.status_var.set(
+            f"批量队列现有 {len(self.aspen_suite_cases)} 个案例；本次新增 {added} 个。"
+        )
+
+    def _refresh_aspen_suite_tree(self) -> None:
+        for item in self.aspen_suite_tree.get_children():
+            self.aspen_suite_tree.delete(item)
+        for index, case in enumerate(self.aspen_suite_cases, 1):
+            source = Path(str(case.get("source_path") or ""))
+            self.aspen_suite_tree.insert(
+                "",
+                "end",
+                iid=f"case:{index}",
+                values=(
+                    index,
+                    source.name,
+                    case.get("group") or "未分组",
+                    case.get("_ui_status") or "等待",
+                ),
+            )
+
+    def _clear_aspen_suite(self) -> None:
+        if self.aspen_suite_button.instate(["disabled"]):
+            messagebox.showwarning(
+                "批量任务正在运行",
+                "请先等待完成或关闭软件终止本次隔离工作进程。",
+                parent=self.root,
+            )
+            return
+        self.aspen_suite_cases = []
+        self.aspen_suite_report = {}
+        self._refresh_aspen_suite_tree()
+        self.aspen_progress.configure(text="")
+
     def _split_drop_paths(self, raw_data: Any) -> list[str]:
         try:
             return [str(value) for value in self.root.tk.splitlist(str(raw_data)) if str(value) != ""]
@@ -1954,7 +2840,13 @@ class EquipmentDesignTkApp:
             return []
 
     def _set_aspen_file(self, raw_path: str, *, source: str) -> bool:
-        if hasattr(self, "aspen_button") and self.aspen_button.instate(["disabled"]):
+        if (
+            hasattr(self, "aspen_button")
+            and (
+                self.aspen_button.instate(["disabled"])
+                or self.aspen_suite_button.instate(["disabled"])
+            )
+        ):
             messagebox.showwarning(
                 "Aspen 正在处理",
                 "当前后台仍在处理已选案例。完成后再更换文件，避免页面路径和实际运行对象不一致。",
@@ -1999,12 +2891,26 @@ class EquipmentDesignTkApp:
             return str(REFUSE_DROP or "refuse_drop")
         return str(COPY or "copy")
 
-    def _background(self, button: ttk.Button, busy: str, task: Callable[[], Any], done: Callable[[Any], None]) -> None:
+    def _background(
+        self,
+        button: ttk.Button,
+        busy: str,
+        task: Callable[[], Any],
+        done: Callable[[Any], None],
+        *,
+        also_disable: tuple[ttk.Button, ...] = (),
+        workflow_step: int = 2,
+        reenable_button: Callable[[], bool] | None = None,
+    ) -> None:
         if self._closing:
             return
         button.state(["disabled"])
+        for peer in also_disable:
+            peer.state(["disabled"])
         self._background_jobs += 1
         self.status_var.set(busy)
+        self._set_workflow_step(workflow_step, busy)
+        self.activity_progress.start(12)
 
         def worker() -> None:
             value: Any = None
@@ -2020,12 +2926,21 @@ class EquipmentDesignTkApp:
                     return
                 try:
                     if error is not None:
+                        self._set_workflow_step(1, f"操作未完成：{error}")
                         messagebox.showerror("操作失败", str(error), parent=self.root)
                     else:
                         done(value)
                 finally:
-                    button.state(["!disabled"])
-                    self.status_var.set("就绪")
+                    if reenable_button is None or reenable_button():
+                        button.state(["!disabled"])
+                    else:
+                        button.state(["disabled"])
+                    for peer in also_disable:
+                        peer.state(["!disabled"])
+                    if self._background_jobs == 0:
+                        self.activity_progress.stop()
+                    if self.status_var.get() == busy:
+                        self.status_var.set("就绪")
 
             try:
                 if not self._closing and self.root.winfo_exists():
@@ -2078,12 +2993,14 @@ class EquipmentDesignTkApp:
             "atmospheric_pressure_mpa": self.aspen_atmospheric.get(),
             "timeout_s": self.aspen_timeout.get(),
             "run": self.aspen_run.get(),
+            "ensure_stream_transport": self.aspen_ensure_transport.get(),
         }
         self.aspen_progress.configure(text="独立子进程正在处理；COM 异常不会冻结主界面。")
 
         def done(response: dict[str, Any]) -> None:
             self.aspen_progress.configure(text="")
             if not response.get("ok"):
+                self._set_workflow_step(1, "Aspen 导入未完成；可检查文件、压力基准或改用手动输入。")
                 messagebox.showerror("Aspen 导入失败", response.get("error", "可改用手动输入或 LLM 辅助。"), parent=self.root)
                 return
             self.session_dir = response.get("session_dir")
@@ -2092,10 +3009,12 @@ class EquipmentDesignTkApp:
             value = response.get("value", {})
             deterministic = value.get("result", value) if isinstance(value, dict) else value
             self.last_deterministic_result = deterministic if isinstance(deterministic, dict) else {"value": deterministic}
+            self.last_manual = None
             self.last_source_input = {
                 "operation": "aspen_import",
                 "payload": json.loads(json.dumps(config, ensure_ascii=False)),
             }
+            self.last_source_context = {"kind": "aspen_import"}
             self._load_aspen_visual_artifacts(value if isinstance(value, dict) else {})
             self._render_result(deterministic)
             equipment_count = (
@@ -2104,17 +3023,247 @@ class EquipmentDesignTkApp:
                 else 0
             )
             diagnostic_count = int(self.aspen_derivation.get("normalization_diagnostic_count") or 0)
-            if diagnostic_count:
+            run_gate = (
+                value.get("run_evidence_gate")
+                if isinstance(value, Mapping)
+                and isinstance(value.get("run_evidence_gate"), Mapping)
+                else {}
+            )
+            if response.get("completed_with_warnings"):
+                self.status_var.set(
+                    f"设备结果已生成，但存在未闭合项：{response.get('warning') or value.get('status')}。"
+                )
+            elif diagnostic_count:
                 self.status_var.set(
                     f"已输出 {equipment_count} 台/模块结果；忽略 {diagnostic_count} 个无法使用的 Aspen 字段，仅相关目标量待补。"
                 )
             else:
                 self.status_var.set(f"Aspen 遍历与确定性计算完成：{equipment_count} 台/模块结果。")
+            if run_gate:
+                self.aspen_progress.configure(
+                    text=(
+                        f"运行证据：{run_gate.get('status')}；"
+                        f"设备/模块结果 {equipment_count} 个。"
+                    )
+                )
             if self.aspen_pfd_mapping:
-                self.result_tabs.select(self.pfd_panel)
+                self._select_result_panel(self.pfd_panel)
                 self.root.after(60, self._fit_pfd)
 
-        self._background(self.aspen_button, "Aspen 处理中…", lambda: self.api.import_aspen(config), done)
+        self._background(
+            self.aspen_button,
+            "Aspen 处理中…",
+            lambda: self.api.import_aspen(config),
+            done,
+            also_disable=(self.aspen_suite_button,),
+        )
+
+    @staticmethod
+    def _aspen_suite_status_text(status: Any) -> str:
+        return {
+            "FORMAL_PROCESS_BASIS_READY": "正式证据通过",
+            "READ_ONLY_SELECTION_READY": "只读提取完成",
+            "SELECTION_READY_FORMAL_EVIDENCE_OPEN": "选型完成·正式证据待闭合",
+            "SELECTION_READY_WITH_WORKER_WARNING": "选型完成·有警告",
+            "SOURCE_HASH_MISMATCH": "源文件哈希不符",
+            "SOURCE_FILE_INVALID": "文件无效",
+            "FAILED_TO_PRODUCE_SELECTION_RESULT": "处理失败",
+        }.get(str(status or ""), str(status or "未知"))
+
+    def _set_aspen_suite_row_status(self, index: int, status: str) -> None:
+        if 1 <= index <= len(self.aspen_suite_cases):
+            self.aspen_suite_cases[index - 1]["_ui_status"] = status
+        iid = f"case:{index}"
+        if not self.aspen_suite_tree.exists(iid):
+            return
+        values = list(self.aspen_suite_tree.item(iid, "values"))
+        if len(values) >= 4:
+            values[3] = status
+            self.aspen_suite_tree.item(iid, values=values)
+            self.aspen_suite_tree.see(iid)
+
+    def _update_aspen_suite_progress(self, event: Mapping[str, Any]) -> None:
+        if self._closing:
+            return
+        event_name = str(event.get("event") or "")
+        if event_name == "CASE_STARTED":
+            index = int(event.get("index") or 0)
+            total = int(event.get("case_count") or len(self.aspen_suite_cases))
+            self._set_aspen_suite_row_status(index, "运行中")
+            self.aspen_progress.configure(
+                text=f"正在处理 {index}/{total}：{Path(str(event.get('source_path') or '')).name}"
+            )
+        elif event_name == "CASE_FINISHED":
+            row = event.get("case")
+            if isinstance(row, Mapping):
+                index = int(row.get("index") or 0)
+                self._set_aspen_suite_row_status(
+                    index,
+                    self._aspen_suite_status_text(row.get("status")),
+                )
+
+    def _run_aspen_suite(self) -> None:
+        if not self.aspen_suite_cases:
+            messagebox.showwarning(
+                "批量队列为空",
+                "请先添加多个 Aspen 文件，或导入补充包中的 BKP JSON 清单。",
+                parent=self.root,
+            )
+            return
+        if any(
+            not str(case.get("pressure_basis") or "").strip()
+            for case in self.aspen_suite_cases
+        ) and self.aspen_basis.get() not in {"absolute", "gauge"}:
+            messagebox.showwarning(
+                "缺少压力基准",
+                "队列中有案例未自带压力基准，请先选择绝压或表压。程序不会替你默认。",
+                parent=self.root,
+            )
+            return
+        config = {
+            "cases": [
+                {
+                    key: value
+                    for key, value in case.items()
+                    if not str(key).startswith("_")
+                }
+                for case in self.aspen_suite_cases
+            ],
+            "pressure_basis": self.aspen_basis.get(),
+            "atmospheric_pressure_mpa": self.aspen_atmospheric.get(),
+            "timeout_s": self.aspen_timeout.get(),
+            "run": self.aspen_run.get(),
+            "ensure_stream_transport": self.aspen_ensure_transport.get(),
+            "require_clean": self.aspen_suite_require_clean.get(),
+        }
+        for case in self.aspen_suite_cases:
+            case["_ui_status"] = "等待"
+        self._refresh_aspen_suite_tree()
+        self.aspen_progress.configure(text="正在启动严格串行 Aspen 队列…")
+
+        def progress(event: dict[str, Any]) -> None:
+            try:
+                if not self._closing and self.root.winfo_exists():
+                    copied = dict(event)
+                    self.root.after(
+                        0,
+                        lambda value=copied: self._update_aspen_suite_progress(value),
+                    )
+            except tk.TclError:
+                pass
+
+        def done(response: dict[str, Any]) -> None:
+            if not response.get("ok"):
+                self.aspen_progress.configure(text="")
+                self._set_workflow_step(1, "Aspen 批量队列未启动或中途失败；详细原因已显示。")
+                messagebox.showerror(
+                    "Aspen 批量处理失败",
+                    str(response.get("error") or "批量运行器未能启动。"),
+                    parent=self.root,
+                )
+                return
+            report = response.get("value")
+            self.aspen_suite_report = (
+                dict(report) if isinstance(report, Mapping) else {}
+            )
+            for row in self.aspen_suite_report.get("cases", []):
+                if isinstance(row, Mapping):
+                    self._set_aspen_suite_row_status(
+                        int(row.get("index") or 0),
+                        self._aspen_suite_status_text(row.get("status")),
+                    )
+            self.session_dir = response.get("session_dir")
+            if self.session_dir:
+                self.open_button.state(["!disabled"])
+            self.last_deterministic_result = self.aspen_suite_report
+            self.last_manual = None
+            self.last_source_input = {
+                "operation": "aspen_suite",
+                "payload": json.loads(json.dumps(config, ensure_ascii=False)),
+            }
+            self.last_source_context = {"kind": "aspen_suite"}
+            self._render_result(self.aspen_suite_report)
+            status = str(self.aspen_suite_report.get("status") or "UNKNOWN")
+            usable = int(self.aspen_suite_report.get("usable_count") or 0)
+            formal = int(self.aspen_suite_report.get("formal_ready_count") or 0)
+            covered = int(
+                self.aspen_suite_report.get(
+                    "candidate_coverage_complete_count"
+                )
+                or 0
+            )
+            total = int(self.aspen_suite_report.get("case_count") or len(self.aspen_suite_cases))
+            self.aspen_progress.configure(
+                text=(
+                    f"批量完成：{status}；具体候选全覆盖 {covered}/{total}，"
+                    f"选型可用 {usable}/{total}，正式流程基础 {formal}/{total}。"
+                )
+            )
+            self.status_var.set("Aspen 批量队列已完成；双击案例行查看设备与管线详情。")
+
+        self._background(
+            self.aspen_suite_button,
+            "Aspen 批量队列处理中…",
+            lambda: self.api.import_aspen_suite(config, progress),
+            done,
+            also_disable=(self.aspen_button,),
+        )
+
+    def _open_aspen_suite_case(self, _event: Any = None) -> None:
+        selection = self.aspen_suite_tree.selection()
+        if not selection or not self.aspen_suite_report:
+            return
+        try:
+            index = int(str(selection[0]).split(":", 1)[1])
+        except (IndexError, ValueError):
+            return
+        row = next(
+            (
+                item
+                for item in self.aspen_suite_report.get("cases", [])
+                if isinstance(item, Mapping) and int(item.get("index") or 0) == index
+            ),
+            None,
+        )
+        if not isinstance(row, Mapping):
+            return
+        case_dir = Path(str(row.get("case_output_dir") or ""))
+        worker_path = case_dir / "worker_result.json"
+        if not worker_path.is_file():
+            messagebox.showwarning(
+                "该案例没有设备结果",
+                str(row.get("api_error") or "请查看批量报告中的失败原因。"),
+                parent=self.root,
+            )
+            return
+        try:
+            worker = json.loads(worker_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            messagebox.showerror("结果无法读取", str(exc), parent=self.root)
+            return
+        if not isinstance(worker, dict):
+            return
+        deterministic = worker.get("result")
+        deterministic = deterministic if isinstance(deterministic, dict) else worker
+        self.session_dir = str(case_dir)
+        self.open_button.state(["!disabled"])
+        self.last_deterministic_result = deterministic
+        self.last_manual = None
+        self.last_source_input = {
+            "operation": "aspen_import",
+            "payload": {
+                "source_path": row.get("source_path"),
+                "pressure_basis": row.get("pressure_basis"),
+                "atmospheric_pressure_mpa": row.get("atmospheric_pressure_mpa"),
+                "run": row.get("run_requested"),
+            },
+        }
+        self.last_source_context = {"kind": "aspen_import"}
+        self._load_aspen_visual_artifacts(worker)
+        self._render_result(deterministic)
+        if self.aspen_pfd_mapping:
+            self._select_result_panel(self.pfd_panel)
+            self.root.after(60, self._fit_pfd)
 
     @staticmethod
     def _read_json_artifact(path_value: Any) -> dict[str, Any]:
@@ -2239,6 +3388,17 @@ class EquipmentDesignTkApp:
         for item in tree.get_children():
             tree.delete(item)
 
+    def _open_pfd_block_from_canvas(self, block_id: str) -> None:
+        """Handle the PFD left-click contract: details first, editable values next."""
+
+        self._open_pfd_block(block_id)
+        if not self._pfd_selection_for_block(block_id):
+            self.status_var.set(
+                f"{block_id} 尚无唯一设备类别；请先右键该节点选择类别，再左键补充参数。"
+            )
+            return
+        self._open_pfd_parameter_editor(block_id)
+
     def _open_pfd_block(self, block_id: str) -> None:
         self._active_pfd_block_id = block_id
         if hasattr(self, "pfd_parameter_button"):
@@ -2257,7 +3417,7 @@ class EquipmentDesignTkApp:
                     "stale_overlay_hidden": True,
                 },
             )
-            self.result_tabs.select(self.parameter_panel)
+            self._select_result_panel(self.parameter_panel)
             return
         card: dict[str, Any] | None = None
         recalculated = self.pfd_recalculated_results.get(block_id)
@@ -2291,7 +3451,7 @@ class EquipmentDesignTkApp:
             )
         self._append_pfd_equipment_lineage(block_id)
         self._append_pfd_parameter_override_state(block_id)
-        self.result_tabs.select(self.parameter_panel)
+        self._select_result_panel(self.parameter_panel)
 
     def _append_pfd_equipment_lineage(self, block_id: str) -> None:
         equipment = self._pfd_equipment_by_block.get(block_id, {})
@@ -2364,7 +3524,7 @@ class EquipmentDesignTkApp:
                     "stale_overlay_hidden": True,
                 },
             )
-            self.result_tabs.select(self.parameter_panel)
+            self._select_result_panel(self.parameter_panel)
             return
         pipe = self._pfd_piping_by_stream.get(stream_id, {})
         match = pipe.get("match_result") if isinstance(pipe.get("match_result"), Mapping) else {}
@@ -2392,7 +3552,7 @@ class EquipmentDesignTkApp:
                 parameters=edge.get("parameters", []),
                 evidence=edge,
             )
-        self.result_tabs.select(self.parameter_panel)
+        self._select_result_panel(self.parameter_panel)
 
     def _render_pfd_raw_parameters(
         self,
@@ -2427,38 +3587,36 @@ class EquipmentDesignTkApp:
 
     def _show_pfd_block_menu(self, block_id: str, x_root: int, y_root: int) -> None:
         menu = tk.Menu(self.root, tearoff=False)
-        menu.add_command(label="查看参数", command=lambda: self._open_pfd_block(block_id))
-        menu.add_command(
-            label="补充/修改本设备参数并重算…",
-            command=lambda: self._open_pfd_parameter_editor(block_id),
-        )
+        menu.add_command(label=f"{block_id} · 自定义设备类别", state="disabled")
+        menu.add_command(label="右键只确定类别；参数请在确定后左键进入", state="disabled")
         menu.add_separator()
-        type_menu = tk.Menu(menu, tearoff=False)
         grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
         catalog = self.aspen_pfd_mapping.get("catalog") if isinstance(self.aspen_pfd_mapping.get("catalog"), Mapping) else {}
         options = catalog.get("selection_options") if isinstance(catalog.get("selection_options"), list) else []
         for option in options:
             if isinstance(option, Mapping):
                 grouped[str(option.get("family_name") or "其他")].append(dict(option))
+        row = self._pfd_block_row(block_id)
+        effective = row.get("effective_mapping") if isinstance(row.get("effective_mapping"), Mapping) else {}
+        current_selection_id = str(effective.get("selection_id") or "")
         for family_name in sorted(grouped):
-            family_menu = tk.Menu(type_menu, tearoff=False)
+            family_menu = tk.Menu(menu, tearoff=False)
             for option in sorted(grouped[family_name], key=lambda item: str(item.get("display_name") or item.get("selection_id"))):
                 selection_id = str(option.get("selection_id"))
+                display_name = str(option.get("display_name") or selection_id)
                 family_menu.add_command(
-                    label=str(option.get("display_name") or selection_id),
+                    label=("● " if selection_id == current_selection_id else "") + display_name,
                     command=lambda sid=selection_id: self._apply_pfd_override(block_id, sid),
                 )
-            type_menu.add_cascade(label=family_name, menu=family_menu)
-        menu.add_cascade(label="更改指定类型", menu=type_menu)
+            menu.add_cascade(label=f"{family_name}（{len(grouped[family_name])} 类）", menu=family_menu)
+        if not grouped:
+            menu.add_command(label="没有可用设备类别", state="disabled")
+        menu.add_separator()
         menu.add_command(
-            label="恢复自动识别",
+            label="恢复程序自动识别类别",
             state="normal" if block_id in self.aspen_type_overrides else "disabled",
             command=lambda: self._apply_pfd_override(block_id, None),
         )
-        menu.add_command(label="按当前类型重新计算", command=lambda: self._recalculate_pfd_block(block_id))
-        menu.add_separator()
-        menu.add_command(label="查看识别证据", command=lambda: self._show_pfd_block_evidence(block_id))
-        menu.add_command(label="复制对象 ID", command=lambda: self._copy_text(block_id))
         try:
             menu.tk_popup(x_root, y_root)
         finally:
@@ -2490,7 +3648,7 @@ class EquipmentDesignTkApp:
 
     def _show_pfd_block_evidence(self, block_id: str) -> None:
         _set_text(self.issue_text, json.dumps(self._pfd_block_row(block_id), ensure_ascii=False, indent=2, sort_keys=True))
-        self.result_tabs.select(self.issue_panel)
+        self._select_result_panel(self.issue_panel)
 
     def _copy_text(self, value: str) -> None:
         self.root.clipboard_clear()
@@ -2550,6 +3708,50 @@ class EquipmentDesignTkApp:
             + "\n补录：只作为本设备的用户输入参与确定性重算；补录动作本身不是正式证据，仍受原证据门限制。"
         )
 
+    @staticmethod
+    def _pfd_editor_initial_values(
+        fields: list[dict[str, Any]],
+        base_values: Mapping[str, Any],
+        current_overrides: Mapping[str, Any],
+    ) -> dict[str, str]:
+        """Prefill every visible editor with the current effective value."""
+
+        values: dict[str, str] = {}
+        for field in fields:
+            name = str(field.get("name") or "")
+            if not name:
+                continue
+            effective = (
+                current_overrides[name]
+                if name in current_overrides
+                else base_values.get(name)
+            )
+            values[name] = "" if effective is None else str(effective)
+        return values
+
+    @staticmethod
+    def _pfd_editor_override_values(
+        fields: list[dict[str, Any]],
+        entered_values: Mapping[str, Any],
+        base_values: Mapping[str, Any],
+    ) -> dict[str, str]:
+        """Keep only explicit differences from the Aspen/program baseline."""
+
+        result: dict[str, str] = {}
+        for field in fields:
+            name = str(field.get("name") or "")
+            if not name:
+                continue
+            raw_entered = entered_values.get(name)
+            entered = "" if raw_entered is None else str(raw_entered).strip()
+            if not entered:
+                continue
+            base = base_values.get(name)
+            baseline = "" if base is None else str(base).strip()
+            if entered != baseline:
+                result[name] = entered
+        return result
+
     def _open_pfd_parameter_editor(self, block_id: str) -> None:
         if not block_id:
             messagebox.showwarning("未选择设备", "请先在 PFD 中左键选择一台设备。", parent=self.root)
@@ -2582,7 +3784,10 @@ class EquipmentDesignTkApp:
         ttk.Label(header, text=f"{block_id} · {selection.get('display_name')}", style="HeaderTitle.TLabel").pack(anchor="w")
         ttk.Label(
             header,
-            text="空框表示沿用 Aspen/原计算输入；填写值只进入本设备独立参数层，确定后立即无 LLM 重算。",
+            text=(
+                "输入框已预填 Aspen/程序基准或现有人工值；修改后只把差异写入本设备独立参数层，"
+                "确定后立即无 LLM 重算。"
+            ),
             style="HeaderSub.TLabel",
         ).pack(anchor="w", pady=(3, 0))
 
@@ -2593,7 +3798,7 @@ class EquipmentDesignTkApp:
         editor_bar.pack(fill="x", pady=(0, 10))
         ttk.Label(
             editor_bar,
-            text="默认只显示真实输入与可选偏好；客户交付输出不在这里填写。",
+            text="默认只显示真实输入与可选偏好；所有框均可直接修改，未改的基准值不会被记成人工补录。",
             style="Muted.TLabel",
         ).pack(side="left", fill="x", expand=True)
         advanced_toggle = ttk.Checkbutton(
@@ -2619,8 +3824,15 @@ class EquipmentDesignTkApp:
         base_values = self._pfd_base_match_input(block_id)
         current_values = dict(self.pfd_parameter_overrides.get(block_id, {}))
         all_fields = self._pfd_parameter_editor_fields(selection, show_advanced=True)
+        initial_values = self._pfd_editor_initial_values(
+            all_fields,
+            base_values,
+            current_values,
+        )
         editor_vars: dict[str, tk.StringVar] = {
-            str(field["name"]): tk.StringVar(value=str(current_values.get(str(field["name"]), "")))
+            str(field["name"]): tk.StringVar(
+                value=initial_values.get(str(field["name"]), "")
+            )
             for field in all_fields
         }
 
@@ -2671,9 +3883,18 @@ class EquipmentDesignTkApp:
                     widget = ttk.Entry(form, textvariable=variable)
                 widget.grid(row=row_index, column=1, sticky="ew", pady=5)
                 base = base_values.get(name)
-                base_text = f"已有 {base}" if base not in (None, "") else "已有 —"
+                source_text = (
+                    "当前人工值"
+                    if name in current_values
+                    else "Aspen/程序基准"
+                )
+                base_text = f"基准 {base}" if base not in (None, "") else "基准 —"
                 ttk.Label(form, text=f"{badge} · {base_text}", style=badge_style).grid(
                     row=row_index, column=2, sticky="w", padx=(10, 0), pady=5
+                )
+                HoverHelp(
+                    widget,
+                    f"{source_text}。直接修改即可；恢复为基准值会自动移除该字段的人工覆盖。",
                 )
                 help_control = tk.Label(
                     form,
@@ -2703,18 +3924,22 @@ class EquipmentDesignTkApp:
         footer.pack(fill="x")
 
         def submit() -> None:
-            values = {
+            entered_values = {
                 name: variable.get().strip()
                 for name, variable in editor_vars.items()
-                if variable.get().strip()
             }
+            values = self._pfd_editor_override_values(
+                all_fields,
+                entered_values,
+                base_values,
+            )
             if self._apply_pfd_parameter_overrides(block_id, values):
                 window.destroy()
 
         def clear_values() -> None:
             if not messagebox.askyesno(
-                "清空本设备补录",
-                "将移除本设备的独立补录值，并仅用原 Aspen/已有规范输入重新计算。是否继续？",
+                "恢复本设备基准值",
+                "将移除本设备的人工差异值，并仅用原 Aspen/程序基准输入重新计算。是否继续？",
                 parent=window,
             ):
                 return
@@ -2722,8 +3947,8 @@ class EquipmentDesignTkApp:
                 window.destroy()
 
         ttk.Button(footer, text="取消", style="Secondary.TButton", command=window.destroy).pack(side="right")
-        ttk.Button(footer, text="清空补录并重算", style="Secondary.TButton", command=clear_values).pack(side="right", padx=8)
-        ttk.Button(footer, text="确定性重算", style="Primary.TButton", command=submit).pack(side="right")
+        ttk.Button(footer, text="恢复基准值并重算", style="Secondary.TButton", command=clear_values).pack(side="right", padx=8)
+        ttk.Button(footer, text="保存修改并确定性重算", style="Primary.TButton", command=submit).pack(side="right")
 
     def _apply_pfd_parameter_overrides(
         self,
@@ -2811,17 +4036,16 @@ class EquipmentDesignTkApp:
                 self.pfd_recalculated_results.pop(affected_block, None)
             self.pfd_invalidated_blocks.update(affected_blocks)
             self.pfd_invalidated_streams.update(affected_streams)
-            self._sync_pfd_view()
-            try:
-                self._recalculate_pfd_block(block_id, selection_id=selection_id, refresh=False)
-            except Exception:
-                self._save_pfd_override_state(result)
-                self._sync_pfd_view()
-                raise
+            self._invalidate_current_pfd_agent_binding(
+                affected_blocks=affected_blocks,
+                reason="设备类别变化使旧 Agent 输入与结果失效",
+            )
             self._save_pfd_override_state(result)
             self._sync_pfd_view()
-            self.status_var.set("改型设备已按确定性链重算；相邻设备与关联管线仍明确标为待复核。")
-            self._open_pfd_block(block_id)
+            self.status_var.set(
+                f"{block_id} 的设备类别已确定，尚未重算。请左键该节点检查预填参数，"
+                "修改或确认后再执行确定性重算。"
+            )
         except aspen_pfd.AspenPFDMappingError as exc:
             messagebox.showerror("类型修改失败", f"{exc.code}：{exc}", parent=self.root)
         except Exception as exc:
@@ -2877,12 +4101,119 @@ class EquipmentDesignTkApp:
         response = self.api.manual_match(str(chosen), cleaned)
         if not response.get("ok"):
             raise RuntimeError(response.get("error", f"{block_id} 复算失败"))
-        self.pfd_recalculated_results[block_id] = dict(response["value"])
+        recalculated = dict(response["value"])
+        self.pfd_recalculated_results[block_id] = recalculated
+        # A PFD node recalculation is the same replayable deterministic boundary
+        # as a manual calculation.  Bind the selected node as the active Agent
+        # input so a subsequent "Agent 协同" run reviews this equipment instead
+        # of the earlier whole-Aspen import.
+        frozen_values = json.loads(json.dumps(cleaned, ensure_ascii=False))
+        self.last_manual = {
+            "selection_id": str(chosen),
+            "values": frozen_values,
+        }
+        self.last_source_input = {
+            "operation": "manual_match",
+            "payload": {
+                "selection_id": str(chosen),
+                "values": frozen_values,
+            },
+        }
+        self.last_source_context = {
+            "kind": "pfd_block",
+            "block_id": str(block_id),
+        }
+        self.last_deterministic_result = recalculated
         self.pfd_invalidated_blocks.discard(block_id)
         self.aspen_pfd_mapping = aspen_pfd.mark_block_recalculated(self.aspen_pfd_mapping, block_id)
+        if (
+            self._background_jobs == 0
+            and self._applied_llm_settings is not None
+            and self._applied_llm_settings_fingerprint
+            == self._llm_settings_sha256(self._collect_llm_settings())
+        ):
+            self.llm_button.state(["!disabled"])
         if refresh:
             self._sync_pfd_view()
             self._open_pfd_block(block_id)
+
+    def _invalidate_current_pfd_agent_binding(
+        self,
+        *,
+        affected_blocks: set[str] | None = None,
+        reason: str,
+    ) -> bool:
+        """Discard an Agent source that no longer represents the current PFD."""
+
+        context = (
+            self.last_source_context
+            if isinstance(self.last_source_context, Mapping)
+            else {}
+        )
+        if context.get("kind") != "pfd_block":
+            return False
+        block_id = str(context.get("block_id") or "")
+        if affected_blocks is not None and block_id not in affected_blocks:
+            return False
+        self.last_manual = None
+        self.last_source_input = None
+        self.last_source_context = None
+        self.last_deterministic_result = None
+        self.llm_proposal = None
+        self.llm_proposal_context = None
+        self.llm_button.state(["disabled"])
+        self.apply_llm_button.state(["disabled"])
+        self.hybrid_state.set(f"机器状态：WAITING_PFD_RECALCULATION · {reason}")
+        return True
+
+    def _validate_current_pfd_agent_binding(
+        self,
+        source_input: Mapping[str, Any],
+        deterministic: Mapping[str, Any],
+    ) -> tuple[bool, str]:
+        """Verify that a cached PFD Agent source is still the current replay."""
+
+        context = (
+            self.last_source_context
+            if isinstance(self.last_source_context, Mapping)
+            else {}
+        )
+        if context.get("kind") != "pfd_block":
+            return True, ""
+        block_id = str(context.get("block_id") or "")
+        payload = (
+            source_input.get("payload")
+            if isinstance(source_input.get("payload"), Mapping)
+            else {}
+        )
+        selection_id = str(payload.get("selection_id") or "")
+        values = payload.get("values")
+        if (
+            not block_id
+            or source_input.get("operation") != "manual_match"
+            or not selection_id
+            or not isinstance(values, Mapping)
+        ):
+            return False, "PFD Agent 缓存缺少可回放的节点、类别或参数。"
+        row = self._pfd_block_row(block_id)
+        effective = (
+            row.get("effective_mapping")
+            if isinstance(row.get("effective_mapping"), Mapping)
+            else {}
+        )
+        if str(effective.get("selection_id") or "") != selection_id:
+            return False, "PFD 节点当前类别已经改变，旧类别结果不得发送给 Agent。"
+        if str(row.get("recalculation_status") or "") != "RECALCULATED_CURRENT":
+            return False, "PFD 节点尚未按当前类别和参数完成确定性重算。"
+        current_result = self.pfd_recalculated_results.get(block_id)
+        if not isinstance(current_result, Mapping):
+            return False, "PFD 节点缺少当前确定性重算结果。"
+        if self.last_manual != {"selection_id": selection_id, "values": values}:
+            return False, "PFD Agent 缓存与当前可回放输入不一致。"
+        expected_hash = self._llm_settings_sha256(current_result)
+        if self._llm_settings_sha256(deterministic) != expected_hash:
+            return False, "PFD 节点当前结果哈希与 Agent 冻结结果不一致。"
+        return True, ""
 
     def _save_pfd_override_state(self, override_result: Mapping[str, Any]) -> None:
         if not self.session_dir:
@@ -2899,7 +4230,13 @@ class EquipmentDesignTkApp:
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    def _save_pfd_parameter_state(self, parameter_result: Mapping[str, Any]) -> None:
+    def _save_pfd_parameter_state(
+        self,
+        parameter_result: Mapping[str, Any],
+        *,
+        llm_used: bool = False,
+        input_provenance: str = "USER_SUPPLIED_PER_BLOCK_NOT_EVIDENCE_BY_ITSELF",
+    ) -> None:
         if not self.session_dir:
             return
         path = Path(self.session_dir) / "aspen_pfd_parameter_overrides.json"
@@ -2912,10 +4249,10 @@ class EquipmentDesignTkApp:
             "parameter_overrides": self.pfd_parameter_overrides,
             "recalculated_results": self.pfd_recalculated_results,
             "change_impact": parameter_result.get("change_impact"),
-            "input_provenance": "USER_SUPPLIED_PER_BLOCK_NOT_EVIDENCE_BY_ITSELF",
+            "input_provenance": input_provenance,
             "source_bundle_modified": False,
             "model_promotion_allowed_by_override_alone": False,
-            "llm_used": False,
+            "llm_used": bool(llm_used),
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -2923,6 +4260,15 @@ class EquipmentDesignTkApp:
         try:
             selection = self._selection()
             values = self._collect_manual()
+            first_missing = self._focus_first_missing_manual_field()
+            self._set_workflow_step(
+                2,
+                (
+                    f"正在按降级链计算；首个待补主输入：{first_missing}。"
+                    if first_missing
+                    else "正在执行确定性匹配、设备分支与公式链。"
+                ),
+            )
             response = self.api.manual_match(selection["selection_id"], values)
             if not response.get("ok"):
                 raise RuntimeError(response.get("error", "匹配失败"))
@@ -2934,10 +4280,15 @@ class EquipmentDesignTkApp:
                     "values": json.loads(json.dumps(values, ensure_ascii=False)),
                 },
             }
+            self.last_source_context = {"kind": "manual_form"}
             self.last_deterministic_result = response["value"]
             self._render_result(self.last_deterministic_result)
-            self.status_var.set("确定性匹配完成")
+            if first_missing:
+                self.status_var.set(f"确定性匹配完成；{first_missing} 未给出，结果已按降级链明确标注。")
+            else:
+                self.status_var.set("确定性匹配完成")
         except Exception as exc:
+            self._set_workflow_step(1, "输入或计算条件需要处理；已定位到手动输入区。")
             messagebox.showerror("匹配失败", str(exc), parent=self.root)
 
     def _run_llm(self) -> None:
@@ -2945,6 +4296,24 @@ class EquipmentDesignTkApp:
         source_input = self.last_source_input
         if not deterministic or not source_input:
             messagebox.showwarning("缺少确定性结果", "请先完成 Aspen 或手动匹配。", parent=self.root)
+            return
+        pfd_binding_valid, pfd_binding_error = self._validate_current_pfd_agent_binding(
+            source_input,
+            deterministic,
+        )
+        if not pfd_binding_valid:
+            self._invalidate_current_pfd_agent_binding(
+                reason=pfd_binding_error,
+            )
+            self._set_workflow_step(
+                2,
+                "PFD 类别或参数已变化；请左键节点检查预填参数并重新计算。",
+            )
+            messagebox.showwarning(
+                "PFD 结果需要重算",
+                pfd_binding_error + " 请先完成当前节点重算，再运行 Agent。",
+                parent=self.root,
+            )
             return
         current_settings = self._collect_llm_settings()
         current_fingerprint = self._llm_settings_sha256(current_settings)
@@ -2959,13 +4328,53 @@ class EquipmentDesignTkApp:
         config = applied["config"]
         config["task"] = applied["task"]
         knowledge_config = applied["knowledge_config"]
+        frozen_source_input = json.loads(json.dumps(source_input, ensure_ascii=False))
+        frozen_source_context = json.loads(json.dumps(
+            self.last_source_context or {"kind": "unknown"},
+            ensure_ascii=False,
+        ))
+        frozen_deterministic_sha256 = self._llm_settings_sha256(deterministic)
+        run_guard = self._llm_settings_sha256({
+            "settings": current_settings,
+            "source_input": frozen_source_input,
+            "source_context": frozen_source_context,
+            "deterministic_result": deterministic,
+        })
         self.llm_proposal = None
+        self.llm_proposal_context = None
         self.apply_llm_button.state(["disabled"])
         self.hybrid_state.set("机器状态：RUNNING · 确定性结果已冻结")
 
         def done(response: dict[str, Any]) -> None:
+            current_deterministic = self.last_deterministic_result or self.last_result
+            current_source_input = self.last_source_input
+            current_run_guard = self._llm_settings_sha256({
+                "settings": self._collect_llm_settings(),
+                "source_input": current_source_input,
+                "source_context": self.last_source_context or {"kind": "unknown"},
+                "deterministic_result": current_deterministic,
+            })
+            if current_run_guard != run_guard:
+                self.llm_proposal = None
+                self.llm_proposal_context = None
+                self.apply_llm_button.state(["disabled"])
+                self.hybrid_state.set(
+                    "机器状态：STALE_RESPONSE_DISCARDED · 运行期间配置或确定性输入已改变"
+                )
+                self._set_workflow_step(
+                    3,
+                    "旧 Agent 回答已丢弃；请按当前配置和当前设备结果重新运行。",
+                )
+                messagebox.showwarning(
+                    "旧回答已丢弃",
+                    "Agent 运行期间 URL、Key、模型、协议或设备输入发生了变化；旧回答没有覆盖当前结果。",
+                    parent=self.root,
+                )
+                return
             if not response.get("ok"):
+                self.llm_proposal_context = None
                 self.hybrid_state.set("机器状态：FAILED · 确定性结果仍保留")
+                self._set_workflow_step(3, "Agent 协同失败；确定性结果仍可审核和导出。")
                 messagebox.showerror("Agent 协同失败", response.get("error", "未知错误"), parent=self.root)
                 return
             hybrid = response["value"]
@@ -2975,6 +4384,11 @@ class EquipmentDesignTkApp:
             review = hybrid.get("llm_review", {})
             if review.get("status") == "COMPLETED_STRICT" and isinstance(review.get("result"), dict):
                 self.llm_proposal = review["result"]
+                self.llm_proposal_context = {
+                    "source_context": frozen_source_context,
+                    "source_input": frozen_source_input,
+                    "deterministic_result_sha256": frozen_deterministic_sha256,
+                }
             validated = self.llm_proposal.get("validated_proposal", {}) if self.llm_proposal else {}
             step_output = self.llm_proposal.get("step_output", {}) if self.llm_proposal else {}
             fallback_errors = fallback.get("errors", []) if isinstance(fallback, dict) else []
@@ -2987,7 +4401,16 @@ class EquipmentDesignTkApp:
                 f"机器状态：{state}{context_note}" + (f" · 回退原因：{detail}" if detail else "")
             )
             self._render_result(hybrid)
-            if validated.get("accepted_changes") and self.last_manual:
+            proposal_kind = str(
+                (self.llm_proposal_context or {}).get("source_context", {}).get("kind")
+                or ""
+            )
+            if (
+                validated.get("accepted_changes")
+                and self.last_manual
+                and frozen_source_input.get("operation") == "manual_match"
+                and proposal_kind in {"manual_form", "pfd_block"}
+            ):
                 self.apply_llm_button.state(["!disabled"])
             if fallback.get("used"):
                 messagebox.showwarning("已回退到确定性结果", detail or "可选协同层失败；确定性结果未丢失。", parent=self.root)
@@ -3002,13 +4425,180 @@ class EquipmentDesignTkApp:
             self.llm_button,
             "Agent 协同运行中…",
             lambda: self.api.agent_hybrid_run(
-                source_input,
+                frozen_source_input,
                 config,
                 knowledge_config,
                 applied["injection_point"],
                 applied["context_scope"],
             ),
             done,
+            workflow_step=3,
+            reenable_button=lambda: (
+                self._applied_llm_settings is not None
+                and self._applied_llm_settings_fingerprint
+                == self._llm_settings_sha256(self._collect_llm_settings())
+                and isinstance(self.last_source_input, Mapping)
+                and isinstance(self.last_deterministic_result, Mapping)
+                and self._validate_current_pfd_agent_binding(
+                    self.last_source_input,
+                    self.last_deterministic_result,
+                )[0]
+            ),
+        )
+
+    def _discard_stale_llm_proposal(self, message: str) -> None:
+        self.llm_proposal = None
+        self.llm_proposal_context = None
+        self.apply_llm_button.state(["disabled"])
+        messagebox.showwarning("草案已失效", message, parent=self.root)
+
+    def _pfd_agent_parameter_overrides(
+        self,
+        block_id: str,
+        selection_id: str,
+        frozen_values: Mapping[str, Any],
+        applied_values: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        selection = self._pfd_selection_for_block(block_id)
+        if str(selection.get("selection_id") or "") != selection_id:
+            raise ValueError("PFD 节点当前设备类别与 Agent 冻结类别不一致。")
+        base_values = self._pfd_base_match_input(block_id)
+        if not base_values:
+            raise ValueError("PFD 节点已缺少原始 canonical_match_input。")
+        field_rows = {
+            str(field.get("name")): dict(field)
+            for field in selection.get("fields", [])
+            if isinstance(field, Mapping) and field.get("name")
+        }
+        overrides: dict[str, Any] = {}
+        for field, value in applied_values.items():
+            if field in aspen_pfd.PARAMETER_OVERRIDE_FORBIDDEN_FIELDS:
+                if field not in frozen_values or frozen_values.get(field) != value:
+                    raise ValueError(f"Agent 草案试图改变 PFD 身份/路由字段：{field}。")
+                continue
+            definition = field_rows.get(str(field))
+            if definition is None:
+                if field not in frozen_values or frozen_values.get(field) != value:
+                    raise ValueError(f"Agent 草案包含所选设备模板之外的新字段：{field}。")
+                continue
+            if str(definition.get("manual_role") or "") == "delivery_output":
+                if field not in frozen_values or frozen_values.get(field) != value:
+                    raise ValueError(f"Agent 草案不得把交付输出反写为 PFD 输入：{field}。")
+                continue
+            if value is None or isinstance(value, str) and not value.strip():
+                continue
+            if isinstance(value, (Mapping, list, tuple, set)):
+                raise ValueError(f"PFD Agent 草案字段必须为标量：{field}。")
+            if field not in base_values or base_values.get(field) != value:
+                overrides[str(field)] = value
+        for field in aspen_pfd.PARAMETER_OVERRIDE_FORBIDDEN_FIELDS:
+            if field in frozen_values and applied_values.get(field) != frozen_values.get(field):
+                raise ValueError(f"Agent 草案未保持 PFD 身份/路由字段：{field}。")
+        return dict(sorted(overrides.items()))
+
+    def _apply_pfd_agent_application(
+        self,
+        *,
+        block_id: str,
+        selection_id: str,
+        frozen_values: Mapping[str, Any],
+        frozen_deterministic_sha256: str,
+        application: Mapping[str, Any],
+    ) -> None:
+        if application.get("replayed_source_operation") != "manual_match":
+            raise ValueError("Agent 应用结果没有确认 manual_match 重放。")
+        original = application.get("original_deterministic_result")
+        values = application.get("applied_draft")
+        recalculated = application.get("deterministic_recalculation")
+        if not isinstance(original, Mapping):
+            raise ValueError("Agent 应用结果缺少原确定性结果。")
+        if self._llm_settings_sha256(original) != frozen_deterministic_sha256:
+            raise ValueError("Agent 应用返回的原确定性结果与 GUI 冻结结果不一致。")
+        if not isinstance(values, Mapping) or not isinstance(recalculated, Mapping):
+            raise ValueError("Agent llm_apply 没有返回可用的草案值和确定性复算结果。")
+        frozen_values_copy = json.loads(json.dumps(dict(frozen_values), ensure_ascii=False))
+        applied_values = json.loads(json.dumps(dict(values), ensure_ascii=False))
+        recalculated_copy = json.loads(json.dumps(dict(recalculated), ensure_ascii=False))
+        parameter_values = self._pfd_agent_parameter_overrides(
+            block_id,
+            selection_id,
+            frozen_values_copy,
+            applied_values,
+        )
+        canonical_blocks, canonical_streams, normalization_issues = self._pfd_canonical_context()
+        parameter_result = aspen_pfd.update_parameter_override(
+            self.aspen_bundle,
+            self.aspen_type_overrides,
+            self.pfd_parameter_overrides,
+            block_id,
+            parameter_values,
+            catalog=self.catalog,
+            canonical_parameters_by_block=canonical_blocks,
+            canonical_parameters_by_stream=canonical_streams,
+            parameter_normalization_issues=normalization_issues,
+        )
+        next_parameter_overrides = {
+            str(key): dict(value)
+            for key, value in parameter_result.get("parameter_overrides", {}).items()
+            if isinstance(value, Mapping)
+        }
+        next_mapping = dict(parameter_result["mapping"])
+        impact = (
+            parameter_result.get("change_impact")
+            if isinstance(parameter_result.get("change_impact"), Mapping)
+            else {}
+        )
+        affected_blocks = {
+            str(item)
+            for key in ("changed_blocks", "immediate_upstream_blocks", "immediate_downstream_blocks")
+            for item in impact.get(key, [])
+        }
+        affected_streams = {str(item) for item in impact.get("affected_streams", [])}
+        next_recalculated_results = dict(self.pfd_recalculated_results)
+        for affected_block in affected_blocks:
+            next_recalculated_results.pop(affected_block, None)
+        next_recalculated_results[block_id] = recalculated_copy
+        next_invalidated_blocks = set(self.pfd_invalidated_blocks)
+        next_invalidated_blocks.update(affected_blocks)
+        next_invalidated_blocks.discard(block_id)
+        next_invalidated_streams = set(self.pfd_invalidated_streams)
+        next_invalidated_streams.update(affected_streams)
+        next_mapping = aspen_pfd.mark_block_recalculated(next_mapping, block_id)
+
+        self.pfd_parameter_overrides = next_parameter_overrides
+        self.pfd_recalculated_results = next_recalculated_results
+        self.pfd_invalidated_blocks = next_invalidated_blocks
+        self.pfd_invalidated_streams = next_invalidated_streams
+        self.aspen_pfd_mapping = next_mapping
+        self.last_manual = {
+            "selection_id": selection_id,
+            "values": applied_values,
+        }
+        self.last_source_input = {
+            "operation": "manual_match",
+            "payload": {
+                "selection_id": selection_id,
+                "values": applied_values,
+            },
+        }
+        self.last_source_context = {
+            "kind": "pfd_block",
+            "block_id": block_id,
+        }
+        self.last_deterministic_result = recalculated_copy
+        self._save_pfd_parameter_state(
+            parameter_result,
+            llm_used=True,
+            input_provenance=(
+                "GUI_USER_APPROVED_AGENT_DRAFT_PER_BLOCK_"
+                "NOT_EVIDENCE_BY_ITSELF"
+            ),
+        )
+        self._sync_pfd_view()
+        self._render_result(dict(application))
+        self._open_pfd_block(block_id)
+        self.status_var.set(
+            f"{block_id} 的白名单 Agent 草案已由程序重放并写回本节点；相邻设备与关联管线仍保持待复核。"
         )
 
     def _apply_llm(self) -> None:
@@ -3017,23 +4607,90 @@ class EquipmentDesignTkApp:
         replay = self.llm_proposal.get("replay_contract", {})
         replay_input = replay.get("input", {}) if isinstance(replay, dict) else {}
         replay_payload = replay_input.get("payload", {}) if isinstance(replay_input, dict) else {}
-        current_selection = self._selection()["selection_id"]
-        current_values = self._collect_manual()
-        frozen_selection = replay_payload.get("selection_id")
-        frozen_values = replay_payload.get("values")
-        if (
-            replay_input.get("operation") != "manual_match"
-            or current_selection != frozen_selection
-            or current_values != frozen_values
-        ):
-            self.llm_proposal = None
-            self.apply_llm_button.state(["disabled"])
-            messagebox.showwarning(
-                "草案已失效",
-                "审核后手动输入或模块选择已经变化。请先重新做确定性匹配，再重新运行 Agent 协同。",
-                parent=self.root,
+        proposal_context = (
+            self.llm_proposal_context
+            if isinstance(self.llm_proposal_context, Mapping)
+            else {}
+        )
+        source_context = (
+            proposal_context.get("source_context")
+            if isinstance(proposal_context.get("source_context"), Mapping)
+            else {}
+        )
+        proposal_kind = str(source_context.get("kind") or "")
+        current_source_kind = (
+            str(self.last_source_context.get("kind") or "")
+            if isinstance(self.last_source_context, Mapping)
+            else ""
+        )
+        if proposal_kind not in {"", "manual_form", "pfd_block"}:
+            self._discard_stale_llm_proposal(
+                "当前 Agent 来源不支持自动应用；确定性结果保持不变。"
             )
             return
+        if current_source_kind == "pfd_block" and proposal_kind != "pfd_block":
+            self._discard_stale_llm_proposal(
+                "PFD 草案缺少冻结节点上下文；为避免写入手动页，程序已拒绝应用。"
+            )
+            return
+        frozen_selection = str(replay_payload.get("selection_id") or "")
+        frozen_values = replay_payload.get("values")
+        pfd_block_id = str(source_context.get("block_id") or "")
+        if proposal_kind == "pfd_block":
+            frozen_source = proposal_context.get("source_input")
+            frozen_deterministic_sha256 = str(
+                proposal_context.get("deterministic_result_sha256") or ""
+            )
+            replay_deterministic_sha256 = str(
+                replay.get("deterministic_result_sha256") or ""
+            )
+            current_deterministic = self.last_deterministic_result or self.last_result
+            current_pfd_result = self.pfd_recalculated_results.get(pfd_block_id)
+            current_selection = self._pfd_selection_for_block(pfd_block_id)
+            pfd_context_current = (
+                isinstance(self.last_source_context, Mapping)
+                and self.last_source_context.get("kind") == "pfd_block"
+                and str(self.last_source_context.get("block_id") or "") == pfd_block_id
+            )
+            valid_pfd_replay = (
+                bool(pfd_block_id)
+                and replay_input.get("operation") == "manual_match"
+                and isinstance(frozen_values, Mapping)
+                and isinstance(frozen_source, Mapping)
+                and replay_input == frozen_source
+                and self.last_source_input == frozen_source
+                and pfd_context_current
+                and self.last_manual.get("selection_id") == frozen_selection
+                and self.last_manual.get("values") == frozen_values
+                and str(current_selection.get("selection_id") or "") == frozen_selection
+                and isinstance(current_deterministic, Mapping)
+                and isinstance(current_pfd_result, Mapping)
+                and bool(frozen_deterministic_sha256)
+                and replay_deterministic_sha256 == frozen_deterministic_sha256
+                and self._llm_settings_sha256(current_deterministic)
+                == frozen_deterministic_sha256
+                and self._llm_settings_sha256(current_pfd_result)
+                == frozen_deterministic_sha256
+            )
+            if not valid_pfd_replay:
+                self._discard_stale_llm_proposal(
+                    "审核后 PFD 节点、类别、参数或确定性结果已变化。"
+                    "旧草案不会写入其他节点；请按当前节点重新运行 Agent。"
+                )
+                return
+        else:
+            current_selection = self._selection()["selection_id"]
+            current_values = self._collect_manual()
+            if (
+                replay_input.get("operation") != "manual_match"
+                or current_selection != frozen_selection
+                or current_values != frozen_values
+            ):
+                self._discard_stale_llm_proposal(
+                    "审核后手动输入或模块选择已经变化。"
+                    "请先重新做确定性匹配，再重新运行 Agent 协同。"
+                )
+                return
         validated = self.llm_proposal.get("validated_proposal", {})
         approved_ids = [
             str(item.get("change_id"))
@@ -3057,6 +4714,25 @@ class EquipmentDesignTkApp:
         if not isinstance(values, dict) or not isinstance(recalculated, dict):
             messagebox.showerror("草案应用失败", "Agent llm_apply 没有返回确定性复算结果。", parent=self.root)
             return
+        if proposal_kind == "pfd_block":
+            try:
+                self._apply_pfd_agent_application(
+                    block_id=pfd_block_id,
+                    selection_id=frozen_selection,
+                    frozen_values=frozen_values,
+                    frozen_deterministic_sha256=frozen_deterministic_sha256,
+                    application=application,
+                )
+            except (ValueError, KeyError, TypeError, aspen_pfd.AspenPFDMappingError) as exc:
+                self.llm_proposal = None
+                self.llm_proposal_context = None
+                self.apply_llm_button.state(["disabled"])
+                messagebox.showerror("PFD 草案应用失败", str(exc), parent=self.root)
+                return
+            self.llm_proposal = None
+            self.llm_proposal_context = None
+            self.apply_llm_button.state(["disabled"])
+            return
         self.tabs.select(1)
         self._fill_manual(values)
         self.last_manual["values"] = values
@@ -3067,8 +4743,10 @@ class EquipmentDesignTkApp:
                 "values": json.loads(json.dumps(values, ensure_ascii=False)),
             },
         }
+        self.last_source_context = {"kind": "manual_form"}
         self.last_deterministic_result = recalculated
         self.llm_proposal = None
+        self.llm_proposal_context = None
         self.apply_llm_button.state(["disabled"])
         self._render_result(application)
 
@@ -3574,6 +5252,7 @@ class EquipmentDesignTkApp:
                     ),
                 },
             }
+            self.last_source_context = {"kind": "derivation_workbench"}
             self.last_deterministic_result = recalculated
             index = getattr(
                 self,
@@ -3663,6 +5342,13 @@ class EquipmentDesignTkApp:
         self.summary_vars["设备族"].set(str(header.get("family_name") or header.get("family_id") or "—"))
         self.summary_vars["型号状态"].set(result_presentation.code_label(axes.get("formal_model", "—")))
         self.summary_vars["待闭合"].set(str(unresolved))
+        self.summary_value_labels["待闭合"].configure(
+            fg=COLORS["safe"] if unresolved == 0 else COLORS["bad"]
+        )
+        formal_status = str(axes.get("formal_model") or "")
+        self.summary_value_labels["型号状态"].configure(
+            fg=COLORS["safe"] if "READY" in formal_status else COLORS["warn"]
+        )
         self._render_derivation_workbench(card)
 
         for item in self.customer_tree.get_children():
@@ -3681,6 +5367,159 @@ class EquipmentDesignTkApp:
                 field.get("unit") or "—", field.get("state"),
                 _display_cell(field.get("evidence_gate")), _display_cell(field.get("profile_ids")),
             ))
+
+        selected_output = (
+            card.get("selected_output")
+            if isinstance(card.get("selected_output"), Mapping)
+            else {}
+        )
+        branch = (
+            card.get("branch_selection")
+            if isinstance(card.get("branch_selection"), Mapping)
+            else {}
+        )
+        branch_lines = [
+            "程序实际选择",
+            f"设备族：{selected_output.get('family_name') or selected_output.get('family_id') or 'OPEN'}",
+            f"型式：{selected_output.get('recommended_type') or 'OPEN'}",
+            f"型号/工程规格：{selected_output.get('model_or_specification') or 'OPEN'}",
+            f"型号状态：{result_presentation.code_label(selected_output.get('model_status'))}",
+            f"型式规则：{selected_output.get('terminal_rule_id') or 'OPEN'}",
+            "",
+            "自然语言分支选择",
+        ]
+        natural_branches = branch.get("natural_language", [])
+        branch_lines.extend(
+            f"{index}. {text}"
+            for index, text in enumerate(natural_branches, start=1)
+        )
+        predicate_rows = branch.get(
+            "leading_candidate_predicate_branches", []
+        )
+        if predicate_rows:
+            branch_lines.extend(["", "首位候选判断节点"])
+            branch_lines.extend(
+                f"- {item.get('branch_narrative') or item.get('predicate_id')}"
+                for item in predicate_rows
+                if isinstance(item, Mapping)
+            )
+        components = card.get("component_selections", [])
+        if components:
+            branch_lines.extend(["", "连接口小部件选择"])
+            branch_lines.extend(
+                f"- {item.get('branch_narrative')}"
+                for item in components
+                if isinstance(item, Mapping)
+            )
+        calculation_branches = branch.get("calculation_branches", [])
+        if calculation_branches:
+            branch_lines.extend(["", "计算分支执行状态"])
+            branch_lines.extend(
+                f"- {item.get('branch_narrative')}"
+                for item in calculation_branches
+                if isinstance(item, Mapping)
+            )
+        branch_lines.extend([
+            "",
+            "机器分支账本 SHA-256",
+            str(branch.get("branch_output_sha256") or "OPEN"),
+        ])
+        _set_text(self.branch_output_text, "\n".join(branch_lines))
+
+        llm_control = (
+            card.get("llm_control_result")
+            if isinstance(card.get("llm_control_result"), Mapping)
+            else {}
+        )
+        llm_lines = [
+            f"状态：{llm_control.get('status') or 'NOT_REQUESTED'}",
+            (
+                "模型："
+                f"{llm_control.get('provider') or '—'} / "
+                f"{llm_control.get('model') or '—'}"
+            ),
+            f"注入点：{llm_control.get('injection_point') or '—'}",
+            f"是否实际改变重算输入：{llm_control.get('llm_changed_active_inputs') is True}",
+            "",
+            "自然语言结果",
+        ]
+        llm_lines.extend(
+            f"- {text}"
+            for text in llm_control.get("natural_language", [])
+        )
+        llm_lines.extend([
+            "",
+            "大模型组织后的输出块（按模型给出的顺序）",
+            json.dumps(
+                llm_control.get("organized_output_blocks", []),
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ),
+            "",
+            "LLM 条件判断",
+            json.dumps(
+                llm_control.get("condition_assessments", []),
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ),
+            "",
+            "LLM 补值建议及程序复核",
+            json.dumps(
+                {
+                    "suggestions": llm_control.get(
+                        "calculation_assists", []
+                    ),
+                    "validation": llm_control.get(
+                        "calculation_assist_validation", []
+                    ),
+                    "applied_calculation_inputs": llm_control.get(
+                        "applied_calculation_inputs", {}
+                    ),
+                    "applied_model_estimates": llm_control.get(
+                        "applied_model_estimates", {}
+                    ),
+                },
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ),
+            "",
+            "LLM 终选分支建议及程序复核",
+            json.dumps(
+                {
+                    "suggestions": llm_control.get(
+                        "terminal_selection_assists", []
+                    ),
+                    "validation": llm_control.get(
+                        "terminal_selection_assist_validation", []
+                    ),
+                    "applied_overrides": llm_control.get(
+                        "applied_terminal_overrides", {}
+                    ),
+                },
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ),
+            "",
+            "LLM 审核发现与回退",
+            json.dumps(
+                {
+                    "audit_findings": llm_control.get(
+                        "audit_findings", []
+                    ),
+                    "fallback_errors": llm_control.get(
+                        "fallback_errors", []
+                    ),
+                },
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ),
+        ])
+        _set_text(self.llm_result_text, "\n".join(llm_lines))
 
         for item in self.parameter_tree.get_children():
             self.parameter_tree.delete(item)
@@ -3874,10 +5713,26 @@ class EquipmentDesignTkApp:
             _set_text(self.equation_text, "当前结果不含确定性设备参数包。")
             _set_text(self.issue_text, "当前结果不含可展示的设备参数、候选或证据门。")
             _set_text(
+                self.branch_output_text,
+                "当前结果不含可展示的程序分支选择。",
+            )
+            _set_text(
+                self.llm_result_text,
+                "当前结果不含可展示的大模型调控记录。",
+            )
+            _set_text(
                 self.organized_answer_text,
                 "当前结果不含可由 Agent 组织的确定性设备事实。",
             )
         _set_text(self.raw_text, json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        if cards:
+            self.quick_save_button.state(["!disabled"])
+            self.quick_export_button.state(["!disabled"])
+            self._set_workflow_step(
+                3,
+                f"已生成 {len(cards)} 个设备/管线结果；可审核分支、修改参数并单设备重算。",
+            )
+            self._select_result_panel(self.customer_panel)
 
     def _save_result(self) -> None:
         if not self.last_result:
@@ -3967,7 +5822,7 @@ class EquipmentDesignTkApp:
                     "organized_answer_sha256"
                 ),
                 "program_generated": True,
-                "llm_used": False,
+                "llm_used": bool(self.presentation.get("llm_used")),
             }
             manifest["manifest_sha256"] = hashlib.sha256(
                 json.dumps(
@@ -3993,6 +5848,10 @@ class EquipmentDesignTkApp:
             )
             self.status_var.set(
                 f"报告已导出：{path}（附带哈希清单）"
+            )
+            self._set_workflow_step(
+                4,
+                f"报告与哈希清单已导出：{path.name}",
             )
             messagebox.showinfo(
                 "导出完成",

@@ -1,0 +1,1438 @@
+{
+  "schema": "equipment-ai-engineering-choice-registry-v1",
+  "version": "1.0.0",
+  "policy": {
+    "purpose": "向受控 AI 注入设备型式、材料与零部件候选及选择依据；AI 只能返回已登记 ID，程序校验后复算。",
+    "authority_order": [
+      "same_case_verified_or_user_input",
+      "deterministic_program_rule",
+      "verified_registered_ai_choice",
+      "registered_engineering_fallback"
+    ],
+    "free_text_choice_allowed": false,
+    "overwrite_existing_value_allowed": false,
+    "evidence_class_if_applied": "J",
+    "promotion_cap": "TYPE_SCREENING",
+    "formal_model_promotion_allowed": false,
+    "warning": "登记选择只用于初步型式、材料和零部件筛选，不替代腐蚀试验、材料相容性、机械设计、厂家数据表或正式审查。"
+  },
+  "families": [
+    {
+      "family_id": "family_fixed_tubesheet_exchanger",
+      "background": "固定管板换热器应同时判断工艺用途、温差应力、检修清洗方式以及壳程/管程介质腐蚀性；材料组合必须分别落到壳体、换热管和管板相关字段。",
+      "source_refs": [
+        "knowledge_graph/standards_graph/exchanger_standards_nodes.md",
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_fixed_exchanger:general_liquid_liquid:fixed_tubesheet",
+          "condition_id": "ai_condition:fixed_exchanger:general_liquid_liquid",
+          "recommended_type": "固定管板式管壳换热器",
+          "condition_text": "冷热侧均为常规流体，壳程机械清洗需求不高，且没有已知的大温差热应力或频繁热循环约束。",
+          "selection_basis": "结构简单、单位面积成本较低；当壳程机械清洗和显著热膨胀补偿不是主导约束时作为初筛路线。",
+          "source_refs": [
+            "knowledge_graph/standards_graph/exchanger_standards_nodes.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "温差应力仍需正式机械校核；本规则不证明管板、膨胀节或焊接接头合格。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_fixed_exchanger:condensing_service:fixed_tubesheet_condenser",
+          "condition_id": "ai_condition:fixed_exchanger:condensing_service",
+          "recommended_type": "卧式固定管板式冷凝器",
+          "condition_text": "主要工艺任务为蒸气冷凝，要求稳定排液，且没有必须抽芯清洗壳程的证据。",
+          "selection_basis": "冷凝服务需要明确卧式布置和排液路径，不能只输出泛称“换热器”。",
+          "source_refs": [
+            "knowledge_graph/standards_graph/exchanger_standards_nodes.md",
+            "knowledge_graph/equipment_parameter_chain_templates.json"
+          ],
+          "assumption": "两相分配、冷凝压降和不凝气排放仍需专门校核。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "fixed_exchanger:wetted_material_package",
+          "title": "壳体—换热管材料组合",
+          "background": "换热器材料不是一个总称字段；应分别给出壳体和换热管材料，并保留介质侧归属和腐蚀复核边界。",
+          "source_refs": [
+            "knowledge_graph/standards_graph/exchanger_standards_nodes.md",
+            "knowledge_graph/manual_decision_gates.md"
+          ],
+          "choices": [
+            {
+              "choice_id": "fixed_exchanger:material:carbon_shell_304_tube",
+              "label": "Q345R 壳体 + S30408 换热管",
+              "trigger_condition_text": "壳程为非强腐蚀公用工程介质，管程需要不锈钢洁净/耐蚀表面，且没有高氯或强酸证据。",
+              "selection_basis": "常规公用工程壳程与一般耐蚀管程的经济型初筛组合。",
+              "field_values": {
+                "shell_material_grade": "Q345R",
+                "tube_material_grade": "S30408"
+              },
+              "warning": "需按温度、氯离子、腐蚀裕量和异种金属连接重新核查。",
+              "source_refs": [
+                "knowledge_graph/standards_graph/exchanger_standards_nodes.md",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "fixed_exchanger:material:316l_wetted",
+              "label": "S31603 壳体 + S31603 换热管",
+              "trigger_condition_text": "两侧均有中等腐蚀风险或清洁要求，且现有信息不支持碳钢接液。",
+              "selection_basis": "含钼奥氏体不锈钢的保守耐蚀初筛路线；仍不覆盖强还原酸、高温浓氯和含氟体系。",
+              "field_values": {
+                "shell_material_grade": "S31603",
+                "tube_material_grade": "S31603"
+              },
+              "warning": "AI 选择不等于腐蚀相容性证明；异常介质必须改用数据库或试验。",
+              "source_refs": [
+                "knowledge_graph/standards_graph/exchanger_standards_nodes.md",
+                "knowledge_graph/manual_decision_gates.md"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_other_heat_exchanger",
+      "background": "非固定管板换热设备首先按清洗、压降、温差应力、紧凑性和相变任务分型，再选择板片/垫片或壳体/管束材料。",
+      "source_refs": [
+        "knowledge_graph/standards_graph/exchanger_standards_nodes.md",
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_other_exchanger:clean_compact:gasketed_plate",
+          "condition_id": "ai_condition:other_exchanger:clean_compact",
+          "recommended_type": "可拆式垫片板式换热器",
+          "condition_text": "两侧流体较清洁，要求紧凑布置和接近温差，压力温度在垫片板式设备可复核范围内。",
+          "selection_basis": "高传热系数、紧凑和可拆洗；垫片相容性与压力温度上限是后续硬门槛。",
+          "source_refs": [
+            "knowledge_graph/standards_graph/exchanger_standards_nodes.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "未证明板片/垫片材料和设计压力温度适用。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_other_exchanger:high_delta_t:u_tube",
+          "condition_id": "ai_condition:other_exchanger:high_delta_t",
+          "recommended_type": "U 形管式管壳换热器",
+          "condition_text": "冷热侧温差或热循环显著，需要管束自由热膨胀，且允许管内机械清洗受 U 形弯管限制。",
+          "selection_basis": "U 形管束可释放纵向热膨胀，但管内清洗和更换范围受限。",
+          "source_refs": [
+            "knowledge_graph/standards_graph/exchanger_standards_nodes.md",
+            "knowledge_graph/equipment_type_applicability_contract.md"
+          ],
+          "assumption": "温差阈值与疲劳寿命需由正式热应力计算确定。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "other_exchanger:plate_gasket_package",
+          "title": "板片—垫片材料组合",
+          "background": "板式换热器必须把板片和垫片作为成对选择，单独给出“不锈钢”不足以形成可采购规格。",
+          "source_refs": [
+            "knowledge_graph/standards_graph/exchanger_standards_nodes.md",
+            "knowledge_graph/manual_decision_gates.md"
+          ],
+          "choices": [
+            {
+              "choice_id": "other_exchanger:material:316l_epdm",
+              "label": "S31603 板片 + EPDM 垫片",
+              "trigger_condition_text": "水系或一般极性介质，温度处于 EPDM 可复核范围，且无油品/芳烃相容性冲突。",
+              "selection_basis": "一般水系换热的耐蚀板片与弹性垫片初筛组合。",
+              "field_values": {
+                "heat_transfer_plate_material_grade": "S31603",
+                "plate_gasket_material_grade": "EPDM"
+              },
+              "warning": "必须用实际组分、浓度和温度校核 EPDM 溶胀与老化。",
+              "source_refs": [
+                "knowledge_graph/standards_graph/exchanger_standards_nodes.md",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "other_exchanger:material:316l_fkm",
+              "label": "S31603 板片 + FKM 垫片",
+              "trigger_condition_text": "介质含油品或烃类，且需要比 EPDM 更偏向耐油的垫片路线。",
+              "selection_basis": "油品/烃类服务的耐油弹性体初筛组合。",
+              "field_values": {
+                "heat_transfer_plate_material_grade": "S31603",
+                "plate_gasket_material_grade": "FKM"
+              },
+              "warning": "FKM 并非对所有胺、酮、蒸汽或低温服务都适用，必须做相容性闭合。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_tower",
+      "background": "塔的型式选择需要结合压降、操作弹性、污堵/起泡倾向、液体负荷和传质任务；材料选择应覆盖壳体、塔内件以及填料或塔板。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "knowledge_graph/formula_family_nodes.md",
+        "knowledge_graph/equipment_parameter_chain_templates.json"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "tower:api_condition:vacuum_structured_packing",
+          "condition_id": "tower:condition:vacuum_low_dp_clean_service",
+          "recommended_type": "规整填料塔",
+          "condition_text": "真空或严格低压降工况，介质较清洁且不以宽负荷调节为主。",
+          "selection_basis": "规整填料路线优先降低压降并提供较高比表面积。",
+          "source_refs": [
+            "knowledge_graph/formula_family_nodes.md",
+            "knowledge_graph/equipment_type_applicability_contract.md"
+          ],
+          "assumption": "液泛、润湿、分布器和压降必须由塔内件水力学复核。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "tower:api_condition:wide_turndown_valve_tray",
+          "condition_id": "tower:condition:wide_turndown_required",
+          "recommended_type": "浮阀塔板塔",
+          "condition_text": "要求较宽操作弹性，且压降并非最严格主导约束。",
+          "selection_basis": "浮阀塔板通常比筛板路线具有更宽的负荷调节空间。",
+          "source_refs": [
+            "knowledge_graph/formula_family_nodes.md",
+            "knowledge_graph/equipment_type_applicability_contract.md"
+          ],
+          "assumption": "塔板间距、降液管、雾沫夹带、漏液和液泛仍需正式水力学校核。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "tower:shell_internals_package",
+          "title": "塔壳—塔内件材料组合",
+          "background": "塔壳与塔内件受力和接液环境不同，必须分别给出材料；填料塔还应明确填料材质。",
+          "source_refs": [
+            "knowledge_graph/manual_decision_gates.md",
+            "knowledge_graph/equipment_parameter_chain_templates.json"
+          ],
+          "choices": [
+            {
+              "choice_id": "tower:material:q345r_304_internals",
+              "label": "Q345R 塔壳 + S30408 塔内件",
+              "trigger_condition_text": "壳体外部承压和主体介质不要求全不锈钢，但接液塔内件需要一般耐蚀性。",
+              "selection_basis": "承压壳体与接液内件分材的经济型初筛路线。",
+              "field_values": {
+                "shell_material_grade": "Q345R",
+                "internals_material_grade": "S30408",
+                "packing_material_grade": "S30408"
+              },
+              "warning": "需核对腐蚀裕量、焊接、冲刷和异种金属连接。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "tower:material:316l_wetted",
+              "label": "S31603 塔壳 + S31603 塔内件",
+              "trigger_condition_text": "存在中等腐蚀风险或产品纯度要求，现有信息不支持碳钢接液。",
+              "selection_basis": "全接液 S31603 的保守耐蚀初筛路线。",
+              "field_values": {
+                "shell_material_grade": "S31603",
+                "internals_material_grade": "S31603",
+                "packing_material_grade": "S31603"
+              },
+              "warning": "高氯、强还原酸或含氟介质仍需升级材料路线。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_reactor_vessel_separator",
+      "background": "该族覆盖反应器、工艺容器与分离器。AI 必须先依据任务和相态选具体型式，再判断承压壳体、接液表面和内件材料，不能把三类设备混为一个泛称。",
+      "source_refs": [
+        "knowledge_graph/standards_graph/reactor_standards_nodes.md",
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "knowledge_graph/equipment_parameter_chain_templates.json"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_vessel_separator:gas_liquid:vertical_knockout",
+          "condition_id": "ai_condition:vessel_separator:gas_liquid_vertical",
+          "recommended_type": "立式气液旋流除沫分离器",
+          "condition_text": "主要任务为气液分离，气相连续，液体滞留量不大，场地更适合立式布置。",
+          "selection_basis": "明确立式、气液和除沫构件，避免只输出“分离器”。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "knowledge_graph/equipment_parameter_chain_templates.json"
+          ],
+          "assumption": "入口构件、丝网/叶片除沫器和液滴粒径效率需正式校核。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_vessel_separator:agitated_reaction:jacketed_cstr",
+          "condition_id": "ai_condition:vessel_separator:agitated_reaction",
+          "recommended_type": "夹套式机械搅拌连续釜式反应器",
+          "condition_text": "存在连续液相反应、混合和换热要求，且工艺逻辑需要釜式停留时间。",
+          "selection_basis": "把反应、搅拌、夹套换热和连续停留时间作为同一设备路线。",
+          "source_refs": [
+            "knowledge_graph/standards_graph/reactor_standards_nodes.md",
+            "knowledge_graph/equipment_parameter_chain_templates.json"
+          ],
+          "assumption": "反应动力学、放热失控、搅拌功率和泄放系统尚未闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "vessel:wetted_material_package",
+          "title": "壳体—接液面—内件材料组合",
+          "background": "承压壳体材料与接液防腐路线必须分开记录；反应器还需覆盖反应管或夹套材料。",
+          "source_refs": [
+            "knowledge_graph/standards_graph/reactor_standards_nodes.md",
+            "knowledge_graph/manual_decision_gates.md"
+          ],
+          "choices": [
+            {
+              "choice_id": "vessel:material:q345r_304_wetted",
+              "label": "Q345R 壳体 + S30408 接液内件",
+              "trigger_condition_text": "主体承压可采用低合金/碳钢路线，接液面需要一般不锈钢耐蚀或洁净性。",
+              "selection_basis": "壳体承压与接液内件分材的常规初筛组合。",
+              "field_values": {
+                "shell_material_grade": "Q345R",
+                "wetted_surface_material_grade": "S30408",
+                "internals_material_grade": "S30408",
+                "jacket_material_grade": "Q345R"
+              },
+              "warning": "衬里/复合板、焊后热处理和腐蚀裕量需机械专业确认。",
+              "source_refs": [
+                "knowledge_graph/standards_graph/reactor_standards_nodes.md",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "vessel:material:316l_wetted",
+              "label": "S31603 全接液组合",
+              "trigger_condition_text": "中等腐蚀或产品纯度要求使一般碳钢/304 接液路线不充分。",
+              "selection_basis": "S31603 壳体、接液面、内件和反应管的保守初筛组合。",
+              "field_values": {
+                "shell_material_grade": "S31603",
+                "wetted_surface_material_grade": "S31603",
+                "internals_material_grade": "S31603",
+                "reaction_tube_material_grade": "S31603",
+                "jacket_material_grade": "Q345R"
+              },
+              "warning": "材料选择不替代反应介质腐蚀、应力腐蚀和催化相容性试验。",
+              "source_refs": [
+                "knowledge_graph/standards_graph/reactor_standards_nodes.md",
+                "knowledge_graph/manual_decision_gates.md"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_storage_vessel",
+      "background": "储存设备必须依据压力、温度、挥发性、库存周期和场地决定立式常压罐或卧式承压容器，并分开给出壳体和内件材料。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "knowledge_graph/equipment_parameter_chain_templates.json",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_storage:low_pressure_large_inventory:vertical_tank",
+          "condition_id": "ai_condition:storage:low_pressure_large_inventory",
+          "recommended_type": "立式圆筒形固定顶储罐",
+          "condition_text": "大库存、接近常压或低压储存，介质挥发性和呼吸损失可由固定顶路线进一步复核。",
+          "selection_basis": "大容积低压库存优先采用立式罐体布局。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "呼吸阀、氮封、消防、抗震和基础未完成。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_storage:pressurized_inventory:horizontal_vessel",
+          "condition_id": "ai_condition:storage:pressurized_inventory",
+          "recommended_type": "卧式圆筒形承压储罐",
+          "condition_text": "储存压力明显高于常压，库存量适合卧式布置并要求明确承压边界。",
+          "selection_basis": "把压力储存与常压罐路线分开，输出卧式承压容器具体型式。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "knowledge_graph/equipment_parameter_chain_templates.json"
+          ],
+          "assumption": "设计压力、充装系数、泄放、支座和疲劳需正式机械设计。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "storage:shell_internals_package",
+          "title": "储罐壳体—内件材料组合",
+          "background": "储罐设备表至少应给出壳体和内件/接液附件材料，而不是单一“材质”文字。",
+          "source_refs": [
+            "knowledge_graph/manual_decision_gates.md",
+            "knowledge_graph/equipment_parameter_chain_templates.json"
+          ],
+          "choices": [
+            {
+              "choice_id": "storage:material:q345r_304_internals",
+              "label": "Q345R 壳体 + S30408 内件",
+              "trigger_condition_text": "主体介质对碳钢可接受，但液位计接管、除沫或洁净内件需要一般不锈钢。",
+              "selection_basis": "常规储存的经济型分材组合。",
+              "field_values": {
+                "shell_material_grade": "Q345R",
+                "internals_material_grade": "S30408",
+                "material": "Q345R"
+              },
+              "warning": "必须按介质腐蚀、低温冲击和焊接工艺确认。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "storage:material:316l_wetted",
+              "label": "S31603 壳体 + S31603 内件",
+              "trigger_condition_text": "产品纯度或中等腐蚀性不允许碳钢接液。",
+              "selection_basis": "全接液 S31603 的保守初筛组合。",
+              "field_values": {
+                "shell_material_grade": "S31603",
+                "internals_material_grade": "S31603",
+                "material": "S31603"
+              },
+              "warning": "高氯和特殊化学品仍需腐蚀数据闭合。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_pump",
+      "background": "泵型由流量、扬程、黏度、固相、汽蚀与泄漏风险共同决定；材料与密封采用程序内 5 条具体路线，AI 只能选择路线 ID，组件明细由程序展开。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "knowledge_graph/formula_family_nodes.md",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_pump:high_viscosity:twin_screw",
+          "condition_id": "ai_condition:pump:high_viscosity",
+          "recommended_type": "双螺杆容积泵",
+          "condition_text": "动力黏度较高或黏度导致离心泵效率/吸入性能明显不利，介质允许容积式输送。",
+          "selection_basis": "高黏液体优先比较螺杆容积泵，避免把所有液体服务退化为离心泵。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "knowledge_graph/formula_family_nodes.md"
+          ],
+          "assumption": "转速、滑差、粘温曲线、脉动和安全阀需厂家校核。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_pump:high_head:multistage_centrifugal",
+          "condition_id": "ai_condition:pump:high_head",
+          "recommended_type": "卧式多级离心泵",
+          "condition_text": "总扬程较高，单级参考点不能合理覆盖，介质仍适合离心输送。",
+          "selection_basis": "用多级叶轮分配总扬程，并保留末级承压和出口压力校核。",
+          "source_refs": [
+            "knowledge_graph/formula_family_nodes.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "完整 Q-H、效率、功率、NPSHr 曲线和末级承压必须由厂家闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "pump:material_seal_route",
+          "title": "泵体—叶轮—轴—机械密封—垫片路线",
+          "background": "每个候选映射到程序已有的具体材料/密封路线；程序输出泵壳、叶轮、轴、轴套、机械密封、辅助密封和垫片。",
+          "source_refs": [
+            "scripts/equipment_design_match.py",
+            "knowledge_graph/manual_decision_gates.md"
+          ],
+          "choices": [
+            {
+              "choice_id": "pump:route:clean_water_standard",
+              "label": "清水标准材料与单端面密封路线",
+              "trigger_condition_text": "主要介质为清水/凝结水，无显著固相、腐蚀、毒性或可燃性。",
+              "selection_basis": "选择程序路线 CLEAN_WATER_STANDARD，由程序展开 HT250 泵壳、锡青铜叶轮、20Cr13 轴、单端面机械密封和无石棉垫片。",
+              "field_values": {
+                "pump_material_route_override_id": "CLEAN_WATER_STANDARD"
+              },
+              "warning": "水质、温度、冲刷和密封冲洗条件仍需确认。",
+              "source_refs": [
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "pump:route:corrosive_316l_hard_face",
+              "label": "CF8M/316L 耐蚀材料与 SiC/SiC 双端面密封路线",
+              "trigger_condition_text": "存在腐蚀性、极端 pH 或较高氯离子信息，且尚无更高级合金的同工况证据。",
+              "selection_basis": "选择程序路线 CORROSIVE_316L_HARD_FACE，由程序展开 CF8M 泵壳/叶轮、17-4PH 轴、316L 轴套、SiC/SiC 双端面密封和 PTFE 辅助密封。",
+              "field_values": {
+                "pump_material_route_override_id": "CORROSIVE_316L_HARD_FACE"
+              },
+              "warning": "强还原酸、高温浓氯和含氟体系不能据此定材。",
+              "source_refs": [
+                "scripts/equipment_design_match.py",
+                "knowledge_graph/manual_decision_gates.md"
+              ]
+            },
+            {
+              "choice_id": "pump:route:hazardous_containment",
+              "label": "危险烃类双端面加压密封路线",
+              "trigger_condition_text": "介质为烃类、易燃或较高毒性，需要更强泄漏控制。",
+              "selection_basis": "选择程序路线 HAZARDOUS_HYDROCARBON_CONTAINMENT，由程序展开 WCB 泵壳、CF8M 叶轮、17-4PH 轴和 Plan 53B 双端面密封。",
+              "field_values": {
+                "pump_material_route_override_id": "HAZARDOUS_HYDROCARBON_CONTAINMENT"
+              },
+              "warning": "密封系统等级、API Plan、排放和联锁必须由项目规范与厂家确认。",
+              "source_refs": [
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "pump:route:abrasive_slurry",
+              "label": "耐磨浆液材料与外冲洗双端面密封路线",
+              "trigger_condition_text": "介质含可观固相、浆液或磨蚀性颗粒。",
+              "selection_basis": "选择程序路线 ABRASIVE_SLURRY_HARD_METAL，由程序展开耐磨泵壳衬里、高铬铸铁叶轮和外冲洗双端面密封。",
+              "field_values": {
+                "pump_material_route_override_id": "ABRASIVE_SLURRY_HARD_METAL"
+              },
+              "warning": "还应同步改走耐磨浆液泵型并核对粒径、浓度、沉降和冲洗液。",
+              "source_refs": [
+                "scripts/equipment_design_match.py"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_compressor",
+      "background": "压缩机型式由入口体积流量、压比、气体清洁度、湿度和调节范围决定；材料/密封至少覆盖机壳、叶轮或转子、轴和轴封。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "knowledge_graph/formula_family_nodes.md",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_compressor:low_flow_high_ratio:reciprocating",
+          "condition_id": "ai_condition:compressor:low_flow_high_ratio",
+          "recommended_type": "多级往复式压缩机",
+          "condition_text": "入口体积流量较小、压比较高，并可接受脉动控制和较多维护点。",
+          "selection_basis": "低流量高压比服务优先比较多级往复式路线。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "knowledge_graph/formula_family_nodes.md"
+          ],
+          "assumption": "级间冷却、脉动、气阀寿命和润滑方式需厂家校核。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_compressor:dirty_or_wet:screw",
+          "condition_id": "ai_condition:compressor:dirty_or_wet",
+          "recommended_type": "喷油双螺杆压缩机",
+          "condition_text": "气体存在一定湿度/夹带或需要连续宽范围调节，且工艺允许油污染控制系统。",
+          "selection_basis": "螺杆路线对连续调节和一定湿气容忍度更高，但必须处理油系统和产品污染边界。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "喷油相容性、分离器、油冷却和产品洁净度未闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "compressor:rotor_seal_package",
+          "title": "机壳—转子—轴—密封组合",
+          "background": "压缩机材料和轴封必须随气体腐蚀性、毒性和泄漏等级选择。",
+          "source_refs": [
+            "knowledge_graph/manual_decision_gates.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "choices": [
+            {
+              "choice_id": "compressor:material:carbon_13cr_labyrinth",
+              "label": "铸钢机壳 + 13Cr 转子 + 迷宫密封",
+              "trigger_condition_text": "清洁、非显著腐蚀、非高毒气体，泄漏控制可由常规迷宫/干气方案进一步复核。",
+              "selection_basis": "一般清洁工艺气体的经济型初筛组合。",
+              "field_values": {
+                "casing_material_grade": "ZG230-450（WCB）",
+                "impeller_material_grade": "20Cr13",
+                "shaft_material_grade": "05Cr17Ni4Cu4Nb（17-4PH）",
+                "seal_type": "迷宫密封"
+              },
+              "warning": "材料强度、低温韧性和泄漏等级需按实际气体和级间温度确认。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "compressor:material:316l_dry_gas_seal",
+              "label": "CF8M 机壳 + 17-4PH 转子轴 + 串联干气密封",
+              "trigger_condition_text": "气体有中等腐蚀、易燃或较高毒性，需要明确泄漏控制。",
+              "selection_basis": "耐蚀承压部件与串联干气密封的保守初筛路线。",
+              "field_values": {
+                "casing_material_grade": "ZG07Cr19Ni11Mo2（CF8M）",
+                "impeller_material_grade": "05Cr17Ni4Cu4Nb（17-4PH）",
+                "shaft_material_grade": "05Cr17Ni4Cu4Nb（17-4PH）",
+                "seal_type": "串联式干气密封，带隔离气系统"
+              },
+              "warning": "必须由厂家完成气体相容性、密封气品质、火炬/放空和转子动力学校核。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_agitator",
+      "background": "搅拌器型式由黏度、固体悬浮、气液分散、剪切敏感性和釜体几何决定；材料与轴封至少覆盖桨叶、轴和机械密封。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "knowledge_graph/formula_family_nodes.md",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_agitator:high_viscosity:anchor",
+          "condition_id": "ai_condition:agitator:high_viscosity",
+          "recommended_type": "顶入式锚框式搅拌器",
+          "condition_text": "液体黏度高，宏观循环和近壁更新比高剪切分散更重要。",
+          "selection_basis": "锚框式叶轮贴近釜壁形成低速大循环，适合高黏初筛。",
+          "source_refs": [
+            "knowledge_graph/formula_family_nodes.md",
+            "knowledge_graph/equipment_type_applicability_contract.md"
+          ],
+          "assumption": "叶轮间隙、扭矩、轴径、临界转速和刮壁机构需正式设计。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_agitator:low_shear_blending:hydrofoil",
+          "condition_id": "ai_condition:agitator:low_shear_blending",
+          "recommended_type": "顶入式水翼推进式搅拌器",
+          "condition_text": "低到中黏液体混合，要求大循环和较低剪切，非高固含或高气含率主导。",
+          "selection_basis": "水翼叶轮以轴向循环和较低功耗作为初筛路线。",
+          "source_refs": [
+            "knowledge_graph/formula_family_nodes.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "功率准数、泵送数和混合时间需试验/厂家数据闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "agitator:wetted_seal_package",
+          "title": "桨叶—轴—机械密封组合",
+          "background": "搅拌器不能只给桨型；设备表还需给接液桨叶、轴和轴封的具体路线。",
+          "source_refs": [
+            "knowledge_graph/manual_decision_gates.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "choices": [
+            {
+              "choice_id": "agitator:material:304_single_seal",
+              "label": "S30408 桨轴 + 单端面机械密封",
+              "trigger_condition_text": "一般水系/非高危介质，无显著腐蚀和严格泄漏控制要求。",
+              "selection_basis": "一般混合服务的经济型接液材料和轴封初筛组合。",
+              "field_values": {
+                "agitator_material_grade": "S30408",
+                "shaft_material_grade": "05Cr17Ni4Cu4Nb（17-4PH）",
+                "seal_type": "集装式单端面机械密封"
+              },
+              "warning": "轴强度、密封端面、弹性体和清洗要求需复核。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "agitator:material:316l_double_seal",
+              "label": "S31603 桨叶 + 17-4PH 轴 + 双端面机械密封",
+              "trigger_condition_text": "介质有中等腐蚀、易燃或较高毒性，需要更强泄漏控制。",
+              "selection_basis": "耐蚀接液件和加压双端面密封的保守初筛组合。",
+              "field_values": {
+                "agitator_material_grade": "S31603",
+                "shaft_material_grade": "05Cr17Ni4Cu4Nb（17-4PH）",
+                "seal_type": "集装式加压双端面机械密封"
+              },
+              "warning": "密封液方案、轴挠度和反应介质相容性必须闭合。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_static_mixer",
+      "background": "静态混合器由雷诺数、黏度比、混合目标、允许压降和清洗边界选元件型式；材料和连接方式必须与管线等级一致。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "knowledge_graph/formula_family_nodes.md",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_static_mixer:general_blending:helical",
+          "condition_id": "ai_condition:static_mixer:general_blending",
+          "recommended_type": "螺旋元件管道静态混合器",
+          "condition_text": "单相或相近黏度流体连续混合，允许一定压降且需要明确混合元件。",
+          "selection_basis": "螺旋元件作为一般连续混合的具体初筛型式。",
+          "source_refs": [
+            "knowledge_graph/formula_family_nodes.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "元件数、混合均匀度和压降必须由同工况试验或厂家关联式闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_static_mixer:low_pressure_drop:grid",
+          "condition_id": "ai_condition:static_mixer:low_pressure_drop",
+          "recommended_type": "格栅式低压降静态混合器",
+          "condition_text": "允许压降严格，流量较大，混合目标以宏观均化为主。",
+          "selection_basis": "用格栅式元件降低局部阻力，保留较大通道。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "低压降与混合质量的权衡需要厂家验证。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "static_mixer:body_element_connection",
+          "title": "壳体—元件—连接组合",
+          "background": "静态混合器应同时选择接液材料和端部连接，且不得脱离当前管线等级。",
+          "source_refs": [
+            "knowledge_graph/manual_decision_gates.md",
+            "scripts/connection_component_selection.py"
+          ],
+          "choices": [
+            {
+              "choice_id": "static_mixer:material:304_flanged",
+              "label": "S30408 壳体/元件 + 法兰连接",
+              "trigger_condition_text": "一般非强腐蚀介质，需要可拆卸检修并与法兰管线连接。",
+              "selection_basis": "一般接液不锈钢与可拆法兰连接初筛。",
+              "field_values": {
+                "material": "S30408",
+                "connection_type": "法兰连接"
+              },
+              "warning": "法兰 PN/Class、密封面和垫片必须由管线等级继续选择。",
+              "source_refs": [
+                "scripts/connection_component_selection.py",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "static_mixer:material:316l_flanged",
+              "label": "S31603 壳体/元件 + 法兰连接",
+              "trigger_condition_text": "存在中等腐蚀或产品洁净性要求，需比 304 更保守的接液路线。",
+              "selection_basis": "S31603 接液件与法兰连接的保守初筛。",
+              "field_values": {
+                "material": "S31603",
+                "connection_type": "法兰连接"
+              },
+              "warning": "仍需核对材料相容性、压降和可清洗性。",
+              "source_refs": [
+                "scripts/connection_component_selection.py",
+                "scripts/equipment_design_match.py"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_membrane",
+      "background": "膜组件型式由进料洁净度、污染倾向、目标通量、回收率、压力和清洗方式决定；组件材料应覆盖膜、压力容器和中心管。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "knowledge_graph/equipment_parameter_chain_templates.json",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_membrane:clean_high_area:spiral_wound",
+          "condition_id": "ai_condition:membrane:clean_high_area",
+          "recommended_type": "卷式膜组件",
+          "condition_text": "进料经过充分预处理、污染倾向较低，要求高装填密度和标准化更换。",
+          "selection_basis": "卷式组件在清洁进料下提供较高单位体积膜面积。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "膜材料、进料指数、清洗药剂、通量衰减和寿命需厂家闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_membrane:fouling_tolerant:tubular",
+          "condition_id": "ai_condition:membrane:fouling_tolerant",
+          "recommended_type": "管式错流膜组件",
+          "condition_text": "进料固含或污染倾向较高，需要较大流道和强化错流清洗。",
+          "selection_basis": "管式组件牺牲装填密度换取较大流道和更强抗污堵性。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "knowledge_graph/manual_decision_gates.md"
+          ],
+          "assumption": "跨膜压差、循环能耗、管径和清洗周期需试验验证。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "membrane:module_material_package",
+          "title": "膜—压力容器—中心管材料组合",
+          "background": "膜设备不能只给膜材质；压力容器和中心管也要进入设备表和相容性复核。",
+          "source_refs": [
+            "knowledge_graph/manual_decision_gates.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "choices": [
+            {
+              "choice_id": "membrane:material:pa_frp_abs",
+              "label": "聚酰胺膜 + FRP 压力容器 + ABS 中心管",
+              "trigger_condition_text": "常规水处理、进料无游离氯暴露要求，压力在 FRP 组件可复核范围内。",
+              "selection_basis": "常规卷式水处理组件的具体初筛组合。",
+              "field_values": {
+                "membrane_material_grade": "芳香族聚酰胺复合膜",
+                "pressure_vessel_material_grade": "FRP 玻璃钢",
+                "center_tube_material_grade": "ABS"
+              },
+              "warning": "氧化剂、pH、溶剂、温度和压力等级必须由膜厂家确认。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "membrane:material:pvdf_frp_upvc",
+              "label": "PVDF 膜 + FRP 压力容器 + UPVC 中心管",
+              "trigger_condition_text": "需要更强耐化学清洗或微滤/超滤耐受性，且工艺条件与 PVDF 相容。",
+              "selection_basis": "PVDF 与非金属承压/支撑件的耐化学初筛组合。",
+              "field_values": {
+                "membrane_material_grade": "PVDF",
+                "pressure_vessel_material_grade": "FRP 玻璃钢",
+                "center_tube_material_grade": "UPVC"
+              },
+              "warning": "溶剂、温度、蠕变和压力等级必须单独闭合。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_package_equipment",
+      "background": "成套设备需依据分离机理、再生方式、周期、杂质负荷和保证值选 TSA、PSA 等具体路线，并明确壳体、内件、吸附剂和再生方式。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "knowledge_graph/equipment_parameter_chain_templates.json",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_package:temperature_regeneration:tsa",
+          "condition_id": "ai_condition:package:temperature_regeneration",
+          "recommended_type": "双塔变温吸附成套装置",
+          "condition_text": "杂质吸附容量需要通过加热再生恢复，周期允许温度摆动和冷却步骤。",
+          "selection_basis": "把双塔切换、加热再生和冷却作为完整 TSA 成套路线。",
+          "source_refs": [
+            "knowledge_graph/equipment_parameter_chain_templates.json",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "吸附等温线、床层温升、再生气量和保证值需厂家试验闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_package:pressure_regeneration:psa",
+          "condition_id": "ai_condition:package:pressure_regeneration",
+          "recommended_type": "多塔变压吸附成套装置",
+          "condition_text": "分离可依赖压力摆动，要求连续产品并允许多塔均压/解吸循环。",
+          "selection_basis": "把多塔切换、均压、降压解吸和产品保证作为 PSA 成套路线。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "循环步序、吸附剂容量、回收率和阀门寿命需动态模拟及厂家闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "package:vessel_internals_adsorbent",
+          "title": "壳体—内件—吸附剂—再生方式组合",
+          "background": "成套设备设备表必须把承压壳体、床层内件、吸附剂和再生方式组合输出。",
+          "source_refs": [
+            "knowledge_graph/equipment_parameter_chain_templates.json",
+            "scripts/equipment_design_match.py"
+          ],
+          "choices": [
+            {
+              "choice_id": "package:material:q345r_304_molecular_sieve_tsa",
+              "label": "Q345R 壳体 + S30408 内件 + 4A 分子筛 TSA",
+              "trigger_condition_text": "一般气体深度干燥，采用加热再生且无显著腐蚀。",
+              "selection_basis": "常规深度干燥 TSA 的具体材料与吸附剂初筛组合。",
+              "field_values": {
+                "shell_material_grade": "Q345R",
+                "internals_material_grade": "S30408",
+                "adsorbent_type": "4A 分子筛",
+                "regeneration_method": "热再生（TSA）"
+              },
+              "warning": "水负荷、共吸附杂质、粉化和再生温度需厂家验证。",
+              "source_refs": [
+                "knowledge_graph/equipment_parameter_chain_templates.json",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "package:material:316l_activated_carbon",
+              "label": "S31603 壳体/内件 + 活性炭吸附",
+              "trigger_condition_text": "存在中等腐蚀或有机杂质吸附任务，需要耐蚀接液和活性炭路线。",
+              "selection_basis": "耐蚀壳体/内件与活性炭的保守初筛组合。",
+              "field_values": {
+                "shell_material_grade": "S31603",
+                "internals_material_grade": "S31603",
+                "adsorbent_type": "颗粒活性炭",
+                "regeneration_method": "离线更换或热再生，待项目确认"
+              },
+              "warning": "放热、着火、解吸和废吸附剂处置必须专项评估。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_liquid_power_recovery_turbine",
+      "background": "液体能量回收设备需按流量、压差、效率、汽蚀和调节方式选择专用液力透平或泵反转，并给出壳体、叶轮、轴和密封。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "knowledge_graph/formula_family_nodes.md",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_liquid_turbine:high_pressure_continuous:hprt",
+          "condition_id": "ai_condition:liquid_turbine:high_pressure_continuous",
+          "recommended_type": "多级液力能量回收透平",
+          "condition_text": "连续高压差液体服务，回收功率显著并要求较高效率和专用调节。",
+          "selection_basis": "高压连续回收优先专用 HPRT，而非简单泵反转。",
+          "source_refs": [
+            "knowledge_graph/formula_family_nodes.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "效率曲线、汽蚀、超速和轴系耦合需厂家闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_liquid_turbine:moderate_clean:pat",
+          "condition_id": "ai_condition:liquid_turbine:moderate_clean",
+          "recommended_type": "泵反转液力透平",
+          "condition_text": "清洁液体、中等压差，经济性优先且允许较有限的调节范围。",
+          "selection_basis": "在适用工况下用标准泵反转作为经济型能量回收初筛路线。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "泵工况不能直接当作透平曲线，必须由厂家换算验证。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "liquid_turbine:rotor_seal_package",
+          "title": "壳体—叶轮—轴—密封组合",
+          "background": "液力透平的材料和密封选择与泵类似，但还需关注超速和反向水力载荷。",
+          "source_refs": [
+            "knowledge_graph/manual_decision_gates.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "choices": [
+            {
+              "choice_id": "liquid_turbine:material:wcb_13cr_single_seal",
+              "label": "WCB 壳体 + 13Cr 叶轮 + 单端面机械密封",
+              "trigger_condition_text": "清洁、非显著腐蚀、非高危液体。",
+              "selection_basis": "一般清洁液体能量回收的经济型初筛组合。",
+              "field_values": {
+                "casing_material_grade": "ZG230-450（WCB）",
+                "impeller_material_grade": "20Cr13",
+                "shaft_material_grade": "05Cr17Ni4Cu4Nb（17-4PH）",
+                "seal_type": "集装式单端面机械密封"
+              },
+              "warning": "需校核超速、反向推力、汽蚀和承压。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "liquid_turbine:material:cf8m_17ph_double_seal",
+              "label": "CF8M 壳体/叶轮 + 17-4PH 轴 + 双端面密封",
+              "trigger_condition_text": "介质有中等腐蚀、易燃或较高毒性。",
+              "selection_basis": "耐蚀承压件和双端面密封的保守初筛路线。",
+              "field_values": {
+                "casing_material_grade": "ZG07Cr19Ni11Mo2（CF8M）",
+                "impeller_material_grade": "ZG07Cr19Ni11Mo2（CF8M）",
+                "shaft_material_grade": "05Cr17Ni4Cu4Nb（17-4PH）",
+                "seal_type": "集装式加压双端面机械密封"
+              },
+              "warning": "必须用实际介质相容性和厂家转子动力学数据复核。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_gas_expander_turbine",
+      "background": "气体膨胀机型式由流量、压比、焓降、两相风险、转速和轴系用途决定；材料与密封覆盖机壳、叶轮、轴和干气密封。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "knowledge_graph/formula_family_nodes.md",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_gas_expander:small_medium_flow:radial_inflow",
+          "condition_id": "ai_condition:gas_expander:small_medium_flow",
+          "recommended_type": "径向内流式膨胀透平",
+          "condition_text": "中小流量、较高单级焓降，需要紧凑高速转子。",
+          "selection_basis": "径向内流路线适合中小流量高焓降初筛。",
+          "source_refs": [
+            "knowledge_graph/formula_family_nodes.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "马赫数、叶轮应力、临界转速和喘振边界需厂家图谱闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_gas_expander:large_flow:axial",
+          "condition_id": "ai_condition:gas_expander:large_flow",
+          "recommended_type": "多级轴流式膨胀透平",
+          "condition_text": "气体体积流量大，轴流通道和多级焓降分配更合理。",
+          "selection_basis": "大流量服务优先比较多级轴流路线。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "级数、叶高、湿气侵蚀和性能图谱需厂家闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "gas_expander:rotor_seal_package",
+          "title": "机壳—叶轮—轴—干气密封组合",
+          "background": "膨胀机材料选择需同时考虑低温、腐蚀、转子强度和密封气系统。",
+          "source_refs": [
+            "knowledge_graph/manual_decision_gates.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "choices": [
+            {
+              "choice_id": "gas_expander:material:low_alloy_17ph_dgs",
+              "label": "低合金钢机壳 + 17-4PH 叶轮轴 + 干气密封",
+              "trigger_condition_text": "清洁、非显著腐蚀气体，温度不触发奥氏体低温材料要求。",
+              "selection_basis": "一般工艺气膨胀的高强转子与干气密封初筛组合。",
+              "field_values": {
+                "casing_material_grade": "ZG20MnMo",
+                "impeller_material_grade": "05Cr17Ni4Cu4Nb（17-4PH）",
+                "shaft_material_grade": "05Cr17Ni4Cu4Nb（17-4PH）",
+                "seal_type": "串联式干气密封"
+              },
+              "warning": "低温冲击、超速强度、脆性转变和密封气需复核。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "gas_expander:material:316l_17ph_tandem_dgs",
+              "label": "CF8M 机壳 + 17-4PH 叶轮轴 + 串联干气密封",
+              "trigger_condition_text": "气体有中等腐蚀、易燃或较高毒性，需要耐蚀和泄漏控制。",
+              "selection_basis": "耐蚀机壳、高强转子和串联干气密封的保守初筛组合。",
+              "field_values": {
+                "casing_material_grade": "ZG07Cr19Ni11Mo2（CF8M）",
+                "impeller_material_grade": "05Cr17Ni4Cu4Nb（17-4PH）",
+                "shaft_material_grade": "05Cr17Ni4Cu4Nb（17-4PH）",
+                "seal_type": "串联式干气密封，带隔离气系统"
+              },
+              "warning": "实际低温、组分和应力腐蚀条件必须由材料与厂家共同确认。",
+              "source_refs": [
+                "knowledge_graph/manual_decision_gates.md",
+                "scripts/equipment_design_match.py"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_process_piping",
+      "background": "管线型式和材料由压力温度、口径、腐蚀、制造方式和管线等级共同决定；AI 只选择登记路线，DN、壁厚、流速和压降仍由程序计算。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "knowledge_graph/formula_family_nodes.md",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_piping:small_medium_high_pressure:seamless",
+          "condition_id": "ai_condition:piping:small_medium_high_pressure",
+          "recommended_type": "无缝钢制工艺管道",
+          "condition_text": "中小口径或较高压力温度，项目等级允许钢制无缝管。",
+          "selection_basis": "无纵向焊缝的常规高压/中小口径工艺管线初筛路线。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "牌号、标准、壁厚负偏差、腐蚀裕量和应力仍由管道专业闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_piping:large_diameter_moderate_pressure:welded",
+          "condition_id": "ai_condition:piping:large_diameter_moderate_pressure",
+          "recommended_type": "直缝焊接钢制工艺管道",
+          "condition_text": "大口径、中低压力，项目管线等级允许焊接钢管且经济性主导。",
+          "selection_basis": "大口径服务采用直缝焊管的可制造经济型初筛路线。",
+          "source_refs": [
+            "knowledge_graph/equipment_type_applicability_contract.md",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "焊缝系数、无损检测、圆度、应力和疲劳需按标准闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "piping:material_route",
+          "title": "管材路线",
+          "background": "材料选择必须回写到管径/壁厚计算和后续管件、法兰、阀门等级，不能孤立选择。",
+          "source_refs": [
+            "knowledge_graph/manual_decision_gates.md",
+            "scripts/connection_component_selection.py",
+            "scripts/equipment_design_match.py"
+          ],
+          "choices": [
+            {
+              "choice_id": "piping:material:20_carbon_steel",
+              "label": "20 钢无缝管",
+              "trigger_condition_text": "一般非强腐蚀工艺流体，温度压力在项目碳钢等级可复核范围内。",
+              "selection_basis": "常规工艺管线的经济型碳钢初筛路线。",
+              "field_values": {
+                "material": "20"
+              },
+              "warning": "必须补充材料许用应力、腐蚀裕量和项目管线等级后重算壁厚。",
+              "source_refs": [
+                "scripts/equipment_design_match.py",
+                "scripts/connection_component_selection.py"
+              ]
+            },
+            {
+              "choice_id": "piping:material:s31603",
+              "label": "S31603 不锈钢管",
+              "trigger_condition_text": "中等腐蚀、产品纯度或清洁性要求不支持碳钢接液。",
+              "selection_basis": "含钼奥氏体不锈钢管线的保守初筛路线。",
+              "field_values": {
+                "material": "S31603"
+              },
+              "warning": "高氯应力腐蚀、强酸、含氟介质和材料许用应力仍需闭合。",
+              "source_refs": [
+                "scripts/equipment_design_match.py",
+                "knowledge_graph/manual_decision_gates.md"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_pipe_fitting",
+      "background": "管件必须继承管线 DN、壁厚系列、材料和连接方式；AI 只在登记的对焊/承插焊等路线中选择，不能脱离当前管线等级。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "scripts/connection_component_selection.py",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_fitting:general_process:butt_weld_elbow",
+          "condition_id": "ai_condition:fitting:general_process",
+          "recommended_type": "长半径 90° 对焊弯头",
+          "condition_text": "一般工艺管线转向，口径和壁厚适合对焊连接，压降和可清扫性优先。",
+          "selection_basis": "以具体弯头型式、曲率和连接方式形成可采购初筛标记。",
+          "source_refs": [
+            "scripts/connection_component_selection.py",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "实际管路拓扑必须证明该位置需要弯头；本规则不凭空增加管件。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_fitting:small_bore_branch:socket_weld_tee",
+          "condition_id": "ai_condition:fitting:small_bore_branch",
+          "recommended_type": "承插焊等径三通",
+          "condition_text": "小口径支管或仪表辅助管线，需要紧凑承插焊分支连接。",
+          "selection_basis": "小口径高完整性支管的承插焊三通初筛路线。",
+          "source_refs": [
+            "scripts/connection_component_selection.py",
+            "knowledge_graph/equipment_type_applicability_contract.md"
+          ],
+          "assumption": "缝隙腐蚀、疲劳和项目禁用承插焊条款需核对。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "fitting:material_connection",
+          "title": "管件材料—连接组合",
+          "background": "管件材料和连接必须与所属管线一致；若输入已有管线等级，本选择不得覆盖。",
+          "source_refs": [
+            "scripts/connection_component_selection.py",
+            "knowledge_graph/manual_decision_gates.md"
+          ],
+          "choices": [
+            {
+              "choice_id": "fitting:material:20_butt_weld",
+              "label": "20 钢对焊管件",
+              "trigger_condition_text": "所属管线为碳钢、一般工艺服务，采用对焊连接。",
+              "selection_basis": "继承碳钢管线的对焊管件初筛路线。",
+              "field_values": {
+                "material": "20",
+                "connection_type": "对焊"
+              },
+              "warning": "DN、壁厚系列和管件型式必须从实际连接拓扑继承。",
+              "source_refs": [
+                "scripts/connection_component_selection.py",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "fitting:material:s31603_butt_weld",
+              "label": "S31603 对焊管件",
+              "trigger_condition_text": "所属管线为 S31603 不锈钢并采用对焊连接。",
+              "selection_basis": "继承不锈钢管线的对焊管件初筛路线。",
+              "field_values": {
+                "material": "S31603",
+                "connection_type": "对焊"
+              },
+              "warning": "不得混用不同管线材料等级；焊材和热处理需项目规范确认。",
+              "source_refs": [
+                "scripts/connection_component_selection.py",
+                "scripts/equipment_design_match.py"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_flange_gasket",
+      "background": "法兰与垫片必须作为成对组件，继承 DN、PN/Class、管材和温度介质；AI 选择必须同时给出法兰型式、密封面和垫片材料。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "scripts/connection_component_selection.py",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_flange:general_process:weld_neck_rf",
+          "condition_id": "ai_condition:flange:general_process",
+          "recommended_type": "带颈对焊突面法兰配缠绕垫片",
+          "condition_text": "一般中压工艺管线，需要较好的应力过渡和可拆连接，介质温度适合金属缠绕垫。",
+          "selection_basis": "带颈对焊法兰、RF 密封面和缠绕垫片的完整配对初筛路线。",
+          "source_refs": [
+            "scripts/connection_component_selection.py",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "PN/Class、垫片等级、螺栓和法兰许用压力需按项目标准表闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_flange:high_pressure:rtj",
+          "condition_id": "ai_condition:flange:high_pressure",
+          "recommended_type": "带颈对焊环连接面法兰配金属环垫",
+          "condition_text": "高压或高完整性密封服务，项目管线等级规定 RTJ 环连接面。",
+          "selection_basis": "高压服务使用 WN-RTJ 与匹配金属环垫的完整配对路线。",
+          "source_refs": [
+            "scripts/connection_component_selection.py",
+            "knowledge_graph/equipment_type_applicability_contract.md"
+          ],
+          "assumption": "只有项目压力等级和法兰标准表能最终确认 RTJ。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "flange:material_face_gasket",
+          "title": "法兰材料—连接—密封面—垫片组合",
+          "background": "四个字段必须联合选择；垫片材料要按介质和温度复核。",
+          "source_refs": [
+            "scripts/connection_component_selection.py",
+            "knowledge_graph/manual_decision_gates.md"
+          ],
+          "choices": [
+            {
+              "choice_id": "flange:package:carbon_rf_graphite_spiral",
+              "label": "碳钢 WN-RF + 304/石墨缠绕垫",
+              "trigger_condition_text": "碳钢一般工艺管线，中等压力温度，介质与柔性石墨相容。",
+              "selection_basis": "常规碳钢带颈对焊突面法兰与金属缠绕垫配对。",
+              "field_values": {
+                "material": "20Mn",
+                "connection_type": "带颈对焊",
+                "flange_face": "RF 突面",
+                "gasket_material": "304 内外环柔性石墨缠绕垫"
+              },
+              "warning": "PN/Class、垫片系数、螺栓载荷和介质相容性必须闭合。",
+              "source_refs": [
+                "scripts/connection_component_selection.py",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "flange:package:316l_rf_ptfe",
+              "label": "S31603 WN-RF + 改性 PTFE 垫",
+              "trigger_condition_text": "不锈钢腐蚀性管线，温度压力允许 PTFE 路线且介质与 PTFE 相容。",
+              "selection_basis": "耐蚀不锈钢法兰与改性 PTFE 垫片配对初筛。",
+              "field_values": {
+                "material": "S31603",
+                "connection_type": "带颈对焊",
+                "flange_face": "RF 突面",
+                "gasket_material": "改性 PTFE 垫片"
+              },
+              "warning": "PTFE 冷流、温度上限和高压爆破风险必须复核。",
+              "source_refs": [
+                "scripts/connection_component_selection.py",
+                "knowledge_graph/manual_decision_gates.md"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "family_id": "family_valve",
+      "background": "阀门型式由调节、切断、止回或安全功能，压降、口径、介质和泄漏等级共同决定；材料与零部件至少覆盖阀体、内件、阀座和端部连接。",
+      "source_refs": [
+        "knowledge_graph/equipment_type_applicability_contract.md",
+        "scripts/connection_component_selection.py",
+        "scripts/equipment_design_match.py"
+      ],
+      "terminal_type_choices": [
+        {
+          "rule_id": "ai_valve:throttling_control:globe",
+          "condition_id": "ai_condition:valve:throttling_control",
+          "recommended_type": "单座直通套筒导向调节阀",
+          "condition_text": "主要功能为连续节流调节，需要明确 Cv、可调比、泄漏等级和执行机构失效位。",
+          "selection_basis": "将调节任务落到具体单座直通套筒导向阀型，而不是泛称阀门。",
+          "source_refs": [
+            "scripts/connection_component_selection.py",
+            "scripts/equipment_design_match.py"
+          ],
+          "assumption": "噪声、空化、闪蒸、执行机构和阀内件特性需厂家计算。",
+          "promotion_cap": "TYPE_SCREENING"
+        },
+        {
+          "rule_id": "ai_valve:tight_shutoff:trunnion_ball",
+          "condition_id": "ai_condition:valve:tight_shutoff",
+          "recommended_type": "固定球全通径切断球阀",
+          "condition_text": "主要功能为低压降严密切断，介质不要求精细节流。",
+          "selection_basis": "用固定球全通径球阀形成低阻切断的具体初筛路线。",
+          "source_refs": [
+            "scripts/connection_component_selection.py",
+            "knowledge_graph/equipment_type_applicability_contract.md"
+          ],
+          "assumption": "阀座材料、双阻断泄放、火灾安全和扭矩需厂家闭合。",
+          "promotion_cap": "TYPE_SCREENING"
+        }
+      ],
+      "material_component_axes": [
+        {
+          "axis_id": "valve:body_trim_seat_connection",
+          "title": "阀体—内件—阀座—连接组合",
+          "background": "现有通用字段用于把成套阀内件路线写入设备表；最终采购仍需厂家数据表展开阀杆、填料和执行机构。",
+          "source_refs": [
+            "scripts/connection_component_selection.py",
+            "knowledge_graph/manual_decision_gates.md"
+          ],
+          "choices": [
+            {
+              "choice_id": "valve:package:wcb_316_softseat_flanged",
+              "label": "WCB 阀体 + 316 内件 + 增强 PTFE 阀座 + 法兰连接",
+              "trigger_condition_text": "一般非显著腐蚀工艺介质，需要严密切断且温度允许软阀座。",
+              "selection_basis": "碳钢承压阀体、不锈钢内件和软密封阀座的通用切断初筛组合。",
+              "field_values": {
+                "material": "ZG230-450（WCB）阀体 / S31603 内件 / 增强 PTFE 阀座",
+                "connection_type": "法兰连接",
+                "valve_function": "切断"
+              },
+              "warning": "温度、压差、空化、火灾安全和泄漏等级必须复核。",
+              "source_refs": [
+                "scripts/connection_component_selection.py",
+                "scripts/equipment_design_match.py"
+              ]
+            },
+            {
+              "choice_id": "valve:package:cf8m_316_hardseat_flanged",
+              "label": "CF8M 阀体 + 316L 内件 + Stellite 硬密封 + 法兰连接",
+              "trigger_condition_text": "介质有中等腐蚀，或温度/压差不适合软阀座，需要硬密封路线。",
+              "selection_basis": "耐蚀阀体与硬化密封副的保守初筛组合。",
+              "field_values": {
+                "material": "ZG07Cr19Ni11Mo2（CF8M）阀体 / S31603 内件 / Stellite 硬密封阀座",
+                "connection_type": "法兰连接",
+                "valve_function": "调节或切断，按工艺任务确认"
+              },
+              "warning": "硬密封不自动保证零泄漏；阀型、Cv、执行机构和失效位需继续选择。",
+              "source_refs": [
+                "scripts/connection_component_selection.py",
+                "knowledge_graph/manual_decision_gates.md"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

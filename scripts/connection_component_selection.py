@@ -528,9 +528,32 @@ def _property_facts_for_stream(
             and str(request_fact.get("project_context_sha256") or "").upper()
             == str(project_context_sha256 or "").upper()
         )
+        registered_programmatic_pipe_mechanical_fact = (
+            request_fact.get("source_kind")
+            == "PROGRAMMATIC_PIPE_MECHANICAL_FACT"
+            and request_fact.get("fact")
+            in {
+                "flange_material_group",
+                "mating_material_group",
+                "current_facing",
+            }
+            and request_fact.get("source_asset_path")
+            == "programmatic_pipe_specification"
+            and str(request_fact.get("subject_scope") or "").lower()
+            == "connection_requirement"
+            and str(request_fact.get("connection_id") or "")
+            == connection_id
+            and str(
+                request_fact.get("project_context_sha256") or ""
+            ).upper()
+            == str(project_context_sha256 or "").upper()
+        )
         record = (
             dict(request_fact)
-            if registered_manual_mechanical_fact
+            if (
+                registered_manual_mechanical_fact
+                or registered_programmatic_pipe_mechanical_fact
+            )
             else _fact_exists_in_graph_asset(request_fact)
         )
         if record is True:  # compatibility for isolated unit-test monkeypatches only
@@ -781,8 +804,133 @@ def build_aspen_connection_component_selections(
     block_type = str(block.get("block_type") or "").upper()
     parent_sha256 = _parent_context_sha256(match_result)
     context = dict(mechanical_context or {})
+    pump_selection = (
+        match_result.get("pump_engineering_selection", {})
+        if isinstance(match_result.get("pump_engineering_selection"), Mapping)
+        else {}
+    )
+    pump_pressure = (
+        pump_selection.get("pressure_and_flange", {})
+        if isinstance(pump_selection.get("pressure_and_flange"), Mapping)
+        else {}
+    )
+    pipe_specification = (
+        match_result.get("programmatic_pipe_specification", {})
+        if isinstance(
+            match_result.get("programmatic_pipe_specification"),
+            Mapping,
+        )
+        else {}
+    )
+    pipe_fields = (
+        pipe_specification.get("fields", {})
+        if isinstance(pipe_specification.get("fields"), Mapping)
+        else {}
+    )
+
+    def pipe_field_value(field_id: str) -> Any:
+        descriptor = pipe_fields.get(field_id)
+        return (
+            descriptor.get("value")
+            if isinstance(descriptor, Mapping)
+            else None
+        )
+
+    program_pressure_class = str(
+        pump_pressure.get("selected_flange_pressure_class")
+        or pipe_field_value("pressure_class")
+        or ""
+    ).strip().upper()
+    program_pipe_design_temperature = _finite(
+        pipe_field_value("design_temperature_c")
+    )
+    program_pipe_design_pressure = _finite(
+        pipe_field_value("design_pressure_mpa")
+    )
+    pn_match = re.fullmatch(r"PN(\d+(?:\.\d+)?)", program_pressure_class)
+    if pn_match and "pn" not in context:
+        context["pn"] = float(pn_match.group(1))
+        context.setdefault("system_series", "PN")
+    program_pipe_dn: float | None = None
+    pipe_dn_value = pipe_field_value("selected_dn")
+    if isinstance(pipe_dn_value, (int, float)) and not isinstance(
+        pipe_dn_value,
+        bool,
+    ):
+        program_pipe_dn = float(pipe_dn_value)
+    elif isinstance(pipe_dn_value, str):
+        pipe_dn_match = re.fullmatch(
+            r"\s*DN\s*(\d+(?:\.\d+)?)\s*",
+            pipe_dn_value,
+            re.IGNORECASE,
+        )
+        if pipe_dn_match:
+            program_pipe_dn = float(pipe_dn_match.group(1))
+    if (
+        program_pipe_dn is not None
+        and math.isfinite(program_pipe_dn)
+        and program_pipe_dn > 0.0
+        and "dn_mm" not in context
+    ):
+        context["dn_mm"] = (
+            int(program_pipe_dn)
+            if program_pipe_dn.is_integer()
+            else program_pipe_dn
+        )
+    adjustment_configuration = (
+        match_result.get("engineering_adjustment_plan", {}).get(
+            "configuration", {}
+        )
+        if isinstance(match_result.get("engineering_adjustment_plan"), Mapping)
+        and isinstance(
+            match_result.get("engineering_adjustment_plan", {}).get(
+                "configuration"
+            ),
+            Mapping,
+        )
+        else {}
+    )
+    program_standard_marking = str(
+        adjustment_configuration.get("candidate_standard_marking") or ""
+    )
+    nozzle_match = re.search(
+        r"(?<!\d)(\d{2,4})-(\d{2,4})-(\d{2,4})(?!\d)",
+        program_standard_marking,
+    )
+    pump_nozzle_dn = (
+        {
+            "inlet": int(nozzle_match.group(1)),
+            "outlet": int(nozzle_match.group(2)),
+        }
+        if nozzle_match
+        else {}
+    )
     ignored_direct_label_fields = sorted(
         set(context).intersection(DIRECT_LABEL_FIELDS | frozenset(DIRECT_LABEL_ALIASES))
+    )
+    property_evidence_rows = [
+        dict(item)
+        for item in property_evidence
+        if isinstance(item, Mapping)
+    ]
+    pipe_specification_sha256 = str(
+        pipe_specification.get("program_specification_sha256") or ""
+    ).upper()
+    pipe_material_text = " ".join(
+        str(value or "")
+        for value in (
+            pipe_field_value("material_grade"),
+            pipe_field_value("material"),
+            pipe_field_value("manufacturing_route_code"),
+        )
+    ).casefold()
+    pipe_material_group = (
+        "stainless"
+        if any(
+            marker in pipe_material_text
+            for marker in ("s316", "316l", "不锈钢", "stainless")
+        )
+        else "steel"
     )
     endpoint_map = endpoints or {}
     all_connections: list[dict[str, Any]] = []
@@ -842,6 +990,30 @@ def build_aspen_connection_component_selections(
                     "component_types": {},
                 })
                 continue
+            selector_stream = dict(stream)
+            temperature_origin = "CURRENT_STREAM"
+            pressure_origin = "CURRENT_STREAM"
+            if (
+                selector_stream.get("temperature_c") in (None, "")
+                and program_pipe_design_temperature is not None
+            ):
+                selector_stream["temperature_c"] = (
+                    program_pipe_design_temperature
+                )
+                temperature_origin = (
+                    "PROGRAMMATIC_PIPE_DESIGN_TEMPERATURE"
+                )
+            if (
+                selector_stream.get("pressure_mpa") in (None, "")
+                and program_pipe_design_pressure is not None
+            ):
+                selector_stream["pressure_mpa"] = (
+                    program_pipe_design_pressure
+                )
+                selector_stream.setdefault("pressure_basis", "gauge")
+                pressure_origin = (
+                    "PROGRAMMATIC_PIPE_DESIGN_PRESSURE"
+                )
             profile_phase, phase_origin = _service_profile_phase(
                 service_profile,
                 source_export_sha256=source_export_sha256,
@@ -849,8 +1021,45 @@ def build_aspen_connection_component_selections(
                 stream_id=stream_id,
             )
             normalized_phase = profile_phase or _stream_phase(stream)
+            connection_property_evidence = list(property_evidence_rows)
+            if SHA256_PATTERN.fullmatch(pipe_specification_sha256):
+                for fact_name, fact_value in (
+                    ("flange_material_group", pipe_material_group),
+                    ("mating_material_group", pipe_material_group),
+                    ("current_facing", "RF"),
+                ):
+                    fact_payload = {
+                        "source_id": (
+                            f"pipe-spec:{pipe_specification_sha256[:16]}:"
+                            f"{connection_id}:{fact_name}"
+                        ),
+                        "source_kind": (
+                            "PROGRAMMATIC_PIPE_MECHANICAL_FACT"
+                        ),
+                        "source_asset_path": (
+                            "programmatic_pipe_specification"
+                        ),
+                        "source_asset_sha256": (
+                            pipe_specification_sha256
+                        ),
+                        "fact": fact_name,
+                        "value": fact_value,
+                        "qa_status": "ACCEPTED",
+                        "subject_scope": "connection_requirement",
+                        "connection_id": connection_id,
+                        "block_id": block_id,
+                        "project_context_sha256": (
+                            source_export_sha256
+                        ),
+                    }
+                    fact_payload["source_record_sha256"] = (
+                        canonical_sha256(fact_payload)
+                    )
+                    connection_property_evidence.append(
+                        fact_payload
+                    )
             accepted_facts, rejected_facts = _property_facts_for_stream(
-                property_evidence,
+                connection_property_evidence,
                 stream=stream,
                 block_id=block_id,
                 connection_id=connection_id,
@@ -881,12 +1090,18 @@ def build_aspen_connection_component_selections(
                     "detail": "Raw phase/fraction input exists but does not normalize to a registered phase; phase-dependent facts remain unusable.",
                 })
             component_types: dict[str, Any] = {}
+            connection_context = dict(context)
+            if direction in pump_nozzle_dn and not any(
+                field in connection_context
+                for field in ("dn_mm", "nominal_diameter_mm")
+            ):
+                connection_context["dn_mm"] = pump_nozzle_dn[direction]
             for family in COMPONENT_FAMILIES:
                 selector_input = _selector_input(
                     family=family,
                     block=block,
-                    stream=stream,
-                    mechanical_context=context,
+                    stream=selector_stream,
+                    mechanical_context=connection_context,
                     property_evidence=accepted_facts,
                 )
                 try:
@@ -918,11 +1133,26 @@ def build_aspen_connection_component_selections(
                 **base,
                 "applicability": "APPLICABLE",
                 "raw_service_context": {
-                    "temperature_c": stream.get("temperature_c"),
-                    "pressure_mpa": stream.get("pressure_mpa"),
-                    "pressure_basis": pressure_basis or stream.get("pressure_basis"),
-                    "vapor_fraction": stream.get("vapor_fraction"),
-                    "solid_fraction": stream.get("solid_fraction"),
+                    "temperature_c": selector_stream.get("temperature_c"),
+                    "temperature_origin": temperature_origin,
+                    "pressure_mpa": selector_stream.get("pressure_mpa"),
+                    "pressure_origin": pressure_origin,
+                    "pressure_basis": (
+                        pressure_basis
+                        or selector_stream.get("pressure_basis")
+                    ),
+                    "vapor_fraction": selector_stream.get(
+                        "vapor_fraction"
+                    ),
+                    "solid_fraction": selector_stream.get(
+                        "solid_fraction"
+                    ),
+                    "program_selected_pressure_class": (
+                        program_pressure_class or None
+                    ),
+                    "program_selected_nozzle_dn_mm": (
+                        pump_nozzle_dn.get(direction) or program_pipe_dn
+                    ),
                     "normalized_phase": normalized_phase or None,
                     "normalized_phase_origin": phase_origin if profile_phase else "strict_raw_stream_fallback",
                     "service_profile_context_sha256": (

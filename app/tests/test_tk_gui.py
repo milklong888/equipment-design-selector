@@ -138,11 +138,64 @@ class TkGuiTests(unittest.TestCase):
         self.assertEqual(self.app.llm_timeout.get(), "90")
         self.assertEqual(self.app.llm_wire_api.get(), "chat_completions")
         self.assertEqual(self.app.llm_reasoning_effort.get(), "medium")
+
+    def test_header_and_primary_command_bar_fit_the_supported_minimum_width(self) -> None:
+        self.root.geometry("1080x720+0+0")
+        self.root.update_idletasks()
+        right_edge = self.root.winfo_rootx() + self.root.winfo_width()
+        for widget in (
+            self.app.header_status_frame,
+            self.app.workflow_quick_frame,
+        ):
+            with self.subTest(widget=str(widget)):
+                self.assertGreater(widget.winfo_width(), 1)
+                self.assertLessEqual(
+                    widget.winfo_rootx() + widget.winfo_width(),
+                    right_edge,
+                )
+
+    def test_empty_pfd_has_actionable_onboarding_instead_of_a_blank_panel(self) -> None:
+        items = self.app.pfd_view.canvas.find_withtag("role:empty_state")
+        self.assertGreaterEqual(len(items), 8)
+
+    def test_result_tables_offer_keyboard_access_to_complete_row_details(self) -> None:
+        self.app.customer_tree.insert(
+            "",
+            "end",
+            values=("一览表", "型号 / 工程规格", "GB/T 5662 泵规格", "—", "—", "—", "GLOBAL"),
+        )
+        first = self.app.customer_tree.get_children()[0]
+        self.app.customer_tree.selection_set(first)
+        self.assertEqual(
+            self.app._show_tree_row_details(
+                self.app.customer_tree,
+                "客户交付字段",
+            ),
+            "break",
+        )
+        self.assertTrue(self.app.tree_detail_window.winfo_exists())
+        self.assertEqual(
+            self.app.customer_tree.bind("<Return>") != "",
+            True,
+        )
         self.assertTrue(self.app.llm_disable_response_storage.get())
         self.assertTrue(self.app.knowledge_pack_vars)
         self.assertTrue(self.app.llm_enabled.get())
-        self.assertEqual(self.app.llm_injection_point.get(), "audit")
+        self.assertEqual(
+            self.app.llm_injection_point.get(),
+            "engineering_choice",
+        )
         self.assertEqual(self.app.llm_context_scope.get(), "minimum")
+        self.assertEqual(
+            self.app.aspen_suite_button.cget("text"),
+            "按队列顺序批量处理",
+        )
+        self.assertTrue(self.app.aspen_ensure_transport.get())
+        self.assertFalse(self.app.aspen_suite_require_clean.get())
+        self.assertEqual(
+            tuple(self.app.aspen_suite_tree["columns"]),
+            ("index", "file", "group", "status"),
+        )
 
     def test_dropdowns_show_chinese_but_keep_canonical_values(self) -> None:
         self.assertEqual(
@@ -161,9 +214,10 @@ class TkGuiTests(unittest.TestCase):
             self.app.llm_provider_combo.cget("values")
         )
         self.assertIn("OpenAI 兼容接口", provider_values)
-        self.assertIn("离线模拟（不联网）", provider_values)
-        self.app.llm_provider_combo.set("离线模拟（不联网）")
-        self.assertEqual(self.app.llm_provider.get(), "mock")
+        self.assertIn("DeepSeek 官方接口", provider_values)
+        self.assertNotIn("离线模拟（不联网）", provider_values)
+        self.app.llm_provider_combo.set("DeepSeek 官方接口")
+        self.assertEqual(self.app.llm_provider.get(), "deepseek")
 
         phase_widget = next(
             child
@@ -195,7 +249,7 @@ class TkGuiTests(unittest.TestCase):
         self.app.llm_wire_api.set("responses")
         self.app.llm_reasoning_effort.set("xhigh")
 
-        def immediate(_button, _label, work, done):
+        def immediate(_button, _label, work, done, **_kwargs):
             done(work())
 
         connected = {
@@ -214,6 +268,9 @@ class TkGuiTests(unittest.TestCase):
             self.app._test_llm_connection()
         test_connection.assert_called_once()
         tested_config = test_connection.call_args.args[0]
+        self.assertEqual(tested_config["base_url"], "https://api.openai.com/v1")
+        self.assertEqual(tested_config["model"], "deepseek-chat")
+        self.assertEqual(tested_config["api_key"], "TEST-SECRET")
         self.assertEqual(tested_config["wire_api"], "responses")
         self.assertEqual(tested_config["reasoning_effort"], "xhigh")
         self.assertTrue(tested_config["disable_response_storage"])
@@ -233,11 +290,26 @@ class TkGuiTests(unittest.TestCase):
         self.assertTrue(self.app.llm_button.instate(["disabled"]))
         self.assertIn("设置已更改", self.app.llm_connection_state.get())
 
+    def test_deepseek_provider_fills_current_safe_defaults(self) -> None:
+        self.app.llm_provider.set("deepseek")
+        self.app._sync_llm_provider()
+        self.assertEqual(self.app.llm_base.get(), "https://api.deepseek.com")
+        self.assertEqual(self.app.llm_model.get(), "deepseek-v4-flash")
+        self.assertEqual(self.app.llm_wire_api.get(), "chat_completions")
+        self.assertEqual(self.app.llm_reasoning_effort.get(), "high")
+        self.assertIn("deepseek", self.app.llm_provider_combo.canonical_to_display)
+        self.assertTrue(self.app.llm_base_entry.instate(["disabled"]))
+        self.assertNotIn("mock", self.app.llm_provider_combo.canonical_to_display)
+
+        self.app.llm_provider.set("openai_compatible")
+        self.app._sync_llm_provider()
+        self.assertFalse(self.app.llm_base_entry.instate(["disabled"]))
+
     def test_llm_connection_failure_keeps_apply_disabled_and_shows_specific_reason(self) -> None:
         self.app.llm_model.set("bad-model-id")
         self.app.llm_key.set("TEST-SECRET")
 
-        def immediate(_button, _label, work, done):
+        def immediate(_button, _label, work, done, **_kwargs):
             done(work())
 
         failed = {
@@ -261,6 +333,7 @@ class TkGuiTests(unittest.TestCase):
         self.assertIn("model not found", show_error.call_args.args[1])
 
     def test_disabled_llm_mode_can_be_applied_without_network_test(self) -> None:
+        self.app.llm_key.set("UNUSED-DISABLED-SECRET")
         self.app.llm_enabled.set(False)
         self.app.llm_knowledge_enabled.set(False)
         self.root.update_idletasks()
@@ -270,6 +343,7 @@ class TkGuiTests(unittest.TestCase):
         test_connection.assert_not_called()
         self.assertFalse(self.app.llm_button.instate(["disabled"]))
         self.assertFalse(self.app._applied_llm_settings["config"]["enabled"])
+        self.assertEqual(self.app._applied_llm_settings["config"]["api_key"], "")
         self.assertIn("确定性模式已应用", self.app.llm_connection_state.get())
 
     def test_manual_fields_are_one_variable_per_parameter(self) -> None:
@@ -281,6 +355,80 @@ class TkGuiTests(unittest.TestCase):
             if isinstance(child, tk.Label) and child.cget("text") == "ⓘ"
         ]
         self.assertEqual(len(help_controls), len(self.app.field_vars))
+
+    def test_result_navigation_is_grouped_into_four_task_oriented_levels(self) -> None:
+        top_labels = [
+            self.app.result_tabs.tab(tab_id, "text")
+            for tab_id in self.app.result_tabs.tabs()
+        ]
+        self.assertEqual(
+            top_labels,
+            ["1  流程", "2  选型结果", "3  计算与校核", "4  Agent 与数据"],
+        )
+        self.assertEqual(
+            [
+                self.app.selection_tabs.tab(tab_id, "text")
+                for tab_id in self.app.selection_tabs.tabs()
+            ],
+            ["客户交付", "分支选择", "参数卡", "候选型号"],
+        )
+        self.assertEqual(
+            [
+                self.app.calculation_tabs.tab(tab_id, "text")
+                for tab_id in self.app.calculation_tabs.tabs()
+            ],
+            ["推导与调整", "校核与缺口", "公式链"],
+        )
+        self.app._select_result_panel(self.app.parameter_panel)
+        self.assertEqual(
+            self.app.selection_tabs.select(),
+            str(self.app.parameter_panel),
+        )
+
+    def test_manual_field_filter_supports_required_missing_and_search_views(self) -> None:
+        selection = self.app._selection()
+        required_names = {
+            str(field["name"])
+            for field in selection["fields"]
+            if field.get("primary_calculation_required")
+        }
+        self.app.manual_view_filter.set("required")
+        self.app._render_manual_fields()
+        self.assertEqual(set(self.app.field_vars), required_names)
+        self.assertIn("当前显示", self.app.manual_field_count_var.get())
+
+        self.app.manual_filter_query.set("流量")
+        self.app._render_manual_fields()
+        self.assertIn("flow_m3_h", self.app.field_vars)
+        self.assertTrue(
+            all(
+                "流量" in str(field.get("label") or "")
+                or "流量" in str(field.get("manual_group_title") or "")
+                for field in selection["fields"]
+                if field.get("name") in self.app.field_vars
+            )
+        )
+
+        self.app._clear_manual_filter()
+        self.assertEqual(self.app.manual_view_filter.get(), "all")
+        self.assertEqual(self.app.manual_filter_query.get(), "")
+
+    def test_shortcuts_and_workflow_state_make_primary_actions_discoverable(self) -> None:
+        for sequence in (
+            "<Control-o>",
+            "<Control-Return>",
+            "<Control-s>",
+            "<Control-Shift-S>",
+            "<Control-f>",
+            "<Control-r>",
+        ):
+            self.assertTrue(self.root.bind(sequence))
+        self.assertEqual(
+            self.app.workflow_step_labels[1].cget("style"),
+            "WorkflowStep.Active.TLabel",
+        )
+        self.assertTrue(self.app.quick_save_button.instate(["disabled"]))
+        self.assertTrue(self.app.quick_export_button.instate(["disabled"]))
 
     def test_knowledge_tab_exposes_browsable_fields_before_free_text_query(self) -> None:
         self.assertEqual(self.app.kg_search_button.cget("text"), "开始查询")
@@ -515,6 +663,16 @@ class TkGuiTests(unittest.TestCase):
         self.assertIn("内置公式生成", self.app.formula_notice_var.get())
         self.assertIn("压差折算压头", self.app._formula_help_text)
         self.assertIn("不能证明", self.app._formula_help_text)
+        self.assertEqual(
+            self.app.workflow_step_labels[3].cget("style"),
+            "WorkflowStep.Active.TLabel",
+        )
+        self.assertFalse(self.app.quick_save_button.instate(["disabled"]))
+        self.assertFalse(self.app.quick_export_button.instate(["disabled"]))
+        self.assertEqual(
+            self.app.result_tabs.select(),
+            str(self.app._result_panel_locations[str(self.app.customer_panel)][0]),
+        )
 
     def test_gui_agent_run_calls_only_the_protocol_17_bridge(self) -> None:
         values = {
@@ -545,7 +703,7 @@ class TkGuiTests(unittest.TestCase):
                 "prepared": {
                     "context_pack": {
                         "context_sha256": "A" * 64,
-                        "injection_point": "audit",
+                        "injection_point": "engineering_choice",
                         "context_scope": "minimum",
                     },
                 },
@@ -554,7 +712,7 @@ class TkGuiTests(unittest.TestCase):
             },
         }
 
-        def immediate(_button, _label, work, done):
+        def immediate(_button, _label, work, done, **_kwargs):
             done(work())
 
         with patch.object(self.app, "_background", side_effect=immediate), patch.object(
@@ -565,9 +723,70 @@ class TkGuiTests(unittest.TestCase):
             self.app._run_llm()
         staged.assert_called_once()
         args = staged.call_args.args
-        self.assertEqual(args[3], "audit")
+        self.assertEqual(args[3], "engineering_choice")
         self.assertEqual(args[4], "minimum")
         self.assertIn("COMPLETED_DETERMINISTIC_ONLY", self.app.hybrid_state.get())
+
+    def test_gui_discards_inflight_agent_response_after_config_or_input_change(self) -> None:
+        values = {
+            "equipment_tag": "P-TK-INFLIGHT",
+            "phase": "liquid",
+            "flow_m3_h": 20,
+            "head_m": 45,
+            "density_kg_m3": 900,
+            "efficiency_percent": 75,
+        }
+        original_source = {
+            "operation": "manual_match",
+            "payload": {"selection_id": "block:PUMP", "values": values},
+        }
+        original_result = app_core.manual_match("block:PUMP", values)
+        self.app.llm_enabled.set(False)
+        self.app.llm_knowledge_enabled.set(False)
+
+        for mutation in ("input", "config"):
+            with self.subTest(mutation=mutation):
+                self.app.llm_model.set("guard-model")
+                self.app.last_source_input = copy.deepcopy(original_source)
+                self.app.last_deterministic_result = copy.deepcopy(original_result)
+                self.app._apply_llm_settings()
+                captured: dict[str, object] = {}
+
+                def defer(_button, _label, work, done, **kwargs):
+                    captured["work"] = work
+                    captured["done"] = done
+                    captured["reenable_button"] = kwargs["reenable_button"]
+
+                with patch.object(self.app, "_background", side_effect=defer):
+                    self.app._run_llm()
+
+                if mutation == "input":
+                    changed_values = {**values, "flow_m3_h": 21}
+                    self.app.last_source_input = {
+                        "operation": "manual_match",
+                        "payload": {
+                            "selection_id": "block:PUMP",
+                            "values": changed_values,
+                        },
+                    }
+                    self.app.last_deterministic_result = app_core.manual_match(
+                        "block:PUMP",
+                        changed_values,
+                    )
+                else:
+                    self.app.llm_model.set("changed-during-run")
+                    self.root.update_idletasks()
+
+                with patch.object(self.app, "_render_result") as render, patch(
+                    "tk_gui.messagebox.showwarning"
+                ) as warning:
+                    captured["done"]({"ok": True, "value": {}})
+                render.assert_not_called()
+                warning.assert_called_once()
+                self.assertIsNone(self.app.llm_proposal)
+                self.assertIn("STALE_RESPONSE_DISCARDED", self.app.hybrid_state.get())
+                can_reenable = captured["reenable_button"]()
+                self.assertEqual(can_reenable, mutation == "input")
 
     def test_gui_edit_after_review_invalidates_proposal_before_apply(self) -> None:
         values = {
@@ -650,6 +869,413 @@ class TkGuiTests(unittest.TestCase):
         self.assertEqual(approval["orchestration_sha256"], "D" * 64)
         self.assertEqual(approval["approved_by"], "GUI_USER_EXPLICIT_CLICK")
 
+    def _prepare_pfd_agent_apply_case(
+        self,
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        source = {
+            "schema": "aspen-equipment-export-v1",
+            "case": {
+                "case_id": "TK-PFD-AGENT-APPLY",
+                "pressure_basis": "absolute",
+            },
+            "blocks": [{
+                "block_id": "P-101",
+                "block_type": "PUMP",
+                "inlet_streams": ["F"],
+                "outlet_streams": ["P"],
+            }],
+            "streams": [
+                {"stream_id": "F", "phase": "liquid"},
+                {"stream_id": "P", "phase": "liquid"},
+            ],
+        }
+        base_values = {
+            "equipment_tag": "P-101",
+            "phase": "liquid",
+            "pressure_basis": "absolute",
+            "flow_m3_h": 20,
+            "head_m": 45,
+            "density_kg_m3": 900,
+            "efficiency_percent": 75,
+        }
+        self.app.aspen_bundle = copy.deepcopy(source)
+        self.app.aspen_derivation = {
+            "equipment": [{
+                "aspen_block_id": "P-101",
+                "canonical_match_input": copy.deepcopy(base_values),
+                "match_result": app_core.manual_match(
+                    "block:PUMP",
+                    base_values,
+                )["result"],
+            }],
+            "piping": [],
+        }
+        self.app.aspen_pfd_mapping = aspen_pfd.build_pfd_mapping(
+            source,
+            catalog=self.app.catalog,
+        )
+        self.app._pfd_equipment_by_block = {
+            "P-101": self.app.aspen_derivation["equipment"][0],
+        }
+        self.assertTrue(self.app._apply_pfd_parameter_overrides(
+            "P-101",
+            {
+                "required_npsh_margin_m": "0.5",
+                "npsha_m": "3.0",
+                "npshr_m": "2.0",
+            },
+        ))
+        frozen_input = copy.deepcopy(self.app.last_source_input)
+        frozen_result = copy.deepcopy(self.app.last_deterministic_result)
+        frozen_hash = self.app._llm_settings_sha256(frozen_result)
+        proposal = {
+            "schema": "equipment-design-app-llm-orchestration-v1",
+            "replay_contract": {
+                "schema": "equipment-design-deterministic-replay-v1",
+                "input": copy.deepcopy(frozen_input),
+                "deterministic_result_sha256": frozen_hash,
+            },
+            "validated_proposal": {
+                "accepted_changes": [{"change_id": "C-PFD-MATERIAL"}],
+            },
+            "step_output": {"summary": "建议将材料补为 S31603。"},
+            "context_sha256": "E" * 64,
+            "orchestration_sha256": "F" * 64,
+        }
+        staged_response = {
+            "ok": True,
+            "value": {
+                "schema": "equipment-design-hybrid-result-v2",
+                "machine_state": {"state": "COMPLETED"},
+                "deterministic_result": copy.deepcopy(frozen_result),
+                "prepared": {
+                    "context_pack": {"context_sha256": "E" * 64},
+                },
+                "llm_review": {
+                    "status": "COMPLETED_STRICT",
+                    "result": proposal,
+                },
+                "fallback": {"used": False, "errors": []},
+            },
+        }
+        self.app.llm_enabled.set(False)
+        self.app.llm_knowledge_enabled.set(False)
+        self.app._apply_llm_settings()
+
+        def immediate(_button, _label, work, done, **_kwargs):
+            done(work())
+
+        with patch.object(
+            self.app,
+            "_background",
+            side_effect=immediate,
+        ), patch.object(
+            self.app.api,
+            "agent_hybrid_run",
+            return_value=staged_response,
+        ), patch("tk_gui.messagebox.showinfo"):
+            self.app._run_llm()
+        self.assertIs(self.app.llm_proposal, proposal)
+        self.assertEqual(
+            self.app.llm_proposal_context["source_context"],
+            {"kind": "pfd_block", "block_id": "P-101"},
+        )
+        self.assertFalse(self.app.apply_llm_button.instate(["disabled"]))
+        return frozen_input, frozen_result
+
+    def test_gui_pfd_agent_apply_updates_frozen_block_not_manual_form(self) -> None:
+        frozen_input, frozen_result = self._prepare_pfd_agent_apply_case()
+        applied_values = copy.deepcopy(frozen_input["payload"]["values"])
+        applied_values["material"] = "S31603"
+        recalculated = app_core.manual_match("block:PUMP", applied_values)
+        application = {
+            "applied_draft": copy.deepcopy(applied_values),
+            "replayed_source_operation": "manual_match",
+            "original_deterministic_result": copy.deepcopy(frozen_result),
+            "deterministic_recalculation": copy.deepcopy(recalculated),
+        }
+        manual_values_before = self.app._collect_manual()
+
+        with patch.object(
+            self.app.api,
+            "agent_llm_apply",
+            return_value={"ok": True, "value": application},
+        ) as apply_call, patch.object(self.app, "_fill_manual") as fill_manual, patch(
+            "tk_gui.messagebox.showerror"
+        ) as show_error:
+            self.app._apply_llm()
+
+        apply_call.assert_called_once()
+        fill_manual.assert_not_called()
+        show_error.assert_not_called()
+        self.assertEqual(self.app._collect_manual(), manual_values_before)
+        self.assertEqual(
+            self.app.pfd_parameter_overrides["P-101"]["material"],
+            "S31603",
+        )
+        self.assertEqual(
+            self.app.pfd_recalculated_results["P-101"],
+            recalculated,
+        )
+        self.assertEqual(self.app.last_deterministic_result, recalculated)
+        self.assertEqual(
+            self.app.last_source_input["payload"]["values"]["material"],
+            "S31603",
+        )
+        self.assertEqual(
+            self.app.last_source_context,
+            {"kind": "pfd_block", "block_id": "P-101"},
+        )
+        self.assertEqual(self.app._active_pfd_block_id, "P-101")
+        self.assertNotIn("P-101", self.app.pfd_invalidated_blocks)
+        self.assertEqual(
+            self.app._pfd_block_row("P-101")["recalculation_status"],
+            "RECALCULATED_CURRENT",
+        )
+        self.assertIsNone(self.app.llm_proposal)
+        self.assertIsNone(self.app.llm_proposal_context)
+        self.assertTrue(self.app.apply_llm_button.instate(["disabled"]))
+
+    def test_gui_pfd_agent_apply_fails_closed_if_frozen_result_changed(self) -> None:
+        self._prepare_pfd_agent_apply_case()
+        changed = copy.deepcopy(self.app.pfd_recalculated_results["P-101"])
+        changed["audit_mutation"] = True
+        self.app.pfd_recalculated_results["P-101"] = changed
+
+        with patch.object(
+            self.app.api,
+            "agent_llm_apply",
+        ) as apply_call, patch("tk_gui.messagebox.showwarning") as warning:
+            self.app._apply_llm()
+
+        apply_call.assert_not_called()
+        warning.assert_called_once()
+        self.assertIsNone(self.app.llm_proposal)
+        self.assertIsNone(self.app.llm_proposal_context)
+        self.assertTrue(self.app.apply_llm_button.instate(["disabled"]))
+
+    def test_pfd_type_override_clears_agent_binding_and_blocks_run_until_recalculation(
+        self,
+    ) -> None:
+        self._prepare_pfd_agent_apply_case()
+        self.assertFalse(self.app.llm_button.instate(["disabled"]))
+        self.assertIsNotNone(self.app.llm_proposal)
+
+        self.app._apply_pfd_override(
+            "P-101",
+            "family:family_storage_vessel",
+        )
+
+        self.assertIsNone(self.app.last_manual)
+        self.assertIsNone(self.app.last_source_input)
+        self.assertIsNone(self.app.last_source_context)
+        self.assertIsNone(self.app.last_deterministic_result)
+        self.assertIsNone(self.app.llm_proposal)
+        self.assertIsNone(self.app.llm_proposal_context)
+        self.assertTrue(self.app.llm_button.instate(["disabled"]))
+        self.assertTrue(self.app.apply_llm_button.instate(["disabled"]))
+        self.assertIn("WAITING_PFD_RECALCULATION", self.app.hybrid_state.get())
+
+        with patch.object(self.app.api, "agent_hybrid_run") as agent_run, patch(
+            "tk_gui.messagebox.showwarning"
+        ) as warning:
+            self.app._run_llm()
+        agent_run.assert_not_called()
+        warning.assert_called_once()
+
+        self.assertTrue(
+            self.app._apply_pfd_parameter_overrides("P-101", {}, clear=True)
+        )
+        self.assertFalse(self.app.llm_button.instate(["disabled"]))
+        self.assertEqual(
+            self.app.last_source_input["payload"]["selection_id"],
+            "family:family_storage_vessel",
+        )
+
+    def test_run_llm_rejects_cached_pfd_result_after_current_result_hash_changes(
+        self,
+    ) -> None:
+        self._prepare_pfd_agent_apply_case()
+        changed = copy.deepcopy(self.app.pfd_recalculated_results["P-101"])
+        changed["audit_mutation"] = True
+        self.app.pfd_recalculated_results["P-101"] = changed
+
+        with patch.object(self.app.api, "agent_hybrid_run") as agent_run, patch(
+            "tk_gui.messagebox.showwarning"
+        ) as warning:
+            self.app._run_llm()
+
+        agent_run.assert_not_called()
+        warning.assert_called_once()
+        self.assertIsNone(self.app.last_source_input)
+        self.assertIsNone(self.app.last_deterministic_result)
+        self.assertIsNone(self.app.llm_proposal)
+        self.assertTrue(self.app.llm_button.instate(["disabled"]))
+        self.assertIn("WAITING_PFD_RECALCULATION", self.app.hybrid_state.get())
+
+    def test_pfd_editor_prefills_effective_values_and_only_submits_differences(self) -> None:
+        fields = [
+            {"name": "flow_m3_h"},
+            {"name": "head_m"},
+            {"name": "efficiency_percent"},
+        ]
+        base = {
+            "flow_m3_h": 20,
+            "head_m": 45,
+            "efficiency_percent": 75,
+        }
+        initial = self.app._pfd_editor_initial_values(
+            fields,
+            base,
+            {"efficiency_percent": "78"},
+        )
+        self.assertEqual(
+            initial,
+            {
+                "flow_m3_h": "20",
+                "head_m": "45",
+                "efficiency_percent": "78",
+            },
+        )
+        submitted = self.app._pfd_editor_override_values(
+            fields,
+            {
+                "flow_m3_h": "20",
+                "head_m": " 50 ",
+                "efficiency_percent": "75",
+            },
+            base,
+        )
+        self.assertEqual(submitted, {"head_m": "50"})
+
+    def test_pfd_canvas_left_click_renders_details_then_opens_prefilled_editor(self) -> None:
+        with patch.object(self.app, "_open_pfd_block") as open_details, patch.object(
+            self.app,
+            "_pfd_selection_for_block",
+            return_value={"selection_id": "block:PUMP"},
+        ), patch.object(self.app, "_open_pfd_parameter_editor") as open_editor:
+            self.app._open_pfd_block_from_canvas("P-101")
+        open_details.assert_called_once_with("P-101")
+        open_editor.assert_called_once_with("P-101")
+
+    def test_pfd_parameter_window_contains_prefilled_editable_inputs(self) -> None:
+        source = {
+            "schema": "aspen-equipment-export-v1",
+            "case": {"case_id": "TK-PFD-PREFILL", "pressure_basis": "absolute"},
+            "blocks": [
+                {
+                    "block_id": "P-101",
+                    "block_type": "PUMP",
+                    "inlet_streams": ["F"],
+                    "outlet_streams": ["P"],
+                }
+            ],
+            "streams": [
+                {"stream_id": "F", "phase": "liquid"},
+                {"stream_id": "P", "phase": "liquid"},
+            ],
+        }
+        base_values = {
+            "equipment_tag": "P-101",
+            "phase": "liquid",
+            "flow_m3_h": 20,
+            "head_m": 45,
+            "density_kg_m3": 900,
+        }
+        self.app.aspen_bundle = copy.deepcopy(source)
+        self.app.aspen_pfd_mapping = aspen_pfd.build_pfd_mapping(
+            source,
+            catalog=self.app.catalog,
+        )
+        self.app._pfd_equipment_by_block = {
+            "P-101": {"canonical_match_input": base_values}
+        }
+        self.app._open_pfd_parameter_editor("P-101")
+        self.root.update_idletasks()
+        window = self.app.pfd_parameter_window
+        self.assertIsNotNone(window)
+        self.assertTrue(window.winfo_exists())
+
+        def descendants(widget: tk.Misc) -> list[tk.Misc]:
+            result: list[tk.Misc] = []
+            for child in widget.winfo_children():
+                result.append(child)
+                result.extend(descendants(child))
+            return result
+
+        advanced_toggle = next(
+            widget
+            for widget in descendants(window)
+            if isinstance(widget, ttk.Checkbutton)
+        )
+        advanced_toggle.invoke()
+        self.root.update_idletasks()
+        editable_values = [
+            widget.get()
+            for widget in descendants(window)
+            if isinstance(widget, (ttk.Entry, ttk.Combobox))
+        ]
+        self.assertIn("20", editable_values)
+        self.assertIn("45", editable_values)
+        window.destroy()
+
+    def test_pfd_right_click_menu_contains_only_category_actions(self) -> None:
+        class FakeMenu:
+            instances: list["FakeMenu"] = []
+
+            def __init__(self, _parent: object, **_kwargs: object) -> None:
+                self.commands: list[dict[str, object]] = []
+                self.cascades: list[dict[str, object]] = []
+                FakeMenu.instances.append(self)
+
+            def add_command(self, **kwargs: object) -> None:
+                self.commands.append(dict(kwargs))
+
+            def add_separator(self) -> None:
+                return None
+
+            def add_cascade(self, **kwargs: object) -> None:
+                self.cascades.append(dict(kwargs))
+
+            def tk_popup(self, _x: int, _y: int) -> None:
+                return None
+
+            def grab_release(self) -> None:
+                return None
+
+        source = {
+            "schema": "aspen-equipment-export-v1",
+            "case": {"case_id": "TK-PFD-MENU", "pressure_basis": "absolute"},
+            "blocks": [
+                {
+                    "block_id": "P-101",
+                    "block_type": "PUMP",
+                    "inlet_streams": ["F"],
+                    "outlet_streams": ["P"],
+                }
+            ],
+            "streams": [
+                {"stream_id": "F", "phase": "liquid"},
+                {"stream_id": "P", "phase": "liquid"},
+            ],
+        }
+        self.app.aspen_pfd_mapping = aspen_pfd.build_pfd_mapping(
+            source,
+            catalog=self.app.catalog,
+        )
+        with patch("tk_gui.tk.Menu", FakeMenu):
+            self.app._show_pfd_block_menu("P-101", 1, 2)
+        root_menu = FakeMenu.instances[0]
+        self.assertGreater(len(root_menu.cascades), 5)
+        actionable_labels = [
+            str(command.get("label") or "")
+            for menu in FakeMenu.instances
+            for command in menu.commands
+            if callable(command.get("command"))
+        ]
+        self.assertTrue(any("恢复程序自动识别类别" == label for label in actionable_labels))
+        self.assertFalse(any("参数" in label or "重算" in label or "证据" in label for label in actionable_labels))
+
     def test_pfd_canvas_and_override_are_deterministic_and_do_not_mutate_bundle(self) -> None:
         source = {
             "schema": "aspen-equipment-export-v1",
@@ -714,6 +1340,12 @@ class TkGuiTests(unittest.TestCase):
         row = self.app._pfd_block_row("P-101")
         self.assertEqual(row["effective_mapping"]["mode"], "user_override")
         self.assertEqual(row["effective_mapping"]["family_id"], "family_storage_vessel")
+        self.assertNotIn("P-101", self.app.pfd_recalculated_results)
+        self.assertIn("P-101", self.app.pfd_invalidated_blocks)
+        self.assertIn("尚未重算", self.app.status_var.get())
+        self.assertTrue(
+            self.app._apply_pfd_parameter_overrides("P-101", {})
+        )
         self.assertIn("P-101", self.app.pfd_recalculated_results)
         self.assertNotIn("P-101", self.app.pfd_invalidated_blocks)
         self.assertEqual(json.dumps(self.app.aspen_bundle, ensure_ascii=False, sort_keys=True), frozen)
@@ -764,7 +1396,7 @@ class TkGuiTests(unittest.TestCase):
         }
         frozen = json.dumps(self.app.aspen_bundle, ensure_ascii=False, sort_keys=True)
         self.assertTrue(self.app.pfd_parameter_button.instate(["disabled"]))
-        self.assertEqual(self.app.pfd_parameter_button.cget("text"), "补充/修改本设备参数并重算")
+        self.assertEqual(self.app.pfd_parameter_button.cget("text"), "编辑预填参数并重算")
 
         self.app._open_pfd_block("P-101")
         self.assertFalse(self.app.pfd_parameter_button.instate(["disabled"]))
@@ -779,6 +1411,23 @@ class TkGuiTests(unittest.TestCase):
         recalculated = self.app.pfd_recalculated_results["P-101"]
         self.assertEqual(recalculated["input"]["equipment_tag"], "P-101")
         self.assertEqual(recalculated["input"]["required_npsh_margin_m"], "0.5")
+        self.assertEqual(self.app.last_deterministic_result, recalculated)
+        self.assertEqual(
+            self.app.last_source_input,
+            {
+                "operation": "manual_match",
+                "payload": {
+                    "selection_id": "block:PUMP",
+                    "values": {
+                        **pump_values,
+                        "required_npsh_margin_m": "0.5",
+                        "npsha_m": "3.0",
+                        "npshr_m": "2.0",
+                    },
+                },
+            },
+        )
+        self.assertEqual(self.app.last_manual, self.app.last_source_input["payload"])
         self.assertNotEqual(recalculated["result"].get("model_decision", {}).get("model_status"), "FINAL_MODEL")
         self.assertEqual(self.app.pfd_overlays["P-101"]["status"], "WAITING_FORMAL_EVIDENCE")
         self.assertNotIn("P-101", self.app.pfd_invalidated_blocks)
@@ -871,10 +1520,14 @@ class TkGuiTests(unittest.TestCase):
 
         self.app._apply_pfd_override("P-101", "family:family_storage_vessel")
 
-        self.assertIn("P-101", self.app.pfd_recalculated_results)
-        self.assertNotIn("P-101", self.app.pfd_invalidated_blocks)
+        self.assertNotIn("P-101", self.app.pfd_recalculated_results)
+        self.assertIn("P-101", self.app.pfd_invalidated_blocks)
         self.assertIn("E-101", self.app.pfd_invalidated_blocks)
         self.assertIn("S1", self.app.pfd_invalidated_streams)
+        self.assertEqual(
+            self.app.pfd_overlays["P-101"]["status"],
+            "WAITING_CALCULATED_PARAMETERS",
+        )
         self.assertEqual(
             self.app.pfd_overlays["E-101"]["status"],
             "WAITING_CALCULATED_PARAMETERS",

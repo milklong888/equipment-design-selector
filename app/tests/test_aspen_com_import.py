@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import shutil
 import sys
 import unittest
 import uuid
 from pathlib import Path
 from unittest.mock import patch
+
+from jsonschema import Draft202012Validator
 
 
 APP_DIR = Path(__file__).resolve().parents[1]
@@ -15,6 +18,183 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 import aspen_com_import
+
+
+def complete_legal_coverage_sidecar() -> dict[str, object]:
+    found = {
+        "field": "HEAD_CAL",
+        "path": r"\Data\Blocks\P-1\Output\HEAD_CAL",
+        "candidate_paths": [r"\Data\Blocks\P-1\Output\HEAD_CAL"],
+        "unit": "m",
+        "status": "found",
+        "value_type": 2,
+        "provenance": {"source": "ASPEN_LIVE_COM_TREE"},
+        "recovered_error_count": 0,
+    }
+    missing = {
+        "field": "NPSHA",
+        "path": r"\Data\Blocks\P-1\Output\NPSHA",
+        "candidate_paths": [r"\Data\Blocks\P-1\Output\NPSHA"],
+        "unit": "m",
+        "status": "missing",
+        "value_type": None,
+        "provenance": {"source": "ASPEN_LIVE_COM_TREE"},
+        "recovered_error_count": 0,
+    }
+    counts = {
+        "requested": 2,
+        "found": 1,
+        "missing": 1,
+        "error": 0,
+        "unsupported": 0,
+    }
+    return {
+        "schema": "aspen-com-extraction-coverage-v1",
+        "registry_revision": aspen_com_import.ASPEN_EXTRACTION_REGISTRY_REVISION,
+        "registry_audit": {
+            "schema": "aspen-com-extraction-registry-audit-v1",
+            "status": "PASS",
+        },
+        "source_contract": {
+            "read_only_extraction": True,
+            "source_bkp_mutated": False,
+            "unmapped_value_mode": "METADATA_ONLY_NO_RAW_VALUES",
+            "raw_unmapped_values_persisted": False,
+            "discovery_bounds": {
+                "max_nodes_per_object": 5000,
+                "max_depth": 24,
+                "max_nodes_per_case": 25000,
+                "max_metadata_bytes_per_case": 16777216,
+            },
+        },
+        "counts": counts,
+        "recovered_error_count": 0,
+        "registry_field_hit_rate": 0.5,
+        "registry_field_hit_percent": 50.0,
+        "coverage_rate": 0.5,
+        "coverage_percent": 50.0,
+        "registry_completeness_status": "SCORED_REGISTERED_OBJECTS",
+        "global_review_required": False,
+        "global_review_reasons": [],
+        "registry_completeness_rate": 0.5,
+        "requested_status_invariant": True,
+        "object_count": 1,
+        "object_review_count": 0,
+        "objects": [{
+            "scope": "block",
+            "object_id": "P-1",
+            "module_type": "PUMP",
+            "registry_status": "supported",
+            "fields": {"HEAD_CAL": found, "NPSHA": missing},
+            "counts": counts,
+            "registry_field_hit_rate": 0.5,
+            "registry_completeness_status": "SCORED_REGISTERED_OBJECT",
+            "registry_completeness_rate": 0.5,
+            "requested_status_invariant": True,
+            "tree_discovery_truncated": False,
+            "unmapped_field_count": 0,
+            "discovery_error_count": 0,
+        }],
+        "unmapped_modules": [],
+        "unmapped_stream_record_types": [],
+        "unmapped_nodes": [],
+        "unmapped_fields": [],
+        "composition_extraction": {
+            "schema": "aspen-stream-composition-extraction-coverage-v1",
+            "status": "NOT_APPLICABLE_NO_MATERIAL_STREAMS",
+            "independent_of_registry_field_hit_rate": True,
+            "material_stream_count": 0,
+            "non_material_stream_count": 0,
+            "requested_vector_count": 0,
+            "found_vector_count": 0,
+            "missing_vector_count": 0,
+            "invalid_or_error_vector_count": 0,
+            "component_count": 0,
+            "rows": [],
+        },
+        "discovery_errors": [],
+        "discovery_error_count": 0,
+        "root_diagnostics": [],
+        "root_diagnostic_count": 0,
+        "tree_discovery_truncated_object_count": 0,
+        "case_discovery_budget_exhausted": False,
+        "case_discovery_budget": {
+            "max_nodes": 25000,
+            "nodes_visited": 10,
+            "node_budget_exhausted": False,
+            "max_metadata_bytes": 16777216,
+            "metadata_bytes_hashed": 10,
+            "metadata_bytes_output": 100,
+            "metadata_bytes_consumed": 110,
+            "metadata_budget_exhausted": False,
+            "metadata_values_truncated": 0,
+            "metadata_text_values_truncated": 0,
+        },
+    }
+
+
+class StrictReadOnlyElements:
+    def __init__(self, rows=None) -> None:
+        self.rows = list(rows or [])
+
+    @property
+    def Count(self) -> int:
+        return len(self.rows)
+
+    def __call__(self, key):
+        return self.Item(key)
+
+    def Item(self, key):
+        if isinstance(key, str):
+            return next(row for row in self.rows if row.Name == key)
+        return self.rows[key]
+
+
+class StrictReadOnlyNode:
+    def __init__(
+        self,
+        name: str,
+        value=None,
+        *,
+        unit: str = "",
+        value_type: int = 2,
+        record_type: str = "",
+        compstatus: int = 1,
+        children=None,
+    ) -> None:
+        self.Name = name
+        self._value = value
+        self.UnitString = unit
+        self.ValueType = value_type
+        self._record_type = record_type
+        self._compstatus = compstatus
+        self.Elements = StrictReadOnlyElements(children)
+
+    @property
+    def Value(self):
+        return self._value
+
+    def AttributeValue(self, index: int):
+        if index == 6:
+            if not self._record_type:
+                raise RuntimeError("record type unavailable")
+            return self._record_type
+        if index == 12:
+            return self._compstatus
+        raise RuntimeError(index)
+
+
+class StrictReadOnlyTree:
+    def __init__(self, mapping, *, failing_paths=()) -> None:
+        self.mapping = dict(mapping)
+        self.failing_paths = set(failing_paths)
+        self.find_calls: list[str] = []
+
+    def FindNode(self, path: str):
+        self.find_calls.append(path)
+        if path in self.failing_paths:
+            raise RuntimeError(f"fixture COM lookup failure: {path}")
+        return self.mapping.get(path)
 
 
 class AspenComImportTests(unittest.TestCase):
@@ -434,6 +614,65 @@ STREAM-REPOR MOLEFLOW PROPERTIES=TXPORT
             ["PHASE", "MUMX"],
         )
 
+    def test_transport_verification_blocks_empty_material_set_and_accepts_solid_bearing(self) -> None:
+        empty = aspen_com_import.verify_stream_transport_properties({
+            "streams": [
+                {"stream_id": "Q-1", "stream_record_type": "HEAT"},
+            ],
+        })
+        self.assertEqual(
+            empty["status"],
+            "BLOCKED_NO_MATERIAL_STREAMS_FOR_TRANSPORT_VERIFICATION",
+        )
+        self.assertEqual(empty["material_stream_count"], 0)
+
+        solid = aspen_com_import.verify_stream_transport_properties({
+            "streams": [
+                {
+                    "stream_id": "SLURRY-1",
+                    "stream_record_type": "MATERIAL",
+                    "phase": "solid_bearing",
+                },
+            ],
+        })
+        self.assertEqual(solid["status"], "PASS")
+        self.assertEqual(solid["not_applicable_solid_stream_count"], 1)
+
+    def test_worker_status_precedence_blocks_com_roots_before_transport(self) -> None:
+        root_blocker = [{
+            "code": "BLOCKED_COM_TREE_ROOT_MISSING",
+            "scope": "block",
+        }]
+        coverage = {
+            "root_diagnostics": root_blocker,
+            "tree_discovery_truncated_object_count": 0,
+            "case_discovery_budget": {},
+        }
+        self.assertEqual(
+            aspen_com_import.classify_aspen_worker_status(
+                {"status": "PASS"},
+                root_blocker,
+                coverage,
+            ),
+            "BLOCKED_COM_EXTRACTION",
+        )
+        self.assertEqual(
+            aspen_com_import.classify_aspen_worker_status(
+                {"status": "BLOCKED_MISSING_ASPEN_VISCOSITY"},
+                [],
+                {},
+            ),
+            "BLOCKED_TRANSPORT_PROPERTY_VERIFICATION",
+        )
+        self.assertEqual(
+            aspen_com_import.classify_aspen_worker_status(
+                {"status": "PASS"},
+                [],
+                {},
+            ),
+            "PASS",
+        )
+
     def test_transport_evidence_is_persisted_when_no_com_change_is_needed(self) -> None:
         root = PACKAGE_ROOT / "outputs" / "app_test_runs" / f"transport_no_change_{uuid.uuid4().hex}"
         root.mkdir(parents=True, exist_ok=False)
@@ -520,6 +759,122 @@ STREAM-REPOR MOLEFLOW PROPERTIES=TXPORT
 
         self.assertEqual(aspen_com_import.node_elements(node), ["A", "B"])
 
+    def test_strict_element_enumerator_records_count_and_item_failures(self) -> None:
+        child = StrictReadOnlyNode("A", 1.0)
+
+        class BrokenCountElements:
+            @property
+            def Count(self):
+                raise RuntimeError("count failed")
+
+            @staticmethod
+            def Item(index: int):
+                if index == 0:
+                    return child
+                raise IndexError(index)
+
+        count_node = type("CountNode", (), {"Elements": BrokenCountElements()})()
+        count_result = aspen_com_import.strict_node_elements(count_node, 5)
+        self.assertEqual(count_result["rows"], [child])
+        self.assertIn(
+            "IHNode.Elements.Count",
+            {item["operation"] for item in count_result["errors"]},
+        )
+        self.assertIn(
+            "IHNode.Elements.Item",
+            {item["operation"] for item in count_result["errors"]},
+        )
+
+        class BrokenItemElements:
+            Count = 2
+
+            @staticmethod
+            def Item(index: int):
+                if index == 0:
+                    return child
+                raise RuntimeError("item failed")
+
+        item_node = type("ItemNode", (), {"Elements": BrokenItemElements()})()
+        item_result = aspen_com_import.strict_node_elements(item_node, 5)
+        self.assertEqual(item_result["rows"], [child])
+        self.assertIn(
+            "IHNode.Elements.Item",
+            {item["operation"] for item in item_result["errors"]},
+        )
+        self.assertIn(
+            "IHNode.Elements.enumeration",
+            {item["operation"] for item in item_result["errors"]},
+        )
+
+    def test_strict_element_enumerator_accepts_one_based_collections_without_false_error(self) -> None:
+        class OneBasedElements:
+            Count = 2
+
+            @staticmethod
+            def Item(index: int):
+                if index == 1:
+                    return "A"
+                if index == 2:
+                    return "B"
+                raise IndexError(index)
+
+        node = type("OneBasedNode", (), {"Elements": OneBasedElements()})()
+        result = aspen_com_import.strict_node_elements(node, 10)
+
+        self.assertEqual(result["rows"], ["A", "B"])
+        self.assertEqual(result["index_basis"], "one_based")
+        self.assertFalse(result["errors"])
+
+    def test_discovery_bounds_deep_wide_trees_and_breaks_cycles(self) -> None:
+        cycle = StrictReadOnlyNode("CYCLE", None, value_type=0)
+        cycle.Elements.rows.append(cycle)
+        cycle_output = StrictReadOnlyNode(
+            "Output",
+            None,
+            value_type=0,
+            children=[cycle],
+        )
+        cycle_tree = StrictReadOnlyTree(
+            {r"\Data\Blocks\CYCLE\Output": cycle_output}
+        )
+        cycle_result = aspen_com_import.discover_object_tree(
+            cycle_tree,
+            scope="block",
+            object_id="CYCLE",
+            base=r"\Data\Blocks\CYCLE",
+            mapped_paths=[],
+        )
+        self.assertLessEqual(cycle_result["visited_node_count"], 2)
+        self.assertFalse(cycle_result["truncated"])
+
+        wide_children = [
+            StrictReadOnlyNode(f"F{index}", float(index))
+            for index in range(20)
+        ]
+        wide_output = StrictReadOnlyNode(
+            "Output",
+            None,
+            value_type=0,
+            children=wide_children,
+        )
+        wide_tree = StrictReadOnlyTree(
+            {r"\Data\Blocks\WIDE\Output": wide_output}
+        )
+        with patch.object(
+            aspen_com_import,
+            "TREE_DISCOVERY_MAX_NODES_PER_OBJECT",
+            4,
+        ):
+            wide_result = aspen_com_import.discover_object_tree(
+                wide_tree,
+                scope="block",
+                object_id="WIDE",
+                base=r"\Data\Blocks\WIDE",
+                mapped_paths=[],
+            )
+        self.assertTrue(wide_result["truncated"])
+        self.assertLessEqual(wide_result["visited_node_count"], 4)
+
     def test_complete_stream_composition_is_read_without_hazard_inference(self) -> None:
         class Child:
             def __init__(self, name: str, value: float) -> None:
@@ -528,17 +883,92 @@ STREAM-REPOR MOLEFLOW PROPERTIES=TXPORT
 
         children = [Child("A", 0.75), Child("B", 0.25)]
         warnings: list[dict[str, object]] = []
-        with patch.object(aspen_com_import, "find_node", return_value=object()), patch.object(
-            aspen_com_import, "node_elements", return_value=children
-        ):
-            composition = aspen_com_import.extract_stream_composition(
-                object(), r"\Data\Streams\S1", "S1", None, warnings
-            )
+        root = StrictReadOnlyNode("MIXED", None, value_type=0, children=children)
+        tree = StrictReadOnlyTree({
+            r"\Data\Streams\S1\Output\MOLEFRAC\MIXED": root,
+        })
+        composition = aspen_com_import.extract_stream_composition(
+            tree, r"\Data\Streams\S1", "S1", None, warnings
+        )
         self.assertEqual([item["component_id"] for item in composition], ["A", "B"])
         self.assertEqual(composition[0]["basis"], "mole_fraction")
         self.assertAlmostEqual(sum(item["fraction"] for item in composition), 1.0)
         self.assertFalse(warnings)
         self.assertTrue(all("hazard" not in item for item in composition))
+
+    def test_composition_invalid_unclosed_and_enumeration_error_never_claim_complete(self) -> None:
+        cases = {
+            "invalid": (
+                StrictReadOnlyNode(
+                    "MIXED",
+                    None,
+                    value_type=0,
+                    children=[StrictReadOnlyNode("A", 1.2)],
+                ),
+                "INVALID_COMPONENT_VALUES",
+            ),
+            "unclosed": (
+                StrictReadOnlyNode(
+                    "MIXED",
+                    None,
+                    value_type=0,
+                    children=[
+                        StrictReadOnlyNode("A", 0.4),
+                        StrictReadOnlyNode("B", 0.4),
+                    ],
+                ),
+                "INVALID_VECTOR_NOT_CLOSED",
+            ),
+        }
+        for label, (root, expected_status) in cases.items():
+            with self.subTest(label=label):
+                warnings: list[dict[str, object]] = []
+                tree = StrictReadOnlyTree({
+                    rf"\Data\Streams\{label}\Output\MOLEFRAC\MIXED": root,
+                })
+                rows, coverage = aspen_com_import.extract_stream_composition_with_status(
+                    tree,
+                    rf"\Data\Streams\{label}",
+                    label,
+                    None,
+                    warnings,
+                )
+                self.assertFalse(rows)
+                self.assertEqual(coverage["found_vector_count"], 0)
+                self.assertEqual(coverage["status"], expected_status)
+                self.assertIn(
+                    "BLOCKED_COMPOSITION_VECTOR_INCOMPLETE",
+                    {item["code"] for item in warnings},
+                )
+
+        class BrokenCompositionElements:
+            @property
+            def Count(self):
+                raise RuntimeError("composition count unavailable")
+
+            @staticmethod
+            def Item(index: int):
+                raise RuntimeError(f"composition item unavailable {index}")
+
+        broken_root = type(
+            "BrokenCompositionRoot",
+            (),
+            {"Elements": BrokenCompositionElements()},
+        )()
+        warnings = []
+        rows, coverage = aspen_com_import.extract_stream_composition_with_status(
+            StrictReadOnlyTree({
+                r"\Data\Streams\BROKEN\Output\MOLEFRAC\MIXED": broken_root,
+            }),
+            r"\Data\Streams\BROKEN",
+            "BROKEN",
+            None,
+            warnings,
+        )
+        self.assertFalse(rows)
+        self.assertEqual(coverage["status"], "ERROR_COMPOSITION_ENUMERATION")
+        self.assertGreater(coverage["enumeration_error_count"], 0)
+        json.dumps(coverage, allow_nan=False)
 
     def test_semantic_record_type_uses_attribute_not_icon_value(self) -> None:
         class FakeNode:
@@ -656,6 +1086,733 @@ STREAM-REPOR MOLEFLOW PROPERTIES=TXPORT
         self.assertEqual(record_type, "")
         self.assertTrue(source.startswith("missing:"))
 
+    def test_registry_driven_extraction_reports_coverage_and_unmapped_tree(self) -> None:
+        def container(name: str, *children: StrictReadOnlyNode) -> StrictReadOnlyNode:
+            return StrictReadOnlyNode(
+                name,
+                None,
+                value_type=0,
+                children=list(children),
+            )
+
+        temp_mixed = StrictReadOnlyNode("MIXED", 25.0, unit="C")
+        temp_out = container("TEMP_OUT", temp_mixed)
+        pressure_mixed = StrictReadOnlyNode("MIXED", 1.5, unit="bar")
+        pressure_out = container("PRES_OUT", pressure_mixed)
+        mass_mixed = StrictReadOnlyNode("MIXED", 1000.0, unit="kg/hr")
+        mass_out = container("MASSFLMX", mass_mixed)
+        volume_mixed = StrictReadOnlyNode("MIXED", 1.1, unit="cum/hr")
+        volume_out = container("VOLFLMX", volume_mixed)
+        vapor_mixed = StrictReadOnlyNode("MIXED", 0.0, unit="")
+        vapor_out = container("VFRAC_OUT", vapor_mixed)
+        liquid_mu = StrictReadOnlyNode("LIQUID", 1.2, unit="cP")
+        mumx_mixed = container("MIXED", liquid_mu)
+        mumx = container("MUMX", mumx_mixed)
+        strm_upp = container("STRM_UPP", mumx)
+        comp_a = StrictReadOnlyNode("A", 0.75, unit="")
+        comp_b = StrictReadOnlyNode("B", 0.25, unit="")
+        mole_mixed = container("MIXED", comp_a, comp_b)
+        molefrac = container("MOLEFRAC", mole_mixed)
+        stream_output = container(
+            "Output",
+            temp_out,
+            pressure_out,
+            mass_out,
+            volume_out,
+            vapor_out,
+            strm_upp,
+            molefrac,
+        )
+        stream = StrictReadOnlyNode(
+            "S-1",
+            "MATERIAL_ICON",
+            record_type="MATERIAL",
+            children=[stream_output],
+        )
+        streams_root = container("Streams", stream)
+
+        driver_efficiency = StrictReadOnlyNode("DEFF", 0.95, unit="")
+        pump_input = container("Input", driver_efficiency)
+        block_status = StrictReadOnlyNode("BLKSTAT", 0, unit="", value_type=1)
+        pump_head = StrictReadOnlyNode("HEAD_CAL", 35.0, unit="m")
+        pump_wnet_fallback = StrictReadOnlyNode("B_WNET", 4.5, unit="kW")
+        brake_power = StrictReadOnlyNode("BRAKE_POWER", 4.2, unit="kW")
+        vendor_card = StrictReadOnlyNode("VENDOR_SPECIAL", 123.0, unit="widget")
+        pump_output = container(
+            "Output",
+            block_status,
+            pump_head,
+            pump_wnet_fallback,
+            brake_power,
+            vendor_card,
+        )
+        pump = StrictReadOnlyNode(
+            "P-101",
+            "PUMP_ICON",
+            record_type="PUMP",
+            children=[pump_input, pump_output],
+        )
+
+        unknown_status = StrictReadOnlyNode("BLKSTAT", 0, unit="", value_type=1)
+        unknown_card = StrictReadOnlyNode("CUSTOM_FLOW", 7.5, unit="kg/hr")
+        unknown_output = container("Output", unknown_status, unknown_card)
+        unknown = StrictReadOnlyNode(
+            "X-1",
+            "CUSTOM_ICON",
+            record_type="VENDORX",
+            children=[unknown_output],
+        )
+        blocks_root = container("Blocks", pump, unknown)
+
+        mapping = {
+            r"\Data\Streams": streams_root,
+            r"\Data\Streams\S-1": stream,
+            r"\Data\Streams\S-1\Output": stream_output,
+            r"\Data\Streams\S-1\Output\TEMP_OUT": temp_out,
+            r"\Data\Streams\S-1\Output\TEMP_OUT\MIXED": temp_mixed,
+            r"\Data\Streams\S-1\Output\PRES_OUT": pressure_out,
+            r"\Data\Streams\S-1\Output\PRES_OUT\MIXED": pressure_mixed,
+            r"\Data\Streams\S-1\Output\MASSFLMX": mass_out,
+            r"\Data\Streams\S-1\Output\MASSFLMX\MIXED": mass_mixed,
+            r"\Data\Streams\S-1\Output\VOLFLMX": volume_out,
+            r"\Data\Streams\S-1\Output\VOLFLMX\MIXED": volume_mixed,
+            r"\Data\Streams\S-1\Output\VFRAC_OUT": vapor_out,
+            r"\Data\Streams\S-1\Output\VFRAC_OUT\MIXED": vapor_mixed,
+            r"\Data\Streams\S-1\Output\STRM_UPP": strm_upp,
+            r"\Data\Streams\S-1\Output\STRM_UPP\MUMX": mumx,
+            r"\Data\Streams\S-1\Output\STRM_UPP\MUMX\MIXED": mumx_mixed,
+            r"\Data\Streams\S-1\Output\STRM_UPP\MUMX\MIXED\LIQUID": liquid_mu,
+            r"\Data\Streams\S-1\Output\MOLEFRAC": molefrac,
+            r"\Data\Streams\S-1\Output\MOLEFRAC\MIXED": mole_mixed,
+            r"\Data\Blocks": blocks_root,
+            r"\Data\Blocks\P-101": pump,
+            r"\Data\Blocks\P-101\Input": pump_input,
+            r"\Data\Blocks\P-101\Input\DEFF": driver_efficiency,
+            r"\Data\Blocks\P-101\Output": pump_output,
+            r"\Data\Blocks\P-101\Output\BLKSTAT": block_status,
+            r"\Data\Blocks\P-101\Output\HEAD_CAL": pump_head,
+            r"\Data\Blocks\P-101\Output\B_WNET": pump_wnet_fallback,
+            r"\Data\Blocks\P-101\Output\BRAKE_POWER": brake_power,
+            r"\Data\Blocks\P-101\Output\VENDOR_SPECIAL": vendor_card,
+            r"\Data\Blocks\X-1": unknown,
+            r"\Data\Blocks\X-1\Output": unknown_output,
+            r"\Data\Blocks\X-1\Output\BLKSTAT": unknown_status,
+            r"\Data\Blocks\X-1\Output\CUSTOM_FLOW": unknown_card,
+        }
+        failing_npsha_path = r"\Data\Blocks\P-101\Output\NPSHA"
+        failing_wnet_path = r"\Data\Blocks\P-101\Output\WNET"
+        tree = StrictReadOnlyTree(
+            mapping,
+            failing_paths=[failing_npsha_path, failing_wnet_path],
+        )
+        bundle, warnings, coverage = aspen_com_import.extract_bundle_with_coverage(
+            tree,
+            {
+                "case_id": "STRICT-FAKE",
+                "pressure_basis": "absolute",
+                "run_status": {
+                    "terminal_errors": 0,
+                    "severe_errors": 0,
+                    "errors": 0,
+                    "warnings": 0,
+                },
+            },
+            {
+                "POWER": "kW",
+                "HEAD": "m",
+                "PRESSURE": "bar",
+                "TEMPERATURE": "C",
+                "MASS-FLOW": "kg/hr",
+                "VOLUME-FLOW": "cum/hr",
+                "VISCOSITY": "cP",
+            },
+        )
+
+        self.assertEqual(bundle["schema"], "aspen-equipment-export-v1")
+        json.dumps(bundle, ensure_ascii=False, allow_nan=False)
+        schema = json.loads(
+            (
+                PACKAGE_ROOT
+                / "knowledge_graph"
+                / "aspen_equipment_export.schema.json"
+            ).read_text(encoding="utf-8")
+        )
+        Draft202012Validator.check_schema(schema)
+        Draft202012Validator(schema).validate(bundle)
+        self.assertNotIn("extraction_coverage", bundle)
+        coverage_schema = json.loads(
+            (
+                PACKAGE_ROOT
+                / "knowledge_graph"
+                / "aspen_extraction_coverage.schema.json"
+            ).read_text(encoding="utf-8")
+        )
+        Draft202012Validator.check_schema(coverage_schema)
+        Draft202012Validator(coverage_schema).validate(coverage)
+        self.assertEqual(coverage["registry_audit"]["status"], "PASS")
+        self.assertTrue(coverage["requested_status_invariant"])
+        self.assertGreater(coverage["counts"]["requested"], 0)
+        self.assertGreater(coverage["counts"]["found"], 0)
+        self.assertGreater(coverage["counts"]["missing"], 0)
+        self.assertEqual(coverage["counts"]["error"], 1)
+        self.assertEqual(coverage["counts"]["unsupported"], 3)
+        self.assertEqual(coverage["recovered_error_count"], 1)
+        self.assertEqual(
+            bundle["case"]["com_extraction_coverage_summary"]["counts"],
+            coverage["counts"],
+        )
+
+        pump_row = next(row for row in bundle["blocks"] if row["block_id"] == "P-101")
+        pump_coverage = next(
+            row
+            for row in coverage["objects"]
+            if row["scope"] == "block" and row["object_id"] == "P-101"
+        )
+        self.assertAlmostEqual(pump_row["BRAKE_POWER"], 4.2)
+        self.assertEqual(
+            pump_row["aspen_raw_paths"]["BRAKE_POWER"],
+            r"\Data\Blocks\P-101\Output\BRAKE_POWER",
+        )
+        self.assertEqual(pump_row["aspen_raw_values"]["BRAKE_POWER"]["unit"], "kW")
+        self.assertNotIn("field_observations", pump_row)
+        self.assertNotIn("VOLUME", pump_coverage["fields"])
+        self.assertEqual(pump_coverage["fields"]["NPSHA"]["status"], "error")
+        self.assertEqual(pump_coverage["fields"]["NPSHA"]["path"], failing_npsha_path)
+        self.assertEqual(pump_coverage["fields"]["WNET"]["status"], "found")
+        self.assertEqual(pump_coverage["fields"]["WNET"]["recovered_error_count"], 1)
+        self.assertEqual(
+            pump_coverage["fields"]["WNET"]["path"],
+            r"\Data\Blocks\P-101\Output\B_WNET",
+        )
+        for observation in pump_coverage["fields"].values():
+            self.assertTrue({"path", "unit", "status", "provenance"}.issubset(observation))
+        self.assertEqual(
+            pump_coverage["registry_completeness_status"],
+            "NOT_SCORABLE_REGISTERED_FIELD_ERRORS",
+        )
+        self.assertIsNone(pump_coverage["registry_completeness_rate"])
+
+        stream_row = bundle["streams"][0]
+        self.assertAlmostEqual(stream_row["TEMP_OUT"], 25.0)
+        self.assertNotIn("field_observations", stream_row)
+        self.assertEqual(
+            set(stream_row["composition"][0]),
+            {"component_id", "fraction", "basis", "source_path"},
+        )
+        component_observation = coverage["composition_extraction"]["rows"][0][
+            "component_observations"
+        ][0]
+        self.assertTrue(
+            {"path", "unit", "status", "provenance"}.issubset(component_observation)
+        )
+
+        unmapped_paths = {
+            row["path"] for row in coverage["unmapped_fields"]
+        }
+        self.assertIn(r"\Data\Blocks\P-101\Output\VENDOR_SPECIAL", unmapped_paths)
+        self.assertIn(r"\Data\Blocks\X-1\Output\CUSTOM_FLOW", unmapped_paths)
+        self.assertEqual(len(coverage["unmapped_modules"]), 1)
+        unknown_coverage = next(
+            row
+            for row in coverage["objects"]
+            if row["scope"] == "block" and row["object_id"] == "X-1"
+        )
+        self.assertEqual(unknown_coverage["registry_field_hit_rate"], 1.0)
+        self.assertIsNone(unknown_coverage["registry_completeness_rate"])
+        self.assertIn("NOT_SCORABLE", unknown_coverage["registry_completeness_status"])
+        self.assertIsNone(coverage["registry_completeness_rate"])
+        self.assertEqual(
+            coverage["registry_completeness_status"],
+            "NOT_SCORABLE_UNSUPPORTED_REGISTRY_IDENTITIES",
+        )
+        self.assertTrue(coverage["global_review_required"])
+        self.assertIn(
+            "REGISTERED_FIELD_ERRORS",
+            coverage["global_review_reasons"],
+        )
+        self.assertIn(
+            "UNSUPPORTED_REGISTRY_IDENTITIES",
+            coverage["global_review_reasons"],
+        )
+        unknown_map = next(
+            row for row in bundle["equipment_map"] if row["block_id"] == "X-1"
+        )
+        self.assertNotIn("mapping_status", unknown_map)
+        self.assertNotIn("block_type", unknown_map)
+        self.assertNotIn("process_function", unknown_map)
+        self.assertNotIn("physical equipment role requires review", json.dumps(unknown_map))
+        self.assertTrue(all("value" not in row for row in coverage["unmapped_fields"]))
+        self.assertIn(
+            "UNSUPPORTED_BLOCK_MODULE",
+            {item["code"] for item in warnings},
+        )
+        self.assertIn(
+            "COM_FIELD_EXTRACTION_RECOVERED_AFTER_ERROR",
+            {item["code"] for item in warnings},
+        )
+        self.assertIn(
+            "BLOCKED_COM_UNSUPPORTED_REGISTRY_IDENTITIES",
+            {item["code"] for item in warnings},
+        )
+        self.assertIn(
+            "BLOCKED_COM_REGISTERED_FIELD_ERRORS",
+            {item["code"] for item in warnings},
+        )
+        worker_status = aspen_com_import.classify_aspen_worker_status(
+            {"status": "PASS"},
+            bundle["case"]["com_extraction_blockers"],
+            coverage,
+        )
+        self.assertEqual(worker_status, "BLOCKED_COM_EXTRACTION")
+        self.assertFalse(
+            aspen_com_import.worker_selection_result_available(
+                worker_status,
+                {"status": "PASS"},
+            )
+        )
+
+    def test_registry_compatibility_views_are_derived_and_audited(self) -> None:
+        audit = aspen_com_import.audit_extraction_registry()
+
+        self.assertEqual(audit["status"], "PASS")
+        self.assertTrue(all(audit["legacy_compatibility_views"].values()))
+        self.assertEqual(
+            aspen_com_import.STREAM_FIELDS,
+            {
+                field: list(spec["paths"])
+                for field, spec in aspen_com_import.STREAM_FIELD_REGISTRY.items()
+            },
+        )
+        self.assertEqual(
+            aspen_com_import.BLOCK_FIELDS,
+            {
+                field: list(spec["paths"])
+                for field, spec in aspen_com_import.BLOCK_FIELD_REGISTRY.items()
+                if field not in aspen_com_import.BLOCK_COMMON_FIELDS
+            },
+        )
+        self.assertIn("never assign a generic", audit["unknown_module_policy"])
+        schema = json.loads(
+            (
+                PACKAGE_ROOT
+                / "knowledge_graph"
+                / "aspen_equipment_export.schema.json"
+            ).read_text(encoding="utf-8")
+        )
+        legacy_bundle = json.loads(
+            (APP_DIR / "fixtures" / "mock_aspen_pump.json").read_text(
+                encoding="utf-8"
+            )
+        )["bundle"]
+        Draft202012Validator.check_schema(schema)
+        Draft202012Validator(schema).validate(legacy_bundle)
+        read_only_bundle = json.loads(json.dumps(legacy_bundle))
+        read_only_bundle["case"]["run_status"] = None
+        Draft202012Validator(schema).validate(read_only_bundle)
+        with patch.dict(
+            aspen_com_import.PROCESS_FUNCTIONS,
+            {"BROKEN_VIEW": "must fail audit"},
+        ):
+            broken = aspen_com_import.audit_extraction_registry()
+        self.assertEqual(broken["status"], "FAIL")
+        self.assertIn(
+            "PROCESS_FUNCTIONS_VIEW_DIVERGED_FROM_MODULE_REGISTRY",
+            {item["code"] for item in broken["issues"]},
+        )
+
+    def test_registered_field_error_is_not_scorable_and_blocks_worker(self) -> None:
+        summary = aspen_com_import.summarize_field_coverage({
+            "NPSHA": {
+                "status": "error",
+                "recovered_error_count": 0,
+            },
+            "HEAD_CAL": {
+                "status": "found",
+                "recovered_error_count": 0,
+            },
+        })
+        self.assertEqual(
+            summary["registry_completeness_status"],
+            "NOT_SCORABLE_REGISTERED_FIELD_ERRORS",
+        )
+        self.assertIsNone(summary["registry_completeness_rate"])
+        coverage = {
+            "registry_completeness_status": (
+                "NOT_SCORABLE_REGISTERED_FIELD_ERRORS"
+            ),
+            "root_diagnostics": [],
+            "tree_discovery_truncated_object_count": 0,
+            "case_discovery_budget": {
+                "node_budget_exhausted": False,
+                "metadata_budget_exhausted": False,
+            },
+        }
+        self.assertEqual(
+            aspen_com_import.classify_aspen_worker_status(
+                {"status": "PASS"},
+                [],
+                coverage,
+            ),
+            "BLOCKED_COM_EXTRACTION",
+        )
+
+        def container(name: str, *children: StrictReadOnlyNode) -> StrictReadOnlyNode:
+            return StrictReadOnlyNode(
+                name,
+                None,
+                value_type=0,
+                children=list(children),
+            )
+
+        status_leaf = StrictReadOnlyNode(
+            "BLKSTAT",
+            0,
+            unit="",
+            value_type=1,
+        )
+        output = container("Output", status_leaf)
+        pump = StrictReadOnlyNode(
+            "P-ERROR",
+            "PUMP_ICON",
+            record_type="PUMP",
+            children=[output],
+        )
+        tree = StrictReadOnlyTree(
+            {
+                r"\Data\Streams": container("Streams"),
+                r"\Data\Blocks": container("Blocks", pump),
+                r"\Data\Blocks\P-ERROR": pump,
+                r"\Data\Blocks\P-ERROR\Output": output,
+                r"\Data\Blocks\P-ERROR\Output\BLKSTAT": status_leaf,
+            },
+            failing_paths=[r"\Data\Blocks\P-ERROR\Output\NPSHA"],
+        )
+        bundle, warnings, extracted_coverage = (
+            aspen_com_import.extract_bundle_with_coverage(
+                tree,
+                {
+                    "case_id": "REGISTERED-ERROR",
+                    "pressure_basis": "absolute",
+                    "run_status": None,
+                },
+            )
+        )
+        self.assertEqual(
+            extracted_coverage["registry_completeness_status"],
+            "NOT_SCORABLE_REGISTERED_FIELD_ERRORS",
+        )
+        self.assertEqual(
+            extracted_coverage["global_review_reasons"],
+            ["REGISTERED_FIELD_ERRORS"],
+        )
+        self.assertTrue(extracted_coverage["global_review_required"])
+        self.assertIn(
+            "BLOCKED_COM_REGISTERED_FIELD_ERRORS",
+            {item["code"] for item in warnings},
+        )
+        self.assertTrue(bundle["case"]["com_extraction_blockers"])
+        coverage_schema = json.loads(
+            (
+                PACKAGE_ROOT
+                / "knowledge_graph"
+                / "aspen_extraction_coverage.schema.json"
+            ).read_text(encoding="utf-8")
+        )
+        Draft202012Validator(coverage_schema).validate(extracted_coverage)
+
+    def test_discovery_never_persists_sensitive_long_or_nonfinite_raw_values(self) -> None:
+        secret = "sentinel-sensitive-test-value"
+        long_value = "Z" * 10000
+        password = StrictReadOnlyNode("PASSWORD", secret, unit="")
+        long_note = StrictReadOnlyNode("LONG_NOTE", long_value, unit="")
+        nan_card = StrictReadOnlyNode("NAN_CARD", float("nan"), unit="")
+        output = StrictReadOnlyNode(
+            "Output",
+            None,
+            value_type=0,
+            children=[password, long_note, nan_card],
+        )
+        tree = StrictReadOnlyTree({r"\Data\Blocks\X-2\Output": output})
+
+        discovery = aspen_com_import.discover_object_tree(
+            tree,
+            scope="block",
+            object_id="X-2",
+            base=r"\Data\Blocks\X-2",
+            mapped_paths=[],
+            module_type="VENDORX",
+        )
+        fields = {item["field"]: item for item in discovery["fields"]}
+        serialized = json.dumps(discovery, ensure_ascii=False, allow_nan=False)
+
+        self.assertEqual(set(fields), {"PASSWORD", "LONG_NOTE", "NAN_CARD"})
+        self.assertTrue(all("value" not in item for item in fields.values()))
+        self.assertNotIn(secret, serialized)
+        self.assertNotIn("Z" * 100, serialized)
+        self.assertEqual(fields["PASSWORD"]["value_size"], len(secret))
+        self.assertEqual(
+            fields["PASSWORD"]["value_sha256"],
+            hashlib.sha256(secret.encode("utf-8")).hexdigest().upper(),
+        )
+        self.assertEqual(fields["LONG_NOTE"]["value_size"], 10000)
+        self.assertEqual(
+            fields["NAN_CARD"]["value_metadata_status"],
+            "rejected_non_finite",
+        )
+        self.assertIn(
+            "NON_FINITE_COM_VALUE_REJECTED",
+            {
+                item["provenance"].get("error")
+                for item in discovery["errors"]
+            },
+        )
+        with self.assertRaisesRegex(ValueError, "NON_FINITE"):
+            aspen_com_import._json_safe_com_value(float("inf"))
+        scalar_path = r"\Data\Blocks\X-2\Output\BLKSTAT"
+        scalar_tree = StrictReadOnlyTree({
+            scalar_path: StrictReadOnlyNode(
+                "BLKSTAT",
+                float("inf"),
+                unit="",
+                value_type=1,
+            ),
+        })
+        scalar_observation = aspen_com_import.read_registered_field(
+            scalar_tree,
+            r"\Data\Blocks\X-2",
+            "BLKSTAT",
+            aspen_com_import.BLOCK_FIELD_REGISTRY["BLKSTAT"],
+        )
+        self.assertEqual(scalar_observation["status"], "error")
+        self.assertEqual(
+            scalar_observation["errors"][0]["value_metadata"]["value_metadata_status"],
+            "rejected_non_finite",
+        )
+        bounded = aspen_com_import._json_safe_com_value("A" * 5000)
+        self.assertLess(len(bounded), 600)
+        self.assertIn("<truncated>", bounded)
+        surrogate = aspen_com_import._json_safe_com_value("\ud800" * 1000)
+        surrogate.encode("utf-8")
+        error_text = aspen_com_import._safe_error_text(
+            RuntimeError("password=do-not-retain " + "E" * 5000)
+        )
+        self.assertNotIn("do-not-retain", error_text)
+        self.assertLess(len(error_text), 600)
+        self.assertIn("<truncated>", error_text)
+        redacted = aspen_com_import._safe_text(
+            'OPENAI_API_KEY=sk-fake-one '
+            '"EQUIPMENT_DESIGN_LLM_API_KEY": "sk-fake-two" '
+            'Authorization: Bearer fake-bearer-token '
+            'Authorization Bearer fake-bearer-token-two'
+        )
+        self.assertNotIn("sk-fake-one", redacted)
+        self.assertNotIn("sk-fake-two", redacted)
+        self.assertNotIn("fake-bearer-token", redacted)
+        self.assertNotIn("fake-bearer-token-two", redacted)
+        self.assertGreaterEqual(redacted.count("<redacted>"), 4)
+
+    def test_case_discovery_node_and_metadata_budgets_fail_closed(self) -> None:
+        long_leaf = StrictReadOnlyNode("LONG", "X" * 10000)
+        output = StrictReadOnlyNode(
+            "Output",
+            None,
+            value_type=0,
+            children=[long_leaf],
+        )
+        tree = StrictReadOnlyTree({r"\Data\Blocks\BUDGET\Output": output})
+        metadata_budget = aspen_com_import.new_case_discovery_budget()
+        metadata_budget["max_metadata_bytes"] = 256
+        result = aspen_com_import.discover_object_tree(
+            tree,
+            scope="block",
+            object_id="BUDGET",
+            base=r"\Data\Blocks\BUDGET",
+            mapped_paths=[],
+            case_budget=metadata_budget,
+        )
+        self.assertTrue(result["truncated"])
+        self.assertTrue(result["budget_exhausted"]["metadata"])
+        self.assertTrue(metadata_budget["metadata_budget_exhausted"])
+        field = result["fields"][0]
+        self.assertIsNone(field["value_size"])
+        self.assertIsNone(field["value_sha256"])
+        self.assertEqual(
+            field["value_metadata_status"],
+            "metadata_budget_exceeded_not_hashed",
+        )
+        self.assertNotIn("X" * 100, json.dumps(result))
+        self.assertGreater(metadata_budget["metadata_bytes_output"], 0)
+        self.assertEqual(
+            metadata_budget["metadata_bytes_consumed"],
+            metadata_budget["max_metadata_bytes"],
+        )
+
+        hostile_name = "N" * 200000
+        hostile_output = StrictReadOnlyNode(
+            "Output",
+            None,
+            value_type=0,
+            children=[StrictReadOnlyNode(hostile_name, 1.0, unit="kg/hr")],
+        )
+        hostile_tree = StrictReadOnlyTree({
+            r"\Data\Blocks\HOSTILE\Output": hostile_output,
+        })
+        hostile_budget = aspen_com_import.new_case_discovery_budget()
+        hostile = aspen_com_import.discover_object_tree(
+            hostile_tree,
+            scope="block",
+            object_id="HOSTILE",
+            base=r"\Data\Blocks\HOSTILE",
+            mapped_paths=[],
+            case_budget=hostile_budget,
+        )
+        hostile_serialized = json.dumps(hostile, ensure_ascii=False)
+        self.assertTrue(hostile["truncated"])
+        self.assertTrue(hostile["budget_exhausted"]["metadata"])
+        self.assertTrue(hostile_budget["metadata_budget_exhausted"])
+        self.assertEqual(hostile_budget["metadata_text_values_truncated"], 1)
+        self.assertNotIn("N" * 1000, hostile_serialized)
+        self.assertLess(len(hostile_serialized), 10000)
+
+        node_budget = aspen_com_import.new_case_discovery_budget()
+        node_budget["max_nodes"] = 1
+        first = aspen_com_import.discover_object_tree(
+            tree,
+            scope="block",
+            object_id="FIRST",
+            base=r"\Data\Blocks\BUDGET",
+            mapped_paths=[],
+            case_budget=node_budget,
+        )
+        second = aspen_com_import.discover_object_tree(
+            tree,
+            scope="block",
+            object_id="SECOND",
+            base=r"\Data\Blocks\BUDGET",
+            mapped_paths=[],
+            case_budget=node_budget,
+        )
+        self.assertTrue(first["truncated"])
+        self.assertTrue(second["truncated"])
+        self.assertTrue(second["budget_exhausted"]["node"])
+        self.assertTrue(node_budget["node_budget_exhausted"])
+
+    def test_extract_bundle_surfaces_root_collection_enumeration_failures(self) -> None:
+        class BrokenRootElements:
+            @property
+            def Count(self):
+                raise RuntimeError("root count unavailable")
+
+            @staticmethod
+            def Item(index: int):
+                raise RuntimeError(f"root item unavailable {index}")
+
+        broken_stream_root = type(
+            "BrokenStreamRoot",
+            (),
+            {"Elements": BrokenRootElements()},
+        )()
+        empty_block_root = StrictReadOnlyNode(
+            "Blocks",
+            None,
+            value_type=0,
+        )
+        tree = StrictReadOnlyTree({
+            r"\Data\Streams": broken_stream_root,
+            r"\Data\Blocks": empty_block_root,
+        })
+
+        bundle, warnings, coverage = aspen_com_import.extract_bundle_with_coverage(
+            tree,
+            {
+                "case_id": "BROKEN-ROOT",
+                "pressure_basis": "absolute",
+                "run_status": {
+                    "terminal_errors": 0,
+                    "severe_errors": 0,
+                    "errors": 0,
+                    "warnings": 0,
+                },
+            },
+        )
+
+        self.assertFalse(bundle["streams"])
+        self.assertGreater(
+            coverage["discovery_error_count"],
+            0,
+        )
+        self.assertIn(
+            "BLOCKED_COM_TREE_ROOT_ENUMERATION_ERROR",
+            {item["code"] for item in warnings},
+        )
+        self.assertTrue(coverage["root_diagnostics"])
+        self.assertEqual(
+            aspen_com_import.classify_aspen_worker_status(
+                {"status": "PASS"},
+                bundle["case"]["com_extraction_blockers"],
+                coverage,
+            ),
+            "BLOCKED_COM_EXTRACTION",
+        )
+
+    def test_non_material_streams_are_excluded_from_material_field_and_composition_rates(self) -> None:
+        duty = StrictReadOnlyNode("DUTY", 50.0, unit="kW")
+        output = StrictReadOnlyNode(
+            "Output",
+            None,
+            value_type=0,
+            children=[duty],
+        )
+        heat_stream = StrictReadOnlyNode(
+            "Q-1",
+            "HEAT_ICON",
+            record_type="HEAT",
+            children=[output],
+        )
+        streams_root = StrictReadOnlyNode(
+            "Streams",
+            None,
+            value_type=0,
+            children=[heat_stream],
+        )
+        blocks_root = StrictReadOnlyNode("Blocks", None, value_type=0)
+        tree = StrictReadOnlyTree({
+            r"\Data\Streams": streams_root,
+            r"\Data\Streams\Q-1\Output": output,
+            r"\Data\Blocks": blocks_root,
+        })
+
+        bundle, _, coverage = aspen_com_import.extract_bundle_with_coverage(
+            tree,
+            {
+                "case_id": "HEAT-STREAM",
+                "pressure_basis": "absolute",
+                "run_status": {
+                    "terminal_errors": 0,
+                    "severe_errors": 0,
+                    "errors": 0,
+                    "warnings": 0,
+                },
+            },
+        )
+
+        row = bundle["streams"][0]
+        row_coverage = next(
+            item for item in coverage["objects"] if item["object_id"] == "Q-1"
+        )
+        self.assertEqual(row_coverage["counts"]["requested"], 0)
+        self.assertIsNone(row_coverage["registry_field_hit_rate"])
+        self.assertIsNone(row_coverage["registry_completeness_rate"])
+        self.assertEqual(
+            row_coverage["composition_extraction"]["status"],
+            "NOT_APPLICABLE_NON_MATERIAL_STREAM",
+        )
+        composition = coverage["composition_extraction"]
+        self.assertEqual(composition["material_stream_count"], 0)
+        self.assertEqual(composition["non_material_stream_count"], 1)
+        self.assertEqual(composition["requested_vector_count"], 0)
+        self.assertEqual(composition["status"], "NOT_APPLICABLE_NO_MATERIAL_STREAMS")
+
     def test_history_clean_statement_is_zero(self) -> None:
         parsed = aspen_com_import.parse_aspen_history("NO ERRORS OR WARNINGS GENERATED\n")
         self.assertTrue(parsed["found"])
@@ -678,6 +1835,25 @@ TERMINAL ERRORS      0        0         0
         parsed = aspen_com_import.parse_aspen_history("no run status was exported")
         self.assertFalse(parsed["found"])
         self.assertIsNone(aspen_com_import.verified_run_status(parsed))
+
+    def test_clean_counts_without_raw_history_are_not_formal_run_evidence(self) -> None:
+        parsed = aspen_com_import.parse_aspen_history(
+            "NO ERRORS OR WARNINGS GENERATED\n"
+        )
+        missing = aspen_com_import.classify_run_evidence(
+            parsed,
+            run_requested=True,
+            raw_history_present=False,
+        )
+        clean = aspen_com_import.classify_run_evidence(
+            parsed,
+            run_requested=True,
+            raw_history_present=True,
+        )
+        self.assertEqual(missing["status"], "RUN_EVIDENCE_MISSING")
+        self.assertFalse(missing["clean"])
+        self.assertEqual(clean["status"], "CLEAN_RUN_EVIDENCE")
+        self.assertTrue(clean["clean"])
 
     def test_pump_com_power_cards_are_independent_and_wnet_is_not_brake_power(self) -> None:
         self.assertEqual(
@@ -1076,6 +2252,134 @@ TERMINAL ERRORS      0        0         0
         self.assertEqual(result["pfd_summary"]["topology_gate"]["status"], "PASS")
         self.assertEqual(result["mapping_sha256"], result["pfd_summary"]["mapping_sha256"])
         self.assertEqual(len(result["pfd_mapping_file_sha256"]), 64)
+
+    def test_write_and_derive_persists_registry_coverage_as_separate_artifact(self) -> None:
+        fixture = json.loads(
+            (APP_DIR / "fixtures" / "mock_aspen_pump.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        coverage = complete_legal_coverage_sidecar()
+        output = (
+            PACKAGE_ROOT
+            / "outputs"
+            / "app_test_runs"
+            / f"coverage_artifact_{uuid.uuid4().hex[:10]}"
+        )
+        output.mkdir(parents=True, exist_ok=False)
+        try:
+            result = aspen_com_import.write_and_derive(
+                fixture["bundle"],
+                output,
+                extraction_coverage=coverage,
+            )
+            artifact = result["extraction_coverage"]
+            artifact_path = Path(artifact["path"])
+            persisted = json.loads(artifact_path.read_text(encoding="utf-8"))
+            persisted_bundle = json.loads(
+                Path(result["bundle"]).read_text(encoding="utf-8")
+            )
+            self.assertEqual(artifact_path.name, "aspen_extraction_coverage.json")
+            self.assertEqual(persisted["counts"]["found"], 1)
+            self.assertEqual(artifact["sha256"], aspen_com_import.sha256(artifact_path))
+            self.assertNotIn("extraction_coverage", persisted_bundle)
+            self.assertEqual(
+                persisted_bundle["case"]["com_extraction_coverage_path"],
+                artifact_path.name,
+            )
+            self.assertEqual(
+                persisted_bundle["case"]["com_extraction_coverage_sha256"],
+                artifact["sha256"],
+            )
+            main_schema = json.loads(
+                (
+                    PACKAGE_ROOT
+                    / "knowledge_graph"
+                    / "aspen_equipment_export.schema.json"
+                ).read_text(encoding="utf-8")
+            )
+            Draft202012Validator(main_schema).validate(persisted_bundle)
+        finally:
+            shutil.rmtree(output, ignore_errors=True)
+
+    def test_write_and_derive_rejects_invalid_coverage_before_any_artifact_write(self) -> None:
+        fixture = json.loads(
+            (APP_DIR / "fixtures" / "mock_aspen_pump.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        output = (
+            PACKAGE_ROOT
+            / "outputs"
+            / "app_test_runs"
+            / f"invalid_coverage_{uuid.uuid4().hex[:10]}"
+        )
+        output.mkdir(parents=True, exist_ok=False)
+        invalid = {
+            "schema": "aspen-com-extraction-coverage-v1",
+            "counts": {"requested": 1, "found": 1},
+        }
+        try:
+            with self.assertRaisesRegex(
+                ValueError,
+                "ASPEN_EXTRACTION_COVERAGE_SCHEMA_INVALID",
+            ):
+                aspen_com_import.write_and_derive(
+                    fixture["bundle"],
+                    output,
+                    extraction_coverage=invalid,
+                )
+            self.assertFalse((output / "aspen_extraction_coverage.json").exists())
+            self.assertFalse((output / "aspen_equipment_export.json").exists())
+        finally:
+            shutil.rmtree(output, ignore_errors=True)
+
+    def test_blocked_com_extraction_persists_evidence_without_running_derivation(self) -> None:
+        fixture = json.loads(
+            (APP_DIR / "fixtures" / "mock_aspen_pump.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        coverage = complete_legal_coverage_sidecar()
+        coverage["registry_completeness_status"] = (
+            "NOT_SCORABLE_UNSUPPORTED_REGISTRY_IDENTITIES"
+        )
+        coverage["registry_completeness_rate"] = None
+        coverage["global_review_required"] = True
+        coverage["global_review_reasons"] = [
+            "UNSUPPORTED_REGISTRY_IDENTITIES"
+        ]
+        output = (
+            PACKAGE_ROOT
+            / "outputs"
+            / "app_test_runs"
+            / f"blocked_no_derivation_{uuid.uuid4().hex[:10]}"
+        )
+        output.mkdir(parents=True, exist_ok=False)
+        try:
+            with patch.object(
+                aspen_com_import.derivation,
+                "derive_bundle",
+                side_effect=AssertionError("blocked extraction reached derivation"),
+            ):
+                result = aspen_com_import.write_and_derive(
+                    fixture["bundle"],
+                    output,
+                    extraction_coverage=coverage,
+                    allow_derivation=False,
+                )
+            self.assertIsNone(result["result"])
+            self.assertIsNone(result["derivation"])
+            self.assertEqual(
+                result["derivation_skipped"],
+                "BLOCKED_COM_EXTRACTION",
+            )
+            self.assertTrue((output / "aspen_equipment_export.json").is_file())
+            self.assertTrue((output / "aspen_extraction_coverage.json").is_file())
+            self.assertTrue((output / "aspen_pfd_mapping.json").is_file())
+            self.assertFalse((output / "equipment_derivation_result.json").exists())
+        finally:
+            shutil.rmtree(output, ignore_errors=True)
 
     def test_pfd_is_written_immediately_after_export_even_if_later_derivation_fails(self) -> None:
         fixture = json.loads((APP_DIR / "fixtures" / "mock_aspen_pump.json").read_text(encoding="utf-8"))

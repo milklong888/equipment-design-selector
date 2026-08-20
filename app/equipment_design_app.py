@@ -10,7 +10,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 
 FROZEN_ROOT = getattr(sys, "_MEIPASS", None)
@@ -28,6 +28,7 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 import app_core  # noqa: E402
+import aspen_suite  # noqa: E402
 import llm_bridge  # noqa: E402
 
 
@@ -110,6 +111,24 @@ def _report_content_counts(presentation: Mapping[str, Any]) -> dict[str, int]:
             len(item.get("candidates", []))
             for item in rows
             if isinstance(item, Mapping) and isinstance(item.get("candidates"), list)
+        ),
+        "branch_output_count": sum(
+            len(item.get("branch_selection", {}).get("natural_language", []))
+            for item in rows
+            if isinstance(item, Mapping)
+            and isinstance(item.get("branch_selection"), Mapping)
+        ),
+        "component_selection_count": sum(
+            len(item.get("component_selections", []))
+            for item in rows
+            if isinstance(item, Mapping)
+            and isinstance(item.get("component_selections"), list)
+        ),
+        "llm_control_result_count": sum(
+            1
+            for item in rows
+            if isinstance(item, Mapping)
+            and isinstance(item.get("llm_control_result"), Mapping)
         ),
     }
 
@@ -346,6 +365,8 @@ class EquipmentDesignApi:
         self.window: Any | None = None
         self._worker_lock = threading.RLock()
         self._active_workers: dict[int, subprocess.Popen[str]] = {}
+        self._suite_lock = threading.Lock()
+        self._suite_cancel_event = threading.Event()
         self._agent_protocol_lock = threading.RLock()
 
     def bind_window(self, window: Any) -> None:
@@ -440,6 +461,7 @@ class EquipmentDesignApi:
 
     def cancel_active_operations(self) -> dict[str, Any]:
         """Terminate only worker trees created by this API instance."""
+        self._suite_cancel_event.set()
         with self._worker_lock:
             workers = list(self._active_workers.values())
         terminated: list[int] = []
@@ -538,10 +560,53 @@ class EquipmentDesignApi:
                 if not result_path.is_file():
                     raise RuntimeError(f"Aspen worker 未生成结果文件（returncode={process.returncode}）：{stderr[-1500:]}")
                 result = json.loads(result_path.read_text(encoding="utf-8"))
+                selection_result_available = bool(
+                    isinstance(result, dict)
+                    and aspen_suite.worker_allows_equipment_selection(result)
+                )
+                operation_completed = selection_result_available
+                worker_status = str(result.get("status") or "").upper()
+                coverage_summary = result.get("com_extraction_coverage_summary")
+                coverage_summary = (
+                    coverage_summary
+                    if isinstance(coverage_summary, Mapping)
+                    else {}
+                )
+                coverage_status = str(
+                    coverage_summary.get("registry_completeness_status") or ""
+                ).upper()
+                blocked_extraction = bool(
+                    worker_status.startswith("BLOCKED_COM_")
+                    or result.get("com_extraction_blockers")
+                    or coverage_status.startswith("NOT_SCORABLE_")
+                )
                 return {
-                    "ok": process.returncode == 0,
+                    "ok": operation_completed,
                     "value": result,
-                    "error": None if process.returncode == 0 else result.get("error", "Aspen 自动导入失败，可切换其他模式。"),
+                    "error": (
+                        None
+                        if operation_completed
+                        else (
+                            result.get("error")
+                            or (
+                                "Aspen COM 提取不完整，已阻断设备选型结果；请查看提取覆盖旁车与阻断项。"
+                                if blocked_extraction
+                                else "Aspen 自动导入失败，可切换其他模式。"
+                            )
+                        )
+                    ),
+                    "completed_with_warnings": bool(
+                        operation_completed and process.returncode != 0
+                    ),
+                    "warning": (
+                        str(
+                            result.get("error")
+                            or result.get("status")
+                            or "设备选型结果已生成，但正式证据门仍有未闭合项。"
+                        )
+                        if operation_completed and process.returncode != 0
+                        else None
+                    ),
                     "session_dir": str(session),
                     "returncode": process.returncode,
                     "stdout": stdout[-2000:],
@@ -551,6 +616,45 @@ class EquipmentDesignApi:
                 self._unregister_worker(process)
         except Exception as exc:
             return self._error(exc)
+
+    def import_aspen_suite(
+        self,
+        config: dict[str, Any],
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
+        """Run a hash-checked Aspen queue strictly serially through isolated workers."""
+
+        if not self._suite_lock.acquire(blocking=False):
+            return self._error(RuntimeError("已有 Aspen 批量队列正在运行。"))
+        self._suite_cancel_event.clear()
+        try:
+            suite_config = dict(config)
+            requested_output = str(suite_config.get("output_dir") or "").strip()
+            if requested_output:
+                output_dir = Path(requested_output).expanduser().resolve()
+                output_dir.parent.mkdir(parents=True, exist_ok=True)
+            else:
+                OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+                output_dir = OUTPUT_ROOT / (
+                    f"aspen_suite_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+                )
+            suite_config["output_dir"] = str(output_dir)
+            report = aspen_suite.run_suite(
+                suite_config,
+                self.import_aspen,
+                cancelled=self._suite_cancel_event.is_set,
+                progress=progress_callback,
+            )
+            return self._ok(
+                report,
+                session_dir=str(output_dir),
+                report_path=report.get("report_path"),
+                markdown_report_path=report.get("markdown_report_path"),
+            )
+        except Exception as exc:
+            return self._error(exc)
+        finally:
+            self._suite_lock.release()
 
     def llm_review(self, config: dict[str, Any], deterministic_result: dict[str, Any]) -> dict[str, Any]:
         """Compatibility entry that is intentionally routed through strict staging."""
@@ -733,7 +837,12 @@ class EquipmentDesignApi:
         context_scope: str = "minimum",
     ) -> dict[str, Any]:
         """Run GUI review through Agent ``hybrid_run`` and return v2 only."""
-        runtime_key = str(config.get("api_key", "")) if isinstance(config, dict) else ""
+        supplied_key = (
+            str(config.get("api_key", ""))
+            if isinstance(config, dict)
+            else ""
+        )
+        runtime_key = ""
         try:
             if not isinstance(source_input, dict) or not isinstance(source_input.get("operation"), str) or not isinstance(source_input.get("payload"), dict):
                 raise ValueError(
@@ -743,13 +852,20 @@ class EquipmentDesignApi:
                 raise ValueError("Agent 协同 config 必须是对象。")
             knowledge = knowledge_config if isinstance(knowledge_config, dict) else {}
             provider = str(config.get("provider", "openai_compatible")).strip()
+            llm_enabled = bool(config.get("enabled", True))
+            if llm_enabled and provider != "mock":
+                runtime_key = supplied_key
             provider_config = {
                 key: value
                 for key, value in config.items()
                 if key not in {"enabled", "api_key", "base_url"}
             }
             provider_config["provider"] = provider
-            runtime_base_url = str(config.get("base_url", "")).strip()
+            runtime_base_url = (
+                str(config.get("base_url", "")).strip()
+                if llm_enabled
+                else ""
+            )
             if provider == "local_openai_compatible" and runtime_base_url:
                 provider_config["base_url"] = runtime_base_url
             payload = {
@@ -758,7 +874,7 @@ class EquipmentDesignApi:
                 "injection_point": injection_point,
                 "context_scope": context_scope,
                 "llm": {
-                    "enabled": bool(config.get("enabled", True)),
+                    "enabled": llm_enabled,
                     "config": provider_config,
                 },
             }
@@ -787,10 +903,10 @@ class EquipmentDesignApi:
                         os.environ[base_name] = old_base
             if not isinstance(value, dict) or value.get("schema") != "equipment-design-hybrid-result-v2":
                 raise RuntimeError("Agent hybrid_run 未返回协议 1.9 规定的 v2 结果。")
-            if runtime_key:
+            if supplied_key:
                 def redact_secret(item: Any) -> Any:
                     if isinstance(item, str):
-                        return item.replace(runtime_key, "[REDACTED]")
+                        return item.replace(supplied_key, "[REDACTED]")
                     if isinstance(item, list):
                         return [redact_secret(child) for child in item]
                     if isinstance(item, dict):
@@ -801,8 +917,8 @@ class EquipmentDesignApi:
             return self._ok(value, artifacts=artifacts)
         except Exception as exc:
             message = str(exc)
-            if runtime_key:
-                message = message.replace(runtime_key, "[REDACTED]")
+            if supplied_key:
+                message = message.replace(supplied_key, "[REDACTED]")
             return self._error(RuntimeError(message))
 
     def hybrid_review(
