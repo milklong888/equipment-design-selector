@@ -500,6 +500,27 @@ class EquipmentDesignAgentTests(unittest.TestCase):
         self.assertEqual(config["model"], "deepseek-chat")
         self.assertEqual(config["base_url"], "https://trusted.example/v1")
 
+    def test_agent_deepseek_provider_binds_official_endpoint_and_runtime_key(self) -> None:
+        with patch.dict(os.environ, {
+            "EQUIPMENT_DESIGN_LLM_API_KEY": "SENTINEL-KEY",
+        }, clear=False):
+            config = agent._agent_provider_config({
+                "provider": "deepseek",
+                "model": "deepseek-v4-pro",
+                "wire_api": "chat_completions",
+                "reasoning_effort": "xhigh",
+            })
+        self.assertEqual(config["base_url"], "https://api.deepseek.com")
+        self.assertEqual(config["model"], "deepseek-v4-pro")
+        self.assertEqual(config["api_key"], "SENTINEL-KEY")
+
+        with self.assertRaisesRegex(agent.AgentRequestError, "不能覆盖 DeepSeek"):
+            agent._agent_provider_config({
+                "provider": "deepseek",
+                "base_url": "https://attacker.invalid",
+                "model": "deepseek-v4-pro",
+            })
+
     def test_capabilities_exposes_nonsensitive_model_environment_contract(self) -> None:
         with patch.dict(os.environ, {"EQUIPMENT_DESIGN_LLM_MODEL_ID": "audit-model"}, clear=False):
             response, code = agent.execute_request({
@@ -568,14 +589,14 @@ class EquipmentDesignAgentTests(unittest.TestCase):
             ):
                 if isinstance(provider_result, Exception):
                     provider_patch = patch.object(
-                        agent.llm_bridge.urllib.request,
-                        "urlopen",
+                        agent.llm_bridge,
+                        "_open_authenticated_request",
                         side_effect=provider_result,
                     )
                 else:
                     provider_patch = patch.object(
-                        agent.llm_bridge.urllib.request,
-                        "urlopen",
+                        agent.llm_bridge,
+                        "_open_authenticated_request",
                         return_value=provider_result,
                     )
                 with provider_patch:

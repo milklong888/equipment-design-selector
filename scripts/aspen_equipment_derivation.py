@@ -96,6 +96,22 @@ PIPE_INTERNAL_FALLBACK_POLICY: dict[str, Any] = {
                 [425.0, 0.45],
             ],
         },
+        "SS304": {
+            "profile_revision": "PIPE-MAT-SS304-2026-02",
+            "grade": "S30408（06Cr19Ni10）",
+            "product_standard": "GB/T 14976-2025",
+            "yield_strength_20c_mpa": 205.0,
+            "tensile_strength_20c_mpa": 520.0,
+            "screening_temperature_range_c": [-196.0, 400.0],
+            "temperature_factor_points": [
+                [-196.0, 1.00],
+                [20.0, 1.00],
+                [100.0, 0.92],
+                [200.0, 0.78],
+                [300.0, 0.66],
+                [400.0, 0.56],
+            ],
+        },
         "SS316L": {
             "profile_revision": "PIPE-MAT-SS316L-2026-02",
             "grade": "S31603（022Cr17Ni12Mo2）",
@@ -172,6 +188,16 @@ PIPE_MATERIAL_STANDARD_ROUTES: dict[str, dict[str, Any]] = {
         "official_registry_url": (
             "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?"
             "hcno=D5537747C227CE74971D8E07FAB5BFD9"
+        ),
+        "product_standard_status": "CURRENT_IDENTITY_VERIFIED",
+    },
+    "SS304": {
+        "grade_search_key": "GB/T 14976 + 06Cr19Ni10/S30408",
+        "annex_b_page_hints": [160],
+        "product_standard": "GB/T 14976-2025",
+        "official_registry_url": (
+            "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?"
+            "hcno=064C7CE386EE926B10AECD1E3E9C539A"
         ),
         "product_standard_status": "CURRENT_IDENTITY_VERIFIED",
     },
@@ -7642,6 +7668,11 @@ def _programmatic_pipe_material(
     design_temperature_c: float,
 ) -> dict[str, Any]:
     text = f"{medium_name} {preliminary_material}".casefold()
+    preliminary_material_key = re.sub(
+        r"[\s_\-—（）()\[\]/]+",
+        "",
+        preliminary_material.casefold(),
+    )
     if any(
         marker in text
         for marker in (
@@ -7674,6 +7705,39 @@ def _programmatic_pipe_material(
                 "强酸/卤化介质不允许由“316L通用耐蚀”规则直接闭合；"
                 "程序改选20钢基管+PTFE衬里候选，但必须用组成、浓度、温度、"
                 "渗透性和真空工况完成材料相容性复核。"
+            ),
+        }
+    if (
+        "s30408" in preliminary_material_key
+        or "06cr19ni10" in preliminary_material_key
+        or preliminary_material_key in {"304", "ss304", "sus304"}
+        or "304不锈钢" in preliminary_material_key
+        or "304stainless" in preliminary_material_key
+    ):
+        return {
+            "code": "SS304",
+            "material": (
+                "S30408（06Cr19Ni10）不锈钢无缝钢管"
+                "（GB/T 14976-2025 产品标准身份候选，程序初选）"
+            ),
+            "material_grade": "S30408（06Cr19Ni10）",
+            "product_standard": "GB/T 14976-2025",
+            "product_standard_identity_candidate": True,
+            "product_standard_scope_established": False,
+            "product_standard_evidence": (
+                _pipe_product_standard_evidence("GB/T 14976-2025")
+            ),
+            "corrosion_allowance_mm": 0.0,
+            "roughness_mm": 0.015,
+            "wall_table_preference": "table3",
+            "selection_basis": (
+                "explicit_s30408_or_304_preliminary_material_input"
+            ),
+            "compatibility_warning": (
+                "程序已把用户给出的S30408/06Cr19Ni10映射为304不锈钢路线，"
+                "但这不等于材料相容性或正式管道等级确认；仍须复核介质组成、"
+                "氯离子、温度、点蚀、缝隙腐蚀和应力腐蚀开裂风险，并确认"
+                "GB/T 14976-2025对具体产品、交货状态、尺寸及温度范围的适用性。"
             ),
         }
     if any(
@@ -8293,6 +8357,13 @@ def _pipe_component_class_candidate(
             "gasket": "304/柔性石墨缠绕垫（带内外环）",
             "fastener": "35CrMoA全螺纹螺柱+30CrMo螺母",
             "valve_body": "WCB铸钢阀体",
+        },
+        "SS304": {
+            "fitting": "S30408（06Cr19Ni10）不锈钢对焊管件",
+            "flange": "06Cr19Ni10不锈钢锻制带颈对焊RF法兰",
+            "gasket": "304/柔性石墨缠绕垫（304内外环）",
+            "fastener": "A2-70不锈钢螺柱螺母组",
+            "valve_body": "CF8不锈钢阀体",
         },
         "SS316L": {
             "fitting": "S31603不锈钢对焊管件",
@@ -9411,7 +9482,7 @@ def build_programmatic_pipe_specification(
         heat_tracing_spec = "不设伴热（程序初选）"
     protective_layer = (
         "酸洗钝化（程序初选）"
-        if material["code"] == "SS316L"
+        if material["code"] in {"SS304", "SS316L"}
         else "Sa2.5表面处理+环氧富锌底漆/环氧面漆（程序初选）"
     )
 

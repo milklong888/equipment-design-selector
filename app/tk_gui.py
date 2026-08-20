@@ -100,6 +100,7 @@ UI_OPTION_LABELS: dict[str, str] = {
     "same_duty_performance_map": "同工况完整性能图",
     "mock": "离线模拟（不联网）",
     "openai": "OpenAI 官方接口",
+    "deepseek": "DeepSeek 官方接口",
     "openai_compatible": "OpenAI 兼容接口",
     "local_openai_compatible": "本机 OpenAI 兼容接口",
     "chat_completions": "Chat Completions（传统兼容）",
@@ -433,7 +434,9 @@ class EquipmentDesignTkApp:
         self.last_deterministic_result: dict[str, Any] | None = None
         self.last_manual: dict[str, Any] | None = None
         self.last_source_input: dict[str, Any] | None = None
+        self.last_source_context: dict[str, Any] | None = None
         self.llm_proposal: dict[str, Any] | None = None
+        self.llm_proposal_context: dict[str, Any] | None = None
         self._tested_llm_connection_fingerprint: str | None = None
         self._applied_llm_settings: dict[str, Any] | None = None
         self._applied_llm_settings_fingerprint: str | None = None
@@ -1165,7 +1168,11 @@ class EquipmentDesignTkApp:
         grid = ttk.Frame(tab, style="Panel.TFrame")
         grid.pack(fill="x")
         grid.columnconfigure(1, weight=1)
-        provider_ids = [item["id"] for item in self.llm_provider_registry.get("providers", [])]
+        provider_ids = [
+            item["id"]
+            for item in self.llm_provider_registry.get("providers", [])
+            if item.get("id") != "mock"
+        ]
         self.llm_enabled = tk.BooleanVar(value=True)
         self.llm_knowledge_enabled = tk.BooleanVar(value=True)
         self.llm_provider = tk.StringVar(value="openai_compatible")
@@ -1191,7 +1198,8 @@ class EquipmentDesignTkApp:
         self.llm_provider_combo = provider
         provider.bind("<<ComboboxSelected>>", lambda _event: self._sync_llm_provider())
         self._labeled_widget(grid, 0, "服务接口", provider)
-        self._labeled_widget(grid, 1, "API Base URL", ttk.Entry(grid, textvariable=self.llm_base))
+        self.llm_base_entry = ttk.Entry(grid, textvariable=self.llm_base)
+        self._labeled_widget(grid, 1, "API Base URL", self.llm_base_entry)
         self._labeled_widget(grid, 2, "模型 ID", ttk.Entry(grid, textvariable=self.llm_model))
         self._labeled_widget(
             grid,
@@ -1291,7 +1299,8 @@ class EquipmentDesignTkApp:
         ttk.Label(
             tab,
             text=(
-                "模型只可使用已登记条件、补算配方和候选引用；数值、单位、压力基准、证据与型号状态由程序锁定。"
+                "自定义 URL 请选择“OpenAI 兼容接口”；官方接口地址固定。模型只可使用已登记条件、"
+                "补算配方和候选引用；数值、单位、压力基准、证据与型号状态由程序锁定。"
             ),
             style="Muted.TLabel",
             wraplength=720,
@@ -1353,6 +1362,21 @@ class EquipmentDesignTkApp:
         )
         if isinstance(definition, dict):
             self.llm_base.set(str(definition.get("default_base_url", self.llm_base.get())))
+            if selected in {"openai", "deepseek"}:
+                self.llm_base_entry.state(["disabled"])
+            else:
+                self.llm_base_entry.state(["!disabled"])
+            default_model = str(definition.get("default_model_id") or "").strip()
+            if default_model:
+                self.llm_model.set(default_model)
+            default_wire_api = str(definition.get("default_wire_api") or "").strip()
+            if default_wire_api:
+                self.llm_wire_api.set(default_wire_api)
+            default_reasoning_effort = str(
+                definition.get("default_reasoning_effort") or ""
+            ).strip()
+            if default_reasoning_effort:
+                self.llm_reasoning_effort.set(default_reasoning_effort)
 
     @staticmethod
     def _llm_settings_sha256(value: Mapping[str, Any]) -> str:
@@ -1360,16 +1384,18 @@ class EquipmentDesignTkApp:
         return hashlib.sha256(payload).hexdigest().upper()
 
     def _llm_connection_config(self) -> dict[str, Any]:
+        enabled = bool(self.llm_enabled.get())
+        provider = self.llm_provider.get().strip()
         return {
-            "enabled": bool(self.llm_enabled.get()),
-            "provider": self.llm_provider.get().strip(),
+            "enabled": enabled,
+            "provider": provider,
             "base_url": self.llm_base.get().strip(),
             "model": self.llm_model.get().strip(),
             "timeout_s": self.llm_timeout.get().strip(),
             "wire_api": self.llm_wire_api.get().strip(),
             "reasoning_effort": self.llm_reasoning_effort.get().strip(),
             "disable_response_storage": bool(self.llm_disable_response_storage.get()),
-            "api_key": self.llm_key.get(),
+            "api_key": self.llm_key.get() if enabled and provider != "mock" else "",
         }
 
     def _collect_llm_settings(self) -> dict[str, Any]:
@@ -1792,7 +1818,7 @@ class EquipmentDesignTkApp:
         ttk.Label(pfd_toolbar, textvariable=self.pfd_status_var, style="Muted.TLabel").pack(side="right")
         self.pfd_view = pfd_canvas.PFDCanvasView(
             pfd_panel,
-            on_block_open=self._open_pfd_block,
+            on_block_open=self._open_pfd_block_from_canvas,
             on_block_menu=self._show_pfd_block_menu,
             on_stream_open=self._open_pfd_stream,
             on_stream_menu=self._show_pfd_stream_menu,
@@ -2115,12 +2141,12 @@ class EquipmentDesignTkApp:
         parameter_toolbar.pack(fill="x")
         ttk.Label(
             parameter_toolbar,
-            text="PFD 设备补录只写独立参数层，不改 Aspen 源文件；重算后仍按证据门停在相应状态。",
+            text="PFD 左键会打开预填参数；修改只写独立参数层，不改 Aspen 源文件，重算仍受证据门约束。",
             style="Muted.TLabel",
         ).pack(side="left", fill="x", expand=True)
         self.pfd_parameter_button = ttk.Button(
             parameter_toolbar,
-            text="补充/修改本设备参数并重算",
+            text="编辑预填参数并重算",
             style="Secondary.TButton",
             command=lambda: self._open_pfd_parameter_editor(self._active_pfd_block_id or ""),
         )
@@ -2874,6 +2900,7 @@ class EquipmentDesignTkApp:
         *,
         also_disable: tuple[ttk.Button, ...] = (),
         workflow_step: int = 2,
+        reenable_button: Callable[[], bool] | None = None,
     ) -> None:
         if self._closing:
             return
@@ -2904,7 +2931,10 @@ class EquipmentDesignTkApp:
                     else:
                         done(value)
                 finally:
-                    button.state(["!disabled"])
+                    if reenable_button is None or reenable_button():
+                        button.state(["!disabled"])
+                    else:
+                        button.state(["disabled"])
                     for peer in also_disable:
                         peer.state(["!disabled"])
                     if self._background_jobs == 0:
@@ -2979,10 +3009,12 @@ class EquipmentDesignTkApp:
             value = response.get("value", {})
             deterministic = value.get("result", value) if isinstance(value, dict) else value
             self.last_deterministic_result = deterministic if isinstance(deterministic, dict) else {"value": deterministic}
+            self.last_manual = None
             self.last_source_input = {
                 "operation": "aspen_import",
                 "payload": json.loads(json.dumps(config, ensure_ascii=False)),
             }
+            self.last_source_context = {"kind": "aspen_import"}
             self._load_aspen_visual_artifacts(value if isinstance(value, dict) else {})
             self._render_result(deterministic)
             equipment_count = (
@@ -3144,10 +3176,12 @@ class EquipmentDesignTkApp:
             if self.session_dir:
                 self.open_button.state(["!disabled"])
             self.last_deterministic_result = self.aspen_suite_report
+            self.last_manual = None
             self.last_source_input = {
                 "operation": "aspen_suite",
                 "payload": json.loads(json.dumps(config, ensure_ascii=False)),
             }
+            self.last_source_context = {"kind": "aspen_suite"}
             self._render_result(self.aspen_suite_report)
             status = str(self.aspen_suite_report.get("status") or "UNKNOWN")
             usable = int(self.aspen_suite_report.get("usable_count") or 0)
@@ -3214,6 +3248,7 @@ class EquipmentDesignTkApp:
         self.session_dir = str(case_dir)
         self.open_button.state(["!disabled"])
         self.last_deterministic_result = deterministic
+        self.last_manual = None
         self.last_source_input = {
             "operation": "aspen_import",
             "payload": {
@@ -3223,6 +3258,7 @@ class EquipmentDesignTkApp:
                 "run": row.get("run_requested"),
             },
         }
+        self.last_source_context = {"kind": "aspen_import"}
         self._load_aspen_visual_artifacts(worker)
         self._render_result(deterministic)
         if self.aspen_pfd_mapping:
@@ -3351,6 +3387,17 @@ class EquipmentDesignTkApp:
     def _clear_tree(tree: ttk.Treeview) -> None:
         for item in tree.get_children():
             tree.delete(item)
+
+    def _open_pfd_block_from_canvas(self, block_id: str) -> None:
+        """Handle the PFD left-click contract: details first, editable values next."""
+
+        self._open_pfd_block(block_id)
+        if not self._pfd_selection_for_block(block_id):
+            self.status_var.set(
+                f"{block_id} 尚无唯一设备类别；请先右键该节点选择类别，再左键补充参数。"
+            )
+            return
+        self._open_pfd_parameter_editor(block_id)
 
     def _open_pfd_block(self, block_id: str) -> None:
         self._active_pfd_block_id = block_id
@@ -3540,38 +3587,36 @@ class EquipmentDesignTkApp:
 
     def _show_pfd_block_menu(self, block_id: str, x_root: int, y_root: int) -> None:
         menu = tk.Menu(self.root, tearoff=False)
-        menu.add_command(label="查看参数", command=lambda: self._open_pfd_block(block_id))
-        menu.add_command(
-            label="补充/修改本设备参数并重算…",
-            command=lambda: self._open_pfd_parameter_editor(block_id),
-        )
+        menu.add_command(label=f"{block_id} · 自定义设备类别", state="disabled")
+        menu.add_command(label="右键只确定类别；参数请在确定后左键进入", state="disabled")
         menu.add_separator()
-        type_menu = tk.Menu(menu, tearoff=False)
         grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
         catalog = self.aspen_pfd_mapping.get("catalog") if isinstance(self.aspen_pfd_mapping.get("catalog"), Mapping) else {}
         options = catalog.get("selection_options") if isinstance(catalog.get("selection_options"), list) else []
         for option in options:
             if isinstance(option, Mapping):
                 grouped[str(option.get("family_name") or "其他")].append(dict(option))
+        row = self._pfd_block_row(block_id)
+        effective = row.get("effective_mapping") if isinstance(row.get("effective_mapping"), Mapping) else {}
+        current_selection_id = str(effective.get("selection_id") or "")
         for family_name in sorted(grouped):
-            family_menu = tk.Menu(type_menu, tearoff=False)
+            family_menu = tk.Menu(menu, tearoff=False)
             for option in sorted(grouped[family_name], key=lambda item: str(item.get("display_name") or item.get("selection_id"))):
                 selection_id = str(option.get("selection_id"))
+                display_name = str(option.get("display_name") or selection_id)
                 family_menu.add_command(
-                    label=str(option.get("display_name") or selection_id),
+                    label=("● " if selection_id == current_selection_id else "") + display_name,
                     command=lambda sid=selection_id: self._apply_pfd_override(block_id, sid),
                 )
-            type_menu.add_cascade(label=family_name, menu=family_menu)
-        menu.add_cascade(label="更改指定类型", menu=type_menu)
+            menu.add_cascade(label=f"{family_name}（{len(grouped[family_name])} 类）", menu=family_menu)
+        if not grouped:
+            menu.add_command(label="没有可用设备类别", state="disabled")
+        menu.add_separator()
         menu.add_command(
-            label="恢复自动识别",
+            label="恢复程序自动识别类别",
             state="normal" if block_id in self.aspen_type_overrides else "disabled",
             command=lambda: self._apply_pfd_override(block_id, None),
         )
-        menu.add_command(label="按当前类型重新计算", command=lambda: self._recalculate_pfd_block(block_id))
-        menu.add_separator()
-        menu.add_command(label="查看识别证据", command=lambda: self._show_pfd_block_evidence(block_id))
-        menu.add_command(label="复制对象 ID", command=lambda: self._copy_text(block_id))
         try:
             menu.tk_popup(x_root, y_root)
         finally:
@@ -3663,6 +3708,50 @@ class EquipmentDesignTkApp:
             + "\n补录：只作为本设备的用户输入参与确定性重算；补录动作本身不是正式证据，仍受原证据门限制。"
         )
 
+    @staticmethod
+    def _pfd_editor_initial_values(
+        fields: list[dict[str, Any]],
+        base_values: Mapping[str, Any],
+        current_overrides: Mapping[str, Any],
+    ) -> dict[str, str]:
+        """Prefill every visible editor with the current effective value."""
+
+        values: dict[str, str] = {}
+        for field in fields:
+            name = str(field.get("name") or "")
+            if not name:
+                continue
+            effective = (
+                current_overrides[name]
+                if name in current_overrides
+                else base_values.get(name)
+            )
+            values[name] = "" if effective is None else str(effective)
+        return values
+
+    @staticmethod
+    def _pfd_editor_override_values(
+        fields: list[dict[str, Any]],
+        entered_values: Mapping[str, Any],
+        base_values: Mapping[str, Any],
+    ) -> dict[str, str]:
+        """Keep only explicit differences from the Aspen/program baseline."""
+
+        result: dict[str, str] = {}
+        for field in fields:
+            name = str(field.get("name") or "")
+            if not name:
+                continue
+            raw_entered = entered_values.get(name)
+            entered = "" if raw_entered is None else str(raw_entered).strip()
+            if not entered:
+                continue
+            base = base_values.get(name)
+            baseline = "" if base is None else str(base).strip()
+            if entered != baseline:
+                result[name] = entered
+        return result
+
     def _open_pfd_parameter_editor(self, block_id: str) -> None:
         if not block_id:
             messagebox.showwarning("未选择设备", "请先在 PFD 中左键选择一台设备。", parent=self.root)
@@ -3695,7 +3784,10 @@ class EquipmentDesignTkApp:
         ttk.Label(header, text=f"{block_id} · {selection.get('display_name')}", style="HeaderTitle.TLabel").pack(anchor="w")
         ttk.Label(
             header,
-            text="空框表示沿用 Aspen/原计算输入；填写值只进入本设备独立参数层，确定后立即无 LLM 重算。",
+            text=(
+                "输入框已预填 Aspen/程序基准或现有人工值；修改后只把差异写入本设备独立参数层，"
+                "确定后立即无 LLM 重算。"
+            ),
             style="HeaderSub.TLabel",
         ).pack(anchor="w", pady=(3, 0))
 
@@ -3706,7 +3798,7 @@ class EquipmentDesignTkApp:
         editor_bar.pack(fill="x", pady=(0, 10))
         ttk.Label(
             editor_bar,
-            text="默认只显示真实输入与可选偏好；客户交付输出不在这里填写。",
+            text="默认只显示真实输入与可选偏好；所有框均可直接修改，未改的基准值不会被记成人工补录。",
             style="Muted.TLabel",
         ).pack(side="left", fill="x", expand=True)
         advanced_toggle = ttk.Checkbutton(
@@ -3732,8 +3824,15 @@ class EquipmentDesignTkApp:
         base_values = self._pfd_base_match_input(block_id)
         current_values = dict(self.pfd_parameter_overrides.get(block_id, {}))
         all_fields = self._pfd_parameter_editor_fields(selection, show_advanced=True)
+        initial_values = self._pfd_editor_initial_values(
+            all_fields,
+            base_values,
+            current_values,
+        )
         editor_vars: dict[str, tk.StringVar] = {
-            str(field["name"]): tk.StringVar(value=str(current_values.get(str(field["name"]), "")))
+            str(field["name"]): tk.StringVar(
+                value=initial_values.get(str(field["name"]), "")
+            )
             for field in all_fields
         }
 
@@ -3784,9 +3883,18 @@ class EquipmentDesignTkApp:
                     widget = ttk.Entry(form, textvariable=variable)
                 widget.grid(row=row_index, column=1, sticky="ew", pady=5)
                 base = base_values.get(name)
-                base_text = f"已有 {base}" if base not in (None, "") else "已有 —"
+                source_text = (
+                    "当前人工值"
+                    if name in current_values
+                    else "Aspen/程序基准"
+                )
+                base_text = f"基准 {base}" if base not in (None, "") else "基准 —"
                 ttk.Label(form, text=f"{badge} · {base_text}", style=badge_style).grid(
                     row=row_index, column=2, sticky="w", padx=(10, 0), pady=5
+                )
+                HoverHelp(
+                    widget,
+                    f"{source_text}。直接修改即可；恢复为基准值会自动移除该字段的人工覆盖。",
                 )
                 help_control = tk.Label(
                     form,
@@ -3816,18 +3924,22 @@ class EquipmentDesignTkApp:
         footer.pack(fill="x")
 
         def submit() -> None:
-            values = {
+            entered_values = {
                 name: variable.get().strip()
                 for name, variable in editor_vars.items()
-                if variable.get().strip()
             }
+            values = self._pfd_editor_override_values(
+                all_fields,
+                entered_values,
+                base_values,
+            )
             if self._apply_pfd_parameter_overrides(block_id, values):
                 window.destroy()
 
         def clear_values() -> None:
             if not messagebox.askyesno(
-                "清空本设备补录",
-                "将移除本设备的独立补录值，并仅用原 Aspen/已有规范输入重新计算。是否继续？",
+                "恢复本设备基准值",
+                "将移除本设备的人工差异值，并仅用原 Aspen/程序基准输入重新计算。是否继续？",
                 parent=window,
             ):
                 return
@@ -3835,8 +3947,8 @@ class EquipmentDesignTkApp:
                 window.destroy()
 
         ttk.Button(footer, text="取消", style="Secondary.TButton", command=window.destroy).pack(side="right")
-        ttk.Button(footer, text="清空补录并重算", style="Secondary.TButton", command=clear_values).pack(side="right", padx=8)
-        ttk.Button(footer, text="确定性重算", style="Primary.TButton", command=submit).pack(side="right")
+        ttk.Button(footer, text="恢复基准值并重算", style="Secondary.TButton", command=clear_values).pack(side="right", padx=8)
+        ttk.Button(footer, text="保存修改并确定性重算", style="Primary.TButton", command=submit).pack(side="right")
 
     def _apply_pfd_parameter_overrides(
         self,
@@ -3924,17 +4036,16 @@ class EquipmentDesignTkApp:
                 self.pfd_recalculated_results.pop(affected_block, None)
             self.pfd_invalidated_blocks.update(affected_blocks)
             self.pfd_invalidated_streams.update(affected_streams)
-            self._sync_pfd_view()
-            try:
-                self._recalculate_pfd_block(block_id, selection_id=selection_id, refresh=False)
-            except Exception:
-                self._save_pfd_override_state(result)
-                self._sync_pfd_view()
-                raise
+            self._invalidate_current_pfd_agent_binding(
+                affected_blocks=affected_blocks,
+                reason="设备类别变化使旧 Agent 输入与结果失效",
+            )
             self._save_pfd_override_state(result)
             self._sync_pfd_view()
-            self.status_var.set("改型设备已按确定性链重算；相邻设备与关联管线仍明确标为待复核。")
-            self._open_pfd_block(block_id)
+            self.status_var.set(
+                f"{block_id} 的设备类别已确定，尚未重算。请左键该节点检查预填参数，"
+                "修改或确认后再执行确定性重算。"
+            )
         except aspen_pfd.AspenPFDMappingError as exc:
             messagebox.showerror("类型修改失败", f"{exc.code}：{exc}", parent=self.root)
         except Exception as exc:
@@ -3990,12 +4101,119 @@ class EquipmentDesignTkApp:
         response = self.api.manual_match(str(chosen), cleaned)
         if not response.get("ok"):
             raise RuntimeError(response.get("error", f"{block_id} 复算失败"))
-        self.pfd_recalculated_results[block_id] = dict(response["value"])
+        recalculated = dict(response["value"])
+        self.pfd_recalculated_results[block_id] = recalculated
+        # A PFD node recalculation is the same replayable deterministic boundary
+        # as a manual calculation.  Bind the selected node as the active Agent
+        # input so a subsequent "Agent 协同" run reviews this equipment instead
+        # of the earlier whole-Aspen import.
+        frozen_values = json.loads(json.dumps(cleaned, ensure_ascii=False))
+        self.last_manual = {
+            "selection_id": str(chosen),
+            "values": frozen_values,
+        }
+        self.last_source_input = {
+            "operation": "manual_match",
+            "payload": {
+                "selection_id": str(chosen),
+                "values": frozen_values,
+            },
+        }
+        self.last_source_context = {
+            "kind": "pfd_block",
+            "block_id": str(block_id),
+        }
+        self.last_deterministic_result = recalculated
         self.pfd_invalidated_blocks.discard(block_id)
         self.aspen_pfd_mapping = aspen_pfd.mark_block_recalculated(self.aspen_pfd_mapping, block_id)
+        if (
+            self._background_jobs == 0
+            and self._applied_llm_settings is not None
+            and self._applied_llm_settings_fingerprint
+            == self._llm_settings_sha256(self._collect_llm_settings())
+        ):
+            self.llm_button.state(["!disabled"])
         if refresh:
             self._sync_pfd_view()
             self._open_pfd_block(block_id)
+
+    def _invalidate_current_pfd_agent_binding(
+        self,
+        *,
+        affected_blocks: set[str] | None = None,
+        reason: str,
+    ) -> bool:
+        """Discard an Agent source that no longer represents the current PFD."""
+
+        context = (
+            self.last_source_context
+            if isinstance(self.last_source_context, Mapping)
+            else {}
+        )
+        if context.get("kind") != "pfd_block":
+            return False
+        block_id = str(context.get("block_id") or "")
+        if affected_blocks is not None and block_id not in affected_blocks:
+            return False
+        self.last_manual = None
+        self.last_source_input = None
+        self.last_source_context = None
+        self.last_deterministic_result = None
+        self.llm_proposal = None
+        self.llm_proposal_context = None
+        self.llm_button.state(["disabled"])
+        self.apply_llm_button.state(["disabled"])
+        self.hybrid_state.set(f"机器状态：WAITING_PFD_RECALCULATION · {reason}")
+        return True
+
+    def _validate_current_pfd_agent_binding(
+        self,
+        source_input: Mapping[str, Any],
+        deterministic: Mapping[str, Any],
+    ) -> tuple[bool, str]:
+        """Verify that a cached PFD Agent source is still the current replay."""
+
+        context = (
+            self.last_source_context
+            if isinstance(self.last_source_context, Mapping)
+            else {}
+        )
+        if context.get("kind") != "pfd_block":
+            return True, ""
+        block_id = str(context.get("block_id") or "")
+        payload = (
+            source_input.get("payload")
+            if isinstance(source_input.get("payload"), Mapping)
+            else {}
+        )
+        selection_id = str(payload.get("selection_id") or "")
+        values = payload.get("values")
+        if (
+            not block_id
+            or source_input.get("operation") != "manual_match"
+            or not selection_id
+            or not isinstance(values, Mapping)
+        ):
+            return False, "PFD Agent 缓存缺少可回放的节点、类别或参数。"
+        row = self._pfd_block_row(block_id)
+        effective = (
+            row.get("effective_mapping")
+            if isinstance(row.get("effective_mapping"), Mapping)
+            else {}
+        )
+        if str(effective.get("selection_id") or "") != selection_id:
+            return False, "PFD 节点当前类别已经改变，旧类别结果不得发送给 Agent。"
+        if str(row.get("recalculation_status") or "") != "RECALCULATED_CURRENT":
+            return False, "PFD 节点尚未按当前类别和参数完成确定性重算。"
+        current_result = self.pfd_recalculated_results.get(block_id)
+        if not isinstance(current_result, Mapping):
+            return False, "PFD 节点缺少当前确定性重算结果。"
+        if self.last_manual != {"selection_id": selection_id, "values": values}:
+            return False, "PFD Agent 缓存与当前可回放输入不一致。"
+        expected_hash = self._llm_settings_sha256(current_result)
+        if self._llm_settings_sha256(deterministic) != expected_hash:
+            return False, "PFD 节点当前结果哈希与 Agent 冻结结果不一致。"
+        return True, ""
 
     def _save_pfd_override_state(self, override_result: Mapping[str, Any]) -> None:
         if not self.session_dir:
@@ -4012,7 +4230,13 @@ class EquipmentDesignTkApp:
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    def _save_pfd_parameter_state(self, parameter_result: Mapping[str, Any]) -> None:
+    def _save_pfd_parameter_state(
+        self,
+        parameter_result: Mapping[str, Any],
+        *,
+        llm_used: bool = False,
+        input_provenance: str = "USER_SUPPLIED_PER_BLOCK_NOT_EVIDENCE_BY_ITSELF",
+    ) -> None:
         if not self.session_dir:
             return
         path = Path(self.session_dir) / "aspen_pfd_parameter_overrides.json"
@@ -4025,10 +4249,10 @@ class EquipmentDesignTkApp:
             "parameter_overrides": self.pfd_parameter_overrides,
             "recalculated_results": self.pfd_recalculated_results,
             "change_impact": parameter_result.get("change_impact"),
-            "input_provenance": "USER_SUPPLIED_PER_BLOCK_NOT_EVIDENCE_BY_ITSELF",
+            "input_provenance": input_provenance,
             "source_bundle_modified": False,
             "model_promotion_allowed_by_override_alone": False,
-            "llm_used": False,
+            "llm_used": bool(llm_used),
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -4056,6 +4280,7 @@ class EquipmentDesignTkApp:
                     "values": json.loads(json.dumps(values, ensure_ascii=False)),
                 },
             }
+            self.last_source_context = {"kind": "manual_form"}
             self.last_deterministic_result = response["value"]
             self._render_result(self.last_deterministic_result)
             if first_missing:
@@ -4072,6 +4297,24 @@ class EquipmentDesignTkApp:
         if not deterministic or not source_input:
             messagebox.showwarning("缺少确定性结果", "请先完成 Aspen 或手动匹配。", parent=self.root)
             return
+        pfd_binding_valid, pfd_binding_error = self._validate_current_pfd_agent_binding(
+            source_input,
+            deterministic,
+        )
+        if not pfd_binding_valid:
+            self._invalidate_current_pfd_agent_binding(
+                reason=pfd_binding_error,
+            )
+            self._set_workflow_step(
+                2,
+                "PFD 类别或参数已变化；请左键节点检查预填参数并重新计算。",
+            )
+            messagebox.showwarning(
+                "PFD 结果需要重算",
+                pfd_binding_error + " 请先完成当前节点重算，再运行 Agent。",
+                parent=self.root,
+            )
+            return
         current_settings = self._collect_llm_settings()
         current_fingerprint = self._llm_settings_sha256(current_settings)
         if (
@@ -4085,12 +4328,51 @@ class EquipmentDesignTkApp:
         config = applied["config"]
         config["task"] = applied["task"]
         knowledge_config = applied["knowledge_config"]
+        frozen_source_input = json.loads(json.dumps(source_input, ensure_ascii=False))
+        frozen_source_context = json.loads(json.dumps(
+            self.last_source_context or {"kind": "unknown"},
+            ensure_ascii=False,
+        ))
+        frozen_deterministic_sha256 = self._llm_settings_sha256(deterministic)
+        run_guard = self._llm_settings_sha256({
+            "settings": current_settings,
+            "source_input": frozen_source_input,
+            "source_context": frozen_source_context,
+            "deterministic_result": deterministic,
+        })
         self.llm_proposal = None
+        self.llm_proposal_context = None
         self.apply_llm_button.state(["disabled"])
         self.hybrid_state.set("机器状态：RUNNING · 确定性结果已冻结")
 
         def done(response: dict[str, Any]) -> None:
+            current_deterministic = self.last_deterministic_result or self.last_result
+            current_source_input = self.last_source_input
+            current_run_guard = self._llm_settings_sha256({
+                "settings": self._collect_llm_settings(),
+                "source_input": current_source_input,
+                "source_context": self.last_source_context or {"kind": "unknown"},
+                "deterministic_result": current_deterministic,
+            })
+            if current_run_guard != run_guard:
+                self.llm_proposal = None
+                self.llm_proposal_context = None
+                self.apply_llm_button.state(["disabled"])
+                self.hybrid_state.set(
+                    "机器状态：STALE_RESPONSE_DISCARDED · 运行期间配置或确定性输入已改变"
+                )
+                self._set_workflow_step(
+                    3,
+                    "旧 Agent 回答已丢弃；请按当前配置和当前设备结果重新运行。",
+                )
+                messagebox.showwarning(
+                    "旧回答已丢弃",
+                    "Agent 运行期间 URL、Key、模型、协议或设备输入发生了变化；旧回答没有覆盖当前结果。",
+                    parent=self.root,
+                )
+                return
             if not response.get("ok"):
+                self.llm_proposal_context = None
                 self.hybrid_state.set("机器状态：FAILED · 确定性结果仍保留")
                 self._set_workflow_step(3, "Agent 协同失败；确定性结果仍可审核和导出。")
                 messagebox.showerror("Agent 协同失败", response.get("error", "未知错误"), parent=self.root)
@@ -4102,6 +4384,11 @@ class EquipmentDesignTkApp:
             review = hybrid.get("llm_review", {})
             if review.get("status") == "COMPLETED_STRICT" and isinstance(review.get("result"), dict):
                 self.llm_proposal = review["result"]
+                self.llm_proposal_context = {
+                    "source_context": frozen_source_context,
+                    "source_input": frozen_source_input,
+                    "deterministic_result_sha256": frozen_deterministic_sha256,
+                }
             validated = self.llm_proposal.get("validated_proposal", {}) if self.llm_proposal else {}
             step_output = self.llm_proposal.get("step_output", {}) if self.llm_proposal else {}
             fallback_errors = fallback.get("errors", []) if isinstance(fallback, dict) else []
@@ -4114,7 +4401,16 @@ class EquipmentDesignTkApp:
                 f"机器状态：{state}{context_note}" + (f" · 回退原因：{detail}" if detail else "")
             )
             self._render_result(hybrid)
-            if validated.get("accepted_changes") and self.last_manual:
+            proposal_kind = str(
+                (self.llm_proposal_context or {}).get("source_context", {}).get("kind")
+                or ""
+            )
+            if (
+                validated.get("accepted_changes")
+                and self.last_manual
+                and frozen_source_input.get("operation") == "manual_match"
+                and proposal_kind in {"manual_form", "pfd_block"}
+            ):
                 self.apply_llm_button.state(["!disabled"])
             if fallback.get("used"):
                 messagebox.showwarning("已回退到确定性结果", detail or "可选协同层失败；确定性结果未丢失。", parent=self.root)
@@ -4129,7 +4425,7 @@ class EquipmentDesignTkApp:
             self.llm_button,
             "Agent 协同运行中…",
             lambda: self.api.agent_hybrid_run(
-                source_input,
+                frozen_source_input,
                 config,
                 knowledge_config,
                 applied["injection_point"],
@@ -4137,6 +4433,172 @@ class EquipmentDesignTkApp:
             ),
             done,
             workflow_step=3,
+            reenable_button=lambda: (
+                self._applied_llm_settings is not None
+                and self._applied_llm_settings_fingerprint
+                == self._llm_settings_sha256(self._collect_llm_settings())
+                and isinstance(self.last_source_input, Mapping)
+                and isinstance(self.last_deterministic_result, Mapping)
+                and self._validate_current_pfd_agent_binding(
+                    self.last_source_input,
+                    self.last_deterministic_result,
+                )[0]
+            ),
+        )
+
+    def _discard_stale_llm_proposal(self, message: str) -> None:
+        self.llm_proposal = None
+        self.llm_proposal_context = None
+        self.apply_llm_button.state(["disabled"])
+        messagebox.showwarning("草案已失效", message, parent=self.root)
+
+    def _pfd_agent_parameter_overrides(
+        self,
+        block_id: str,
+        selection_id: str,
+        frozen_values: Mapping[str, Any],
+        applied_values: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        selection = self._pfd_selection_for_block(block_id)
+        if str(selection.get("selection_id") or "") != selection_id:
+            raise ValueError("PFD 节点当前设备类别与 Agent 冻结类别不一致。")
+        base_values = self._pfd_base_match_input(block_id)
+        if not base_values:
+            raise ValueError("PFD 节点已缺少原始 canonical_match_input。")
+        field_rows = {
+            str(field.get("name")): dict(field)
+            for field in selection.get("fields", [])
+            if isinstance(field, Mapping) and field.get("name")
+        }
+        overrides: dict[str, Any] = {}
+        for field, value in applied_values.items():
+            if field in aspen_pfd.PARAMETER_OVERRIDE_FORBIDDEN_FIELDS:
+                if field not in frozen_values or frozen_values.get(field) != value:
+                    raise ValueError(f"Agent 草案试图改变 PFD 身份/路由字段：{field}。")
+                continue
+            definition = field_rows.get(str(field))
+            if definition is None:
+                if field not in frozen_values or frozen_values.get(field) != value:
+                    raise ValueError(f"Agent 草案包含所选设备模板之外的新字段：{field}。")
+                continue
+            if str(definition.get("manual_role") or "") == "delivery_output":
+                if field not in frozen_values or frozen_values.get(field) != value:
+                    raise ValueError(f"Agent 草案不得把交付输出反写为 PFD 输入：{field}。")
+                continue
+            if value is None or isinstance(value, str) and not value.strip():
+                continue
+            if isinstance(value, (Mapping, list, tuple, set)):
+                raise ValueError(f"PFD Agent 草案字段必须为标量：{field}。")
+            if field not in base_values or base_values.get(field) != value:
+                overrides[str(field)] = value
+        for field in aspen_pfd.PARAMETER_OVERRIDE_FORBIDDEN_FIELDS:
+            if field in frozen_values and applied_values.get(field) != frozen_values.get(field):
+                raise ValueError(f"Agent 草案未保持 PFD 身份/路由字段：{field}。")
+        return dict(sorted(overrides.items()))
+
+    def _apply_pfd_agent_application(
+        self,
+        *,
+        block_id: str,
+        selection_id: str,
+        frozen_values: Mapping[str, Any],
+        frozen_deterministic_sha256: str,
+        application: Mapping[str, Any],
+    ) -> None:
+        if application.get("replayed_source_operation") != "manual_match":
+            raise ValueError("Agent 应用结果没有确认 manual_match 重放。")
+        original = application.get("original_deterministic_result")
+        values = application.get("applied_draft")
+        recalculated = application.get("deterministic_recalculation")
+        if not isinstance(original, Mapping):
+            raise ValueError("Agent 应用结果缺少原确定性结果。")
+        if self._llm_settings_sha256(original) != frozen_deterministic_sha256:
+            raise ValueError("Agent 应用返回的原确定性结果与 GUI 冻结结果不一致。")
+        if not isinstance(values, Mapping) or not isinstance(recalculated, Mapping):
+            raise ValueError("Agent llm_apply 没有返回可用的草案值和确定性复算结果。")
+        frozen_values_copy = json.loads(json.dumps(dict(frozen_values), ensure_ascii=False))
+        applied_values = json.loads(json.dumps(dict(values), ensure_ascii=False))
+        recalculated_copy = json.loads(json.dumps(dict(recalculated), ensure_ascii=False))
+        parameter_values = self._pfd_agent_parameter_overrides(
+            block_id,
+            selection_id,
+            frozen_values_copy,
+            applied_values,
+        )
+        canonical_blocks, canonical_streams, normalization_issues = self._pfd_canonical_context()
+        parameter_result = aspen_pfd.update_parameter_override(
+            self.aspen_bundle,
+            self.aspen_type_overrides,
+            self.pfd_parameter_overrides,
+            block_id,
+            parameter_values,
+            catalog=self.catalog,
+            canonical_parameters_by_block=canonical_blocks,
+            canonical_parameters_by_stream=canonical_streams,
+            parameter_normalization_issues=normalization_issues,
+        )
+        next_parameter_overrides = {
+            str(key): dict(value)
+            for key, value in parameter_result.get("parameter_overrides", {}).items()
+            if isinstance(value, Mapping)
+        }
+        next_mapping = dict(parameter_result["mapping"])
+        impact = (
+            parameter_result.get("change_impact")
+            if isinstance(parameter_result.get("change_impact"), Mapping)
+            else {}
+        )
+        affected_blocks = {
+            str(item)
+            for key in ("changed_blocks", "immediate_upstream_blocks", "immediate_downstream_blocks")
+            for item in impact.get(key, [])
+        }
+        affected_streams = {str(item) for item in impact.get("affected_streams", [])}
+        next_recalculated_results = dict(self.pfd_recalculated_results)
+        for affected_block in affected_blocks:
+            next_recalculated_results.pop(affected_block, None)
+        next_recalculated_results[block_id] = recalculated_copy
+        next_invalidated_blocks = set(self.pfd_invalidated_blocks)
+        next_invalidated_blocks.update(affected_blocks)
+        next_invalidated_blocks.discard(block_id)
+        next_invalidated_streams = set(self.pfd_invalidated_streams)
+        next_invalidated_streams.update(affected_streams)
+        next_mapping = aspen_pfd.mark_block_recalculated(next_mapping, block_id)
+
+        self.pfd_parameter_overrides = next_parameter_overrides
+        self.pfd_recalculated_results = next_recalculated_results
+        self.pfd_invalidated_blocks = next_invalidated_blocks
+        self.pfd_invalidated_streams = next_invalidated_streams
+        self.aspen_pfd_mapping = next_mapping
+        self.last_manual = {
+            "selection_id": selection_id,
+            "values": applied_values,
+        }
+        self.last_source_input = {
+            "operation": "manual_match",
+            "payload": {
+                "selection_id": selection_id,
+                "values": applied_values,
+            },
+        }
+        self.last_source_context = {
+            "kind": "pfd_block",
+            "block_id": block_id,
+        }
+        self.last_deterministic_result = recalculated_copy
+        self._save_pfd_parameter_state(
+            parameter_result,
+            llm_used=True,
+            input_provenance=(
+                "GUI_USER_APPROVED_AGENT_DRAFT_PER_BLOCK_"
+                "NOT_EVIDENCE_BY_ITSELF"
+            ),
+        )
+        self._sync_pfd_view()
+        self._render_result(dict(application))
+        self._open_pfd_block(block_id)
+        self.status_var.set(
+            f"{block_id} 的白名单 Agent 草案已由程序重放并写回本节点；相邻设备与关联管线仍保持待复核。"
         )
 
     def _apply_llm(self) -> None:
@@ -4145,23 +4607,90 @@ class EquipmentDesignTkApp:
         replay = self.llm_proposal.get("replay_contract", {})
         replay_input = replay.get("input", {}) if isinstance(replay, dict) else {}
         replay_payload = replay_input.get("payload", {}) if isinstance(replay_input, dict) else {}
-        current_selection = self._selection()["selection_id"]
-        current_values = self._collect_manual()
-        frozen_selection = replay_payload.get("selection_id")
-        frozen_values = replay_payload.get("values")
-        if (
-            replay_input.get("operation") != "manual_match"
-            or current_selection != frozen_selection
-            or current_values != frozen_values
-        ):
-            self.llm_proposal = None
-            self.apply_llm_button.state(["disabled"])
-            messagebox.showwarning(
-                "草案已失效",
-                "审核后手动输入或模块选择已经变化。请先重新做确定性匹配，再重新运行 Agent 协同。",
-                parent=self.root,
+        proposal_context = (
+            self.llm_proposal_context
+            if isinstance(self.llm_proposal_context, Mapping)
+            else {}
+        )
+        source_context = (
+            proposal_context.get("source_context")
+            if isinstance(proposal_context.get("source_context"), Mapping)
+            else {}
+        )
+        proposal_kind = str(source_context.get("kind") or "")
+        current_source_kind = (
+            str(self.last_source_context.get("kind") or "")
+            if isinstance(self.last_source_context, Mapping)
+            else ""
+        )
+        if proposal_kind not in {"", "manual_form", "pfd_block"}:
+            self._discard_stale_llm_proposal(
+                "当前 Agent 来源不支持自动应用；确定性结果保持不变。"
             )
             return
+        if current_source_kind == "pfd_block" and proposal_kind != "pfd_block":
+            self._discard_stale_llm_proposal(
+                "PFD 草案缺少冻结节点上下文；为避免写入手动页，程序已拒绝应用。"
+            )
+            return
+        frozen_selection = str(replay_payload.get("selection_id") or "")
+        frozen_values = replay_payload.get("values")
+        pfd_block_id = str(source_context.get("block_id") or "")
+        if proposal_kind == "pfd_block":
+            frozen_source = proposal_context.get("source_input")
+            frozen_deterministic_sha256 = str(
+                proposal_context.get("deterministic_result_sha256") or ""
+            )
+            replay_deterministic_sha256 = str(
+                replay.get("deterministic_result_sha256") or ""
+            )
+            current_deterministic = self.last_deterministic_result or self.last_result
+            current_pfd_result = self.pfd_recalculated_results.get(pfd_block_id)
+            current_selection = self._pfd_selection_for_block(pfd_block_id)
+            pfd_context_current = (
+                isinstance(self.last_source_context, Mapping)
+                and self.last_source_context.get("kind") == "pfd_block"
+                and str(self.last_source_context.get("block_id") or "") == pfd_block_id
+            )
+            valid_pfd_replay = (
+                bool(pfd_block_id)
+                and replay_input.get("operation") == "manual_match"
+                and isinstance(frozen_values, Mapping)
+                and isinstance(frozen_source, Mapping)
+                and replay_input == frozen_source
+                and self.last_source_input == frozen_source
+                and pfd_context_current
+                and self.last_manual.get("selection_id") == frozen_selection
+                and self.last_manual.get("values") == frozen_values
+                and str(current_selection.get("selection_id") or "") == frozen_selection
+                and isinstance(current_deterministic, Mapping)
+                and isinstance(current_pfd_result, Mapping)
+                and bool(frozen_deterministic_sha256)
+                and replay_deterministic_sha256 == frozen_deterministic_sha256
+                and self._llm_settings_sha256(current_deterministic)
+                == frozen_deterministic_sha256
+                and self._llm_settings_sha256(current_pfd_result)
+                == frozen_deterministic_sha256
+            )
+            if not valid_pfd_replay:
+                self._discard_stale_llm_proposal(
+                    "审核后 PFD 节点、类别、参数或确定性结果已变化。"
+                    "旧草案不会写入其他节点；请按当前节点重新运行 Agent。"
+                )
+                return
+        else:
+            current_selection = self._selection()["selection_id"]
+            current_values = self._collect_manual()
+            if (
+                replay_input.get("operation") != "manual_match"
+                or current_selection != frozen_selection
+                or current_values != frozen_values
+            ):
+                self._discard_stale_llm_proposal(
+                    "审核后手动输入或模块选择已经变化。"
+                    "请先重新做确定性匹配，再重新运行 Agent 协同。"
+                )
+                return
         validated = self.llm_proposal.get("validated_proposal", {})
         approved_ids = [
             str(item.get("change_id"))
@@ -4185,6 +4714,25 @@ class EquipmentDesignTkApp:
         if not isinstance(values, dict) or not isinstance(recalculated, dict):
             messagebox.showerror("草案应用失败", "Agent llm_apply 没有返回确定性复算结果。", parent=self.root)
             return
+        if proposal_kind == "pfd_block":
+            try:
+                self._apply_pfd_agent_application(
+                    block_id=pfd_block_id,
+                    selection_id=frozen_selection,
+                    frozen_values=frozen_values,
+                    frozen_deterministic_sha256=frozen_deterministic_sha256,
+                    application=application,
+                )
+            except (ValueError, KeyError, TypeError, aspen_pfd.AspenPFDMappingError) as exc:
+                self.llm_proposal = None
+                self.llm_proposal_context = None
+                self.apply_llm_button.state(["disabled"])
+                messagebox.showerror("PFD 草案应用失败", str(exc), parent=self.root)
+                return
+            self.llm_proposal = None
+            self.llm_proposal_context = None
+            self.apply_llm_button.state(["disabled"])
+            return
         self.tabs.select(1)
         self._fill_manual(values)
         self.last_manual["values"] = values
@@ -4195,8 +4743,10 @@ class EquipmentDesignTkApp:
                 "values": json.loads(json.dumps(values, ensure_ascii=False)),
             },
         }
+        self.last_source_context = {"kind": "manual_form"}
         self.last_deterministic_result = recalculated
         self.llm_proposal = None
+        self.llm_proposal_context = None
         self.apply_llm_button.state(["disabled"])
         self._render_result(application)
 
@@ -4702,6 +5252,7 @@ class EquipmentDesignTkApp:
                     ),
                 },
             }
+            self.last_source_context = {"kind": "derivation_workbench"}
             self.last_deterministic_result = recalculated
             index = getattr(
                 self,

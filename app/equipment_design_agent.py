@@ -205,6 +205,14 @@ def _agent_provider_config(raw_config: Any) -> dict[str, Any]:
             )
         config["base_url"] = "https://api.openai.com/v1"
         config["api_key"] = os.environ.get(FIXED_LLM_API_KEY_ENV, "")
+    elif provider == "deepseek":
+        if supplied_base_url:
+            raise AgentRequestError(
+                "LLM_BASE_URL_LITERAL_FORBIDDEN",
+                "Agent 请求不能覆盖 DeepSeek endpoint；provider=deepseek 固定使用 api.deepseek.com。",
+            )
+        config["base_url"] = "https://api.deepseek.com"
+        config["api_key"] = os.environ.get(FIXED_LLM_API_KEY_ENV, "")
     elif provider == "openai_compatible":
         if supplied_base_url:
             raise AgentRequestError(
@@ -221,7 +229,10 @@ def _agent_provider_config(raw_config: Any) -> dict[str, Any]:
         config["api_key"] = os.environ.get(FIXED_LLM_API_KEY_ENV, "")
     elif provider == "local_openai_compatible":
         config["base_url"] = supplied_base_url or llm_bridge.SUPPORTED_PROVIDERS[provider]["default_base_url"]
-        config["api_key"] = ""
+        # A loopback service may still require a Bearer credential.  The GUI
+        # binds it through the same short-lived, in-memory environment channel
+        # as remote providers; never copy the literal into the Agent payload.
+        config["api_key"] = os.environ.get(FIXED_LLM_API_KEY_ENV, "")
     else:  # offline mock
         config.pop("base_url", None)
         config["api_key"] = ""
@@ -1041,6 +1052,7 @@ def _hybrid_selection_completeness(
             "EXPLICIT_TERMINAL_TYPE_SELECTED",
             "CONDITIONED_TERMINAL_TYPE_SELECTED",
             "DEFAULTED_TERMINAL_TYPE_SELECTED",
+            "PROGRAMMATIC_PIPE_ROUTE_AND_GEOMETRY_SELECTED",
         }
         and bool(str(terminal.get("recommended_type") or "").strip())
     )

@@ -692,6 +692,9 @@ def _engineering_choice_registry(value: Any) -> list[dict[str, Any]]:
                             "current_field_state": choice.get(
                                 "current_field_state", {}
                             ),
+                            "deterministic_trigger_support": choice.get(
+                                "deterministic_trigger_support", {}
+                            ),
                             "eligible_for_ai_selection": (
                                 choice.get("eligible_for_ai_selection") is True
                             ),
@@ -853,7 +856,16 @@ def _missing_input_registry(deterministic_result: dict[str, Any]) -> list[dict[s
     for field_id in sorted(goals):
         if field_id in forbidden or field_id.endswith(forbidden_suffixes):
             continue
-        row = rows.get(field_id, {})
+        row = rows.get(field_id)
+        if not isinstance(row, dict):
+            # Progress/customer-delivery gaps also carry formal-gate markers
+            # such as ``calculation_promotion_cap:...`` and
+            # ``design_fallback:...``.  They are audit states, not replayable
+            # matcher inputs.  Without a parameter-package row there is no
+            # canonical unit/state binding, so exposing the marker as a model
+            # estimate target would let validation mint lineage for a value
+            # that normalization must discard.
+            continue
         if row.get("raw_value") not in (None, ""):
             continue
         if row.get("state") == "EXTERNAL_REQUIRED":
@@ -1067,6 +1079,16 @@ SUPPORTED_PROVIDERS: dict[str, dict[str, Any]] = {
         "default_base_url": "https://api.openai.com/v1",
         "remote": True,
     },
+    "deepseek": {
+        "label": "DeepSeek official API",
+        "default_base_url": "https://api.deepseek.com",
+        "remote": True,
+        "default_model_id": "deepseek-v4-flash",
+        "model_options": ["deepseek-v4-flash", "deepseek-v4-pro"],
+        "default_wire_api": "chat_completions",
+        "supported_wire_apis": ["chat_completions"],
+        "default_reasoning_effort": "high",
+    },
     "openai_compatible": {
         "label": "OpenAI-compatible API",
         "default_base_url": "https://api.openai.com/v1",
@@ -1081,6 +1103,37 @@ SUPPORTED_PROVIDERS: dict[str, dict[str, Any]] = {
 
 SUPPORTED_WIRE_APIS = {"chat_completions", "responses"}
 SUPPORTED_REASONING_EFFORTS = {"minimal", "low", "medium", "high", "xhigh"}
+
+
+class _RejectAuthenticatedRedirects(urllib.request.HTTPRedirectHandler):
+    """Never forward an Authorization header to a redirect target."""
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> None:
+        raise urllib.error.HTTPError(
+            req.full_url,
+            code,
+            "LLM API redirect blocked; configure the final endpoint directly.",
+            headers,
+            fp,
+        )
+
+
+def _open_authenticated_request(
+    request: urllib.request.Request,
+    timeout: int,
+) -> Any:
+    """Open one credentialed request without following HTTP redirects."""
+
+    opener = urllib.request.build_opener(_RejectAuthenticatedRedirects())
+    return opener.open(request, timeout=timeout)
 
 
 def provider_catalog() -> dict[str, Any]:
@@ -1138,6 +1191,7 @@ def test_provider_connection(config: dict[str, Any]) -> dict[str, Any]:
         base_url = str(config.get("base_url") or provider_definition["default_base_url"]).strip()
         timeout_s = _timeout_seconds(config.get("timeout_s", 90))
         wire_api = _wire_api(config)
+        _validate_provider_wire_api(provider, wire_api)
         reasoning_effort = _reasoning_effort(config)
         disable_response_storage = _disable_response_storage(config)
         endpoint = _endpoint(base_url, provider, wire_api)
@@ -1146,19 +1200,30 @@ def test_provider_connection(config: dict[str, Any]) -> dict[str, Any]:
         endpoint_profile = "local_openai_compatible" if is_loopback else "remote_openai_compatible"
         if not api_key and not is_loopback:
             raise ValueError("远程 API 必须填写 API Key。")
+        probe_instruction = (
+            'Return exactly one JSON object with no markdown: {"status":"pong"}'
+        )
         if wire_api == "responses":
             payload = _responses_payload(
                 model_id,
-                "Reply with exactly: pong",
+                probe_instruction,
                 reasoning_effort=reasoning_effort,
                 disable_response_storage=disable_response_storage,
-                max_output_tokens=16,
+                max_output_tokens=128,
             )
+        elif provider == "deepseek":
+            payload = {
+                "model": model_id,
+                "messages": [{"role": "user", "content": probe_instruction}],
+                "max_tokens": 128,
+                "response_format": {"type": "json_object"},
+            }
+            payload.update(_deepseek_reasoning_controls(reasoning_effort))
         else:
             payload = {
                 "model": model_id,
-                "messages": [{"role": "user", "content": "ping"}],
-                "max_tokens": 1,
+                "messages": [{"role": "user", "content": probe_instruction}],
+                "max_tokens": 64,
                 "temperature": 0,
             }
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -1171,14 +1236,16 @@ def test_provider_connection(config: dict[str, Any]) -> dict[str, Any]:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=timeout_s) as response:
+            with _open_authenticated_request(request, timeout=timeout_s) as response:
                 response_obj = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = _redact(exc.read().decode("utf-8", errors="replace")[:1500], api_key)
             raise RuntimeError(f"LLM API HTTP {exc.code}: {detail}") from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"LLM API 连接失败：{_redact(str(exc.reason), api_key)}") from exc
-        _content(response_obj)
+        probe = _parse_json(_content(response_obj))
+        if str(probe.get("status") or "").strip().casefold() != "pong":
+            raise ValueError("模型未返回连接功能探针要求的 status=pong JSON。")
         return {
             "schema": schema,
             "status": "CONNECTED",
@@ -1188,7 +1255,8 @@ def test_provider_connection(config: dict[str, Any]) -> dict[str, Any]:
             "wire_api": wire_api,
             "reasoning_effort": reasoning_effort,
             "response_storage_disabled": disable_response_storage if wire_api == "responses" else None,
-            "message": f"已通过最小 {wire_api} 请求验证该精确模型。",
+            "functional_probe": "JSON_OBJECT_STATUS_PONG",
+            "message": f"已通过最小 {wire_api} JSON 功能请求验证该精确模型。",
         }
     except Exception as exc:
         return {
@@ -1228,6 +1296,28 @@ def _reasoning_effort(config: dict[str, Any]) -> str | None:
             "reasoning_effort 只能是 minimal、low、medium、high 或 xhigh。"
         )
     return raw
+
+
+def _validate_provider_wire_api(provider: str, wire_api: str) -> None:
+    provider_definition = SUPPORTED_PROVIDERS.get(provider)
+    if provider_definition is None:
+        raise ValueError(f"不支持的 LLM provider：{provider}。")
+    allowed = provider_definition.get("supported_wire_apis")
+    if isinstance(allowed, list) and wire_api not in allowed:
+        allowed_text = "、".join(str(item) for item in allowed)
+        raise ValueError(
+            f"provider={provider} 不支持 {wire_api}；可用协议：{allowed_text}。"
+        )
+
+
+def _deepseek_reasoning_controls(reasoning_effort: str | None) -> dict[str, Any]:
+    """Map the common GUI scale to DeepSeek's current chat-completions controls."""
+    if reasoning_effort is None:
+        return {"thinking": {"type": "disabled"}}
+    return {
+        "thinking": {"type": "enabled"},
+        "reasoning_effort": "max" if reasoning_effort == "xhigh" else "high",
+    }
 
 
 def _disable_response_storage(config: dict[str, Any]) -> bool:
@@ -1297,6 +1387,8 @@ def _endpoint(
         raise ValueError("远程 API 必须使用 HTTPS；HTTP 仅允许本机 loopback。")
     if provider == "openai" and parsed.hostname != "api.openai.com":
         raise ValueError("provider=openai 时 API Base URL 必须使用 api.openai.com。")
+    if provider == "deepseek" and parsed.hostname != "api.deepseek.com":
+        raise ValueError("provider=deepseek 时 API Base URL 必须使用 api.deepseek.com。")
     if provider == "local_openai_compatible" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
         raise ValueError("local_openai_compatible 仅允许本机 loopback 地址。")
     target_suffix = "/responses" if wire_api == "responses" else "/chat/completions"
@@ -1990,6 +2082,9 @@ def validate_engineering_choice_assists(
             "source_refs": choice.get("source_refs", []),
             "warning": choice.get("warning"),
             "current_field_state": choice.get("current_field_state", {}),
+            "deterministic_trigger_support": choice.get(
+                "deterministic_trigger_support", {}
+            ),
             "evidence_class": "J",
             "promotion_cap": "TYPE_SCREENING",
             "citations": assist.get("citations", []),
@@ -2008,6 +2103,21 @@ def validate_engineering_choice_assists(
                 "detail": str(
                     choice.get("application_policy")
                     or "registered choice cannot fill this current case"
+                ),
+            })
+            validations.append(record)
+            continue
+        trigger_support = choice.get("deterministic_trigger_support")
+        if (
+            not isinstance(trigger_support, dict)
+            or trigger_support.get("status") != "SUPPORTED"
+        ):
+            record.update({
+                "status": "REJECTED_NONBLOCKING_TRIGGER_NOT_SUPPORTED",
+                "detail": (
+                    str(trigger_support.get("reason") or "")
+                    if isinstance(trigger_support, dict)
+                    else "deterministic trigger-support record is missing"
                 ),
             })
             validations.append(record)
@@ -2742,8 +2852,112 @@ def _provider_safe_schema(value: Any) -> Any:
     return safe
 
 
-def _step_output_contract(injection_point: str, context_sha256: str) -> dict[str, Any]:
+def _bind_citation_context_ids(value: Any, allowed_ids: list[str]) -> None:
+    """Bind every citation slot in a copied step schema to exact context IDs."""
+    if isinstance(value, list):
+        for item in value:
+            _bind_citation_context_ids(item, allowed_ids)
+        return
+    if not isinstance(value, dict):
+        return
+
+    properties = value.get("properties")
+    if isinstance(properties, dict):
+        context_id = properties.get("context_id")
+        if isinstance(context_id, dict):
+            context_id["enum"] = list(allowed_ids)
+
+        citations = properties.get("citations")
+        if isinstance(citations, dict):
+            citation_items = citations.get("items")
+            if isinstance(citation_items, dict):
+                if citation_items.get("type") == "string":
+                    citation_items["enum"] = list(allowed_ids)
+                elif citation_items.get("type") == "object":
+                    citation_properties = citation_items.get("properties")
+                    if isinstance(citation_properties, dict):
+                        citation_context_id = citation_properties.get("context_id")
+                        if isinstance(citation_context_id, dict):
+                            citation_context_id["enum"] = list(allowed_ids)
+
+    for item in value.values():
+        _bind_citation_context_ids(item, allowed_ids)
+
+
+def _generation_constraints() -> dict[str, Any]:
+    """Return provider-visible preflight rules for recurrent generation errors.
+
+    These rules guide generation only.  The strict local validator remains the
+    authority and still rejects any non-conforming provider response.
+    """
+
+    return {
+        "model_inference_confidence": {
+            "applies_when": "calculation_assists[*].method == model_inference",
+            "allowed_exact_values": ["low", "medium"],
+            "forbidden_values": ["high"],
+            "instruction": (
+                "Use exactly low or medium. Never emit high for model_inference, "
+                "regardless of internal reasoning confidence."
+            ),
+        },
+        "output_composition": {
+            "blocks_represent_sections_not_items": True,
+            "section_ref_must_be_unique": True,
+            "nonempty_section_block_count": 1,
+            "empty_section_block_count": 0,
+            "calculation_assists_max_block_count": 1,
+            "instruction": (
+                "If calculation_assists contains multiple assist items, create "
+                "one calculation_assists block that references the whole section; "
+                "never create one block per assist."
+            ),
+        },
+        "user_visible_language": {
+            "locale": "zh-CN",
+            "script": "Simplified Chinese",
+            "required_paths": [
+                "summary",
+                "proposed_changes[*].reason",
+                "condition_assessments[*].reason",
+                "terminal_selection_assists[*].reason",
+                "engineering_choice_assists[*].reason",
+                "calculation_assists[*].reason",
+                "retrieval_plan[*].reason",
+                "ambiguity_decision.reason",
+                "output_composition.title",
+                "output_composition.blocks[*].heading",
+            ],
+            "canonical_tokens_remain_untranslated": True,
+            "instruction": (
+                "Write user-visible summary, every field named reason, the "
+                "output-composition title, and every heading in Simplified Chinese. "
+                "Keep schema keys, IDs, enum values, field names, units, hashes and "
+                "citation context IDs as their exact canonical tokens."
+            ),
+        },
+        "final_preflight": [
+            "Every model_inference confidence is exactly low or medium, never high.",
+            "Every nonempty step-output section appears in output_composition.blocks exactly once.",
+            "calculation_assists appears in at most one output-composition block even when it has multiple items.",
+            "All required user-visible prose paths are written in Simplified Chinese.",
+        ],
+    }
+
+
+def _step_output_contract(
+    injection_point: str,
+    context_sha256: str,
+    allowed_citation_context_ids: list[str],
+) -> dict[str, Any]:
     policy = INJECTION_POINT_POLICIES[injection_point]
+    allowed_citation_context_ids = sorted({
+        str(item).strip()
+        for item in allowed_citation_context_ids
+        if str(item).strip()
+    })
+    if not allowed_citation_context_ids:
+        raise ValueError("上下文包必须至少提供一个可引用的 context_id。")
     conditional_sections = {
         "proposed_changes",
         "condition_assessments",
@@ -2761,6 +2975,7 @@ def _step_output_contract(injection_point: str, context_sha256: str) -> dict[str
     properties = json_schema.setdefault("properties", {})
     properties["injection_point"] = {"const": injection_point}
     properties["context_sha256"] = {"const": context_sha256}
+    _bind_citation_context_ids(json_schema, allowed_citation_context_ids)
     provider_json_schema = _provider_safe_schema(json_schema)
     return {
         "schema": STEP_OUTPUT_SCHEMA,
@@ -2796,11 +3011,13 @@ def _step_output_contract(injection_point: str, context_sha256: str) -> dict[str
             "audit_findings": [],
         },
         "allowed_change_fields": sorted(policy["change_fields"]),
+        "allowed_citation_context_ids": allowed_citation_context_ids,
         "forbidden_field_classes": ["numeric_overwrite", "unit_overwrite", "pressure_basis", "evidence_state", "model_status", "final_model"],
         "calculation_assistance_policy": (
             "Exhaust allowlisted deterministic recipes first; the program computes and verifies them and resolves "
             "multi-step dependencies. Remaining fields may use only missing_input_registry. A model_inference must "
-            "carry structured basis, assumptions, bounds, confidence and sensitivity. After program validation it may "
+            "carry structured basis, assumptions, bounds, confidence and sensitivity; its confidence value must be "
+            "exactly low or medium and must never be high. After program validation it may "
             "auto-apply only to preliminary selection as visible J/provisional input capped at TYPE_SCREENING. It never "
             "overwrites an existing value, and a later deterministic calculation always wins."
         ),
@@ -2820,11 +3037,19 @@ def _step_output_contract(injection_point: str, context_sha256: str) -> dict[str
             "candidate_model text is forbidden; ambiguity_resolution may only reference an existing "
             "candidate_id/designation with exact selection feature/context hashes"
         ),
-        "citation_policy": "every nested claim must cite a context_id from the immutable context pack",
-        "output_composition_policy": (
-            "AI owns the order and headings of its intermediate operation blocks; the program inserts immutable "
-            "initial/recalculation result anchors outside those blocks and never lets the model rewrite them"
+        "citation_policy": (
+            "Every citation token must exactly equal one complete entry in allowed_citation_context_ids. "
+            "Never append a field path, colon, explanation or other text to a context_id; put those details "
+            "in claim, reason, message or inference_basis instead."
         ),
+        "output_composition_policy": (
+            "AI owns the order and headings of its intermediate operation blocks. Blocks represent whole sections, "
+            "not individual items: include every nonempty section exactly once, include no empty section, and keep "
+            "section_ref unique. In particular, multiple calculation_assists items still use exactly one "
+            "calculation_assists block. The program inserts immutable initial/recalculation result anchors outside "
+            "those blocks and never lets the model rewrite them."
+        ),
+        "generation_constraints": _generation_constraints(),
     }
 
 
@@ -2847,7 +3072,15 @@ def hybrid_prepare(
         "deterministic_authority": True,
         "authority_revision": current_revision,
         "context_pack": context_pack,
-        "output_contract": _step_output_contract(injection_point, context_pack["context_sha256"]),
+        "output_contract": _step_output_contract(
+            injection_point,
+            context_pack["context_sha256"],
+            [
+                str(item.get("context_id"))
+                for item in context_pack["sources"]
+                if isinstance(item, dict) and str(item.get("context_id", "")).strip()
+            ],
+        ),
     }
     prepared["prepared_sha256"] = _canonical_sha256(prepared)
     return prepared
@@ -3184,6 +3417,7 @@ def _request_step_output(config: dict[str, Any], prepared: dict[str, Any]) -> tu
     base_url = str(config.get("base_url") or provider_definition["default_base_url"]).strip()
     timeout_s = _timeout_seconds(config.get("timeout_s", 90))
     wire_api = _wire_api(config)
+    _validate_provider_wire_api(provider, wire_api)
     reasoning_effort = _reasoning_effort(config)
     disable_response_storage = _disable_response_storage(config)
     if not model:
@@ -3223,10 +3457,21 @@ def _request_step_output(config: dict[str, Any], prepared: dict[str, Any]) -> tu
         "J-class provenance and reruns the deterministic selector. "
         "Do not invent candidate_model text. A candidate may only be referenced from candidate_registry with its exact "
         "candidate_id, designation, selection_feature_vector_sha256 and selection_context_sha256. Cite context_id values. "
+        "Citation syntax is strict: allowed_citation_context_ids is the complete whitelist. In every citations array, "
+        "copy only an entire whitelist string exactly. Never append a colon, field path, label, quotation or explanation "
+        "to a context_id; missing_input_registry and its field paths are not context IDs. Put those details in claim, "
+        "reason, message or inference_basis instead. "
         "The active_output_policy is mandatory. Only its allowed_sections may contain non-empty values. Every entry in "
         "sections_that_must_be_empty must use the exact empty value supplied in empty_value_by_section; do not perform "
         "helpful work in a section that is inactive for this call. Your summary must state whether the preliminary "
-        "selection can close, which values are model estimates, and which formal software/vendor/evidence gates remain."
+        "selection can close, which values are model estimates, and which formal software/vendor/evidence gates remain. "
+        "Before emitting the final JSON, perform this exact preflight and regenerate the JSON if any check fails: "
+        "(1) every calculation_assists item whose method is model_inference has confidence exactly low or medium, never "
+        "high; (2) output_composition.blocks represents whole sections rather than individual items, so each nonempty "
+        "section_ref occurs exactly once, every empty section occurs zero times, and calculation_assists has at most one "
+        "block even when it contains multiple assists; (3) write summary, every field named reason, "
+        "output_composition.title and every output_composition block heading in Simplified Chinese (zh-CN). Keep schema "
+        "keys, IDs, enum values such as low/medium, field names, units, hashes and citation context IDs untranslated."
     )
     output_contract = prepared["output_contract"]
     user = {
@@ -3234,12 +3479,14 @@ def _request_step_output(config: dict[str, Any], prepared: dict[str, Any]) -> tu
         "prepared_sha256": prepared["prepared_sha256"],
         "authority_revision": prepared["authority_revision"],
         "context_pack": prepared["context_pack"],
+        "allowed_citation_context_ids": output_contract["allowed_citation_context_ids"],
         "active_output_policy": {
             "injection_point": prepared["injection_point"],
             "allowed_sections": output_contract["allowed_sections"],
             "sections_that_must_be_empty": output_contract["sections_that_must_be_empty"],
             "empty_value_by_section": output_contract["empty_value_by_section"],
         },
+        "generation_constraints": output_contract["generation_constraints"],
         "output_contract": output_contract,
     }
     provider_schema = prepared["output_contract"].get("provider_json_schema")
@@ -3273,6 +3520,9 @@ def _request_step_output(config: dict[str, Any], prepared: dict[str, Any]) -> tu
                 "schema": provider_schema,
             },
         }
+    elif provider == "deepseek":
+        payload["response_format"] = {"type": "json_object"}
+        payload.update(_deepseek_reasoning_controls(reasoning_effort))
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -3283,7 +3533,7 @@ def _request_step_output(config: dict[str, Any], prepared: dict[str, Any]) -> tu
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:
+        with _open_authenticated_request(request, timeout=timeout_s) as response:
             body = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         detail = _redact(exc.read().decode("utf-8", errors="replace")[:1500], api_key)
@@ -3395,6 +3645,7 @@ def request_review(
     model = str(config.get("model") or "").strip()
     timeout_s = _timeout_seconds(config.get("timeout_s", 90))
     wire_api = _wire_api(config)
+    _validate_provider_wire_api(provider, wire_api)
     reasoning_effort = _reasoning_effort(config)
     disable_response_storage = _disable_response_storage(config)
     if not model:
@@ -3411,7 +3662,8 @@ def request_review(
         "the supplied evidence uniquely closes one branch. You may propose only allowlisted draft text fields: "
         "equipment_type, process_function, phase. candidate_model is forbidden here; existing candidates may only be "
         "referenced through the phased orchestration contract. Do not invent numeric values. Return JSON with "
-        "summary, recommended_action, and changes:[{field,value,reason,source}]."
+        "summary, recommended_action, and changes:[{field,value,reason,source}]. Write summary and every changes[].reason "
+        "in Simplified Chinese (zh-CN); keep schema keys, field names and enum-like control values untranslated."
     )
     user = {
         "task": str(config.get("task", "审核确定性结果，并在候选集内提出可选的机械化决策。")),
@@ -3440,6 +3692,9 @@ def request_review(
             ],
             "temperature": 0.1,
         }
+        if provider == "deepseek":
+            payload["response_format"] = {"type": "json_object"}
+            payload.update(_deepseek_reasoning_controls(reasoning_effort))
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -3450,7 +3705,7 @@ def request_review(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:
+        with _open_authenticated_request(request, timeout=timeout_s) as response:
             body = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         detail = _redact(exc.read().decode("utf-8", errors="replace")[:1500], api_key)

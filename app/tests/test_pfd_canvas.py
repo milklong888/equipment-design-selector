@@ -338,6 +338,24 @@ class PFDCanvasTkRenderTests(unittest.TestCase):
         self.view.set_zoom(0.15)
         self.assertAlmostEqual(self.view.zoom, 0.15)
 
+    def test_left_and_right_click_callbacks_remain_separate(self) -> None:
+        opened: list[str] = []
+        menus: list[tuple[str, int, int]] = []
+        self.view.on_block_open = opened.append
+        self.view.on_block_menu = (
+            lambda block_id, x_root, y_root: menus.append(
+                (block_id, x_root, y_root)
+            )
+        )
+        self.assertEqual(self.view._open_block(None, "P-101"), "break")
+        self.assertEqual(opened, ["P-101"])
+        self.assertEqual(menus, [])
+        event = type("Event", (), {"x_root": 12, "y_root": 34})()
+        self.assertEqual(self.view._menu_block(event, "P-101"), "break")
+        self.assertEqual(opened, ["P-101"])
+        self.assertEqual(menus, [("P-101", 12, 34)])
+        self.assertEqual(self.view.selected_entity, "block:P-101")
+
     def test_shared_branch_has_one_junction_and_one_label(self) -> None:
         source = _bundle(
             [

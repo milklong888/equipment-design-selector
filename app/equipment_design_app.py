@@ -816,7 +816,12 @@ class EquipmentDesignApi:
         context_scope: str = "minimum",
     ) -> dict[str, Any]:
         """Run GUI review through Agent ``hybrid_run`` and return v2 only."""
-        runtime_key = str(config.get("api_key", "")) if isinstance(config, dict) else ""
+        supplied_key = (
+            str(config.get("api_key", ""))
+            if isinstance(config, dict)
+            else ""
+        )
+        runtime_key = ""
         try:
             if not isinstance(source_input, dict) or not isinstance(source_input.get("operation"), str) or not isinstance(source_input.get("payload"), dict):
                 raise ValueError(
@@ -826,13 +831,20 @@ class EquipmentDesignApi:
                 raise ValueError("Agent 协同 config 必须是对象。")
             knowledge = knowledge_config if isinstance(knowledge_config, dict) else {}
             provider = str(config.get("provider", "openai_compatible")).strip()
+            llm_enabled = bool(config.get("enabled", True))
+            if llm_enabled and provider != "mock":
+                runtime_key = supplied_key
             provider_config = {
                 key: value
                 for key, value in config.items()
                 if key not in {"enabled", "api_key", "base_url"}
             }
             provider_config["provider"] = provider
-            runtime_base_url = str(config.get("base_url", "")).strip()
+            runtime_base_url = (
+                str(config.get("base_url", "")).strip()
+                if llm_enabled
+                else ""
+            )
             if provider == "local_openai_compatible" and runtime_base_url:
                 provider_config["base_url"] = runtime_base_url
             payload = {
@@ -841,7 +853,7 @@ class EquipmentDesignApi:
                 "injection_point": injection_point,
                 "context_scope": context_scope,
                 "llm": {
-                    "enabled": bool(config.get("enabled", True)),
+                    "enabled": llm_enabled,
                     "config": provider_config,
                 },
             }
@@ -870,10 +882,10 @@ class EquipmentDesignApi:
                         os.environ[base_name] = old_base
             if not isinstance(value, dict) or value.get("schema") != "equipment-design-hybrid-result-v2":
                 raise RuntimeError("Agent hybrid_run 未返回协议 1.9 规定的 v2 结果。")
-            if runtime_key:
+            if supplied_key:
                 def redact_secret(item: Any) -> Any:
                     if isinstance(item, str):
-                        return item.replace(runtime_key, "[REDACTED]")
+                        return item.replace(supplied_key, "[REDACTED]")
                     if isinstance(item, list):
                         return [redact_secret(child) for child in item]
                     if isinstance(item, dict):
@@ -884,8 +896,8 @@ class EquipmentDesignApi:
             return self._ok(value, artifacts=artifacts)
         except Exception as exc:
             message = str(exc)
-            if runtime_key:
-                message = message.replace(runtime_key, "[REDACTED]")
+            if supplied_key:
+                message = message.replace(supplied_key, "[REDACTED]")
             return self._error(RuntimeError(message))
 
     def hybrid_review(

@@ -2095,10 +2095,403 @@ def ai_engineering_family_registry(
     )
 
 
+def _engineering_choice_trigger_support(
+    family_id: str,
+    choice: dict[str, Any],
+    params: dict[str, Any],
+    recommended_type: str | None,
+) -> dict[str, Any]:
+    """Prove a registered engineering-choice trigger from deterministic facts.
+
+    Registry prose is useful context for the model, but prose is not executable
+    authority.  This gate deliberately fails closed: a choice is selectable only
+    when a small deterministic predicate proves the corresponding service route.
+    Unimplemented predicates remain unavailable instead of treating a missing
+    target field as evidence that every package on the axis is applicable.
+    """
+
+    choice_id = str(choice.get("choice_id") or "").strip()
+    evidence: list[str] = []
+    blockers: list[str] = []
+
+    def result(status: str, reason: str) -> dict[str, Any]:
+        return {
+            "status": status,
+            "reason": reason,
+            "supporting_facts": evidence,
+            "blocking_facts": blockers,
+            "gate": "deterministic_engineering_choice_trigger_v1",
+        }
+
+    # A generic user material is an immutable construction constraint, not a
+    # synonym for "no component grades supplied".  Do not let a package silently
+    # reinterpret that material as a casing/shell/wetted-parts split.
+    generic_material = str(params.get("material") or "").strip()
+    field_values = choice.get("field_values")
+    material_fields = {
+        str(field): value
+        for field, value in (field_values.items() if isinstance(field_values, dict) else [])
+        if "material" in str(field).casefold()
+    }
+    if generic_material and (
+        family_id == "family_pump"
+        or (
+            material_fields
+            and any(
+                token(generic_material) != token(value)
+                for value in material_fields.values()
+            )
+        )
+    ):
+        blockers.append(
+            f"immutable_general_material_requires_explicit_component_mapping:{generic_material}"
+        )
+
+    if family_id == "family_pump":
+        base_params = dict(params)
+        base_params.pop("pump_material_route_override_id", None)
+        deterministic_route = str(
+            _pump_material_and_seal_selection(base_params).get("route_id") or ""
+        )
+        registered_route = str(
+            (field_values or {}).get("pump_material_route_override_id") or ""
+        )
+        evidence.append(f"program_pump_service_route:{deterministic_route or 'UNKNOWN'}")
+        if blockers:
+            return result(
+                "NOT_SUPPORTED",
+                "The user material has no proven one-to-one mapping to the registered "
+                "pump casing/impeller/shaft/seal package.",
+            )
+        if deterministic_route == registered_route and deterministic_route:
+            return result(
+                "SUPPORTED",
+                "The deterministic pump service classifier selected this exact "
+                "registered route before any AI choice was considered.",
+            )
+        if deterministic_route == "GENERAL_PROCESS_CONSERVATIVE":
+            blockers.append("specialized_pump_service_route_not_proven")
+            return result(
+                "INSUFFICIENT_EVIDENCE",
+                "The available medium, corrosion, hazard and solids facts do not "
+                "prove a specialized registered pump route.",
+            )
+        blockers.append(
+            f"program_selected_different_pump_route:{deterministic_route or 'UNKNOWN'}"
+        )
+        return result(
+            "NOT_SUPPORTED",
+            "A different pump service branch has deterministic precedence for this case.",
+        )
+
+    if family_id == "family_other_heat_exchanger":
+        terminal_type = str(recommended_type or params.get("equipment_type") or "")
+        if not _is_plate_exchanger_branch(terminal_type):
+            blockers.append(
+                f"terminal_type_is_not_plate_exchanger:{terminal_type or 'UNKNOWN'}"
+            )
+        if blockers:
+            return result(
+                "NOT_SUPPORTED",
+                "The registered plate-and-gasket package is incompatible with the "
+                "current terminal exchanger type or immutable material.",
+            )
+        medium_text = " ".join(
+            str(params.get(field) or "")
+            for field in (
+                "main_medium", "medium", "hot_side_medium", "cold_side_medium",
+                "dominant_components",
+            )
+        ).casefold()
+        temperatures = [
+            numeric(params.get(field))
+            for field in (
+                "design_temperature_c", "temperature_c", "inlet_temperature_c",
+                "outlet_temperature_c",
+            )
+            if numeric(params.get(field)) is not None
+        ]
+        if choice_id == "other_exchanger:material:316l_epdm":
+            water_or_polar = any(
+                marker in medium_text
+                for marker in (
+                    "water", "condensate", "aqueous", "polar", "水", "凝结水", "水溶液",
+                )
+            )
+            oil_or_hydrocarbon = any(
+                marker in medium_text
+                for marker in (
+                    "oil", "hydrocarbon", "benzene", "toluene", "xylene",
+                    "油", "烃", "苯", "甲苯", "二甲苯",
+                )
+            )
+            temperature_supported = bool(temperatures) and max(temperatures) <= 120.0
+            evidence.extend([
+                f"water_or_polar_medium:{water_or_polar}",
+                f"maximum_known_temperature_c:{max(temperatures) if temperatures else 'UNKNOWN'}",
+            ])
+            if water_or_polar and temperature_supported and not oil_or_hydrocarbon:
+                return result(
+                    "SUPPORTED",
+                    "Plate-exchanger type, polar/water service and a conservative "
+                    "known EPDM temperature screen are all satisfied.",
+                )
+            blockers.append("epdm_medium_and_temperature_trigger_not_proven")
+        elif choice_id == "other_exchanger:material:316l_fkm":
+            oil_or_hydrocarbon = any(
+                marker in medium_text
+                for marker in (
+                    "oil", "hydrocarbon", "benzene", "toluene", "xylene",
+                    "油", "烃", "苯", "甲苯", "二甲苯",
+                )
+            )
+            evidence.append(f"oil_or_hydrocarbon_medium:{oil_or_hydrocarbon}")
+            if oil_or_hydrocarbon:
+                return result(
+                    "SUPPORTED",
+                    "The terminal type is a plate exchanger and the medium explicitly "
+                    "identifies an oil/hydrocarbon service.",
+                )
+            blockers.append("fkm_oil_or_hydrocarbon_trigger_not_proven")
+        return result(
+            "INSUFFICIENT_EVIDENCE",
+            "The registered gasket compatibility trigger is not proven by current facts.",
+        )
+
+    if family_id == "family_tower":
+        if blockers:
+            return result(
+                "NOT_SUPPORTED",
+                "The generic user material does not unambiguously authorize this "
+                "shell/internals/packing material split.",
+            )
+        route = _tower_material_route(params)
+        route_id = str(route.get("route_id") or "")
+        evidence.append(f"program_tower_material_route:{route_id or 'UNKNOWN'}")
+        if (
+            choice_id == "tower:material:q345r_304_internals"
+            and route_id == "Q345R_S30408_GENERAL_TOWER"
+        ):
+            return result(
+                "SUPPORTED",
+                "The deterministic tower material selector chose the matching "
+                "Q345R shell and S30408 internals route.",
+            )
+        if (
+            choice_id == "tower:material:316l_wetted"
+            and route_id == "USER_S31603_STAINLESS_TOWER"
+        ):
+            return result(
+                "SUPPORTED",
+                "The deterministic tower material selector retained an explicit "
+                "all-S31603 user route.",
+            )
+        blockers.append(f"program_selected_different_tower_route:{route_id or 'UNKNOWN'}")
+        return result(
+            "NOT_SUPPORTED",
+            "The deterministic tower material route does not match this package.",
+        )
+
+    if family_id == "family_compressor":
+        if blockers:
+            return result(
+                "NOT_SUPPORTED",
+                "The immutable user material does not authorize the registered "
+                "compressor rotor/seal package.",
+            )
+        medium_text = " ".join(
+            str(params.get(field) or "")
+            for field in ("main_medium", "medium", "dominant_components")
+        ).casefold()
+        corrosivity = str(params.get("corrosivity") or "").strip().casefold()
+        toxicity = str(params.get("toxicity") or "").strip().casefold()
+        flammability = str(params.get("flammability") or "").strip().casefold()
+        explicit_gas = bool(medium_text) or str(params.get("phase") or "").casefold() in {
+            "gas", "vapor", "vapour", "气", "气相",
+        }
+        corrosive = corrosivity in {
+            "moderate", "medium", "high", "severe", "true", "yes",
+            "中", "中等", "高", "严重",
+        }
+        hazardous = (
+            toxicity in {
+                "moderate", "medium", "high", "extreme", "true", "yes",
+                "中", "中等", "高", "极高",
+            }
+            or flammability in {
+                "flammable", "highly_flammable", "true", "yes", "易燃", "高度易燃",
+            }
+            or any(
+                marker in medium_text
+                for marker in (
+                    "hydrocarbon", "natural gas", "hydrogen", "benzene",
+                    "烃", "天然气", "氢", "苯",
+                )
+            )
+        )
+        explicitly_benign = (
+            corrosivity in {"none", "noncorrosive", "low", "false", "no", "无", "低"}
+            and toxicity in {"none", "low", "false", "no", "无", "低"}
+            and flammability in {
+                "none", "nonflammable", "low", "false", "no", "无", "不可燃", "低",
+            }
+        )
+        evidence.extend([
+            f"explicit_gas_identity:{explicit_gas}",
+            f"corrosive_service:{corrosive}",
+            f"hazardous_service:{hazardous}",
+            f"explicitly_benign_service:{explicitly_benign}",
+        ])
+        if choice_id == "compressor:material:316l_dry_gas_seal" and (
+            corrosive or hazardous
+        ):
+            return result(
+                "SUPPORTED",
+                "Explicit corrosion, flammability or toxicity facts support the "
+                "registered corrosion-resistant dry-gas-seal package.",
+            )
+        if (
+            choice_id == "compressor:material:carbon_13cr_labyrinth"
+            and explicit_gas
+            and explicitly_benign
+        ):
+            return result(
+                "SUPPORTED",
+                "The gas identity and explicit noncorrosive, nontoxic and "
+                "nonflammable labels support the conventional package.",
+            )
+        blockers.append("compressor_service_trigger_not_positively_proven")
+        return result(
+            "INSUFFICIENT_EVIDENCE",
+            "Absence of hazard data is not deterministic proof of a benign "
+            "compressor service.",
+        )
+
+    if family_id == "family_process_piping":
+        if blockers:
+            return result(
+                "NOT_SUPPORTED",
+                "The registered piping material conflicts with the immutable "
+                "user material.",
+            )
+        corrosivity = str(params.get("corrosivity") or "").strip().casefold()
+        purity_text = str(params.get("process_function") or "").casefold()
+        if (
+            choice_id == "piping:material:20_carbon_steel"
+            and corrosivity in {"none", "noncorrosive", "low", "false", "no", "无", "低"}
+        ):
+            evidence.append(f"explicit_corrosivity:{corrosivity}")
+            return result(
+                "SUPPORTED",
+                "An explicit low/noncorrosive label supports the carbon-steel "
+                "screening route.",
+            )
+        if (
+            choice_id == "piping:material:s31603"
+            and (
+                corrosivity in {
+                    "moderate", "medium", "high", "severe", "true", "yes",
+                    "中", "中等", "高", "严重",
+                }
+                or any(
+                    marker in purity_text
+                    for marker in ("high purity", "sanitary", "pharma", "高纯", "卫生", "制药")
+                )
+            )
+        ):
+            evidence.append(f"explicit_corrosivity:{corrosivity or 'not_labelled'}")
+            return result(
+                "SUPPORTED",
+                "Explicit corrosion or purity service facts support the S31603 route.",
+            )
+        blockers.append("piping_material_trigger_not_positively_proven")
+        return result(
+            "INSUFFICIENT_EVIDENCE",
+            "The current piping facts do not positively prove this material route.",
+        )
+
+    if family_id == "family_valve":
+        if blockers:
+            return result(
+                "NOT_SUPPORTED",
+                "The registered valve package conflicts with immutable user "
+                "material/function data.",
+            )
+        corrosivity = str(params.get("corrosivity") or "").strip().casefold()
+        function_text = " ".join(
+            str(params.get(field) or "")
+            for field in ("valve_function", "process_function")
+        ).casefold()
+        temperatures = [
+            numeric(params.get(field))
+            for field in ("design_temperature_c", "temperature_c")
+            if numeric(params.get(field)) is not None
+        ]
+        pressure_drop = None
+        if (
+            numeric(params.get("inlet_pressure_mpa")) is not None
+            and numeric(params.get("outlet_pressure_mpa")) is not None
+        ):
+            pressure_drop = (
+                float(numeric(params.get("inlet_pressure_mpa")))
+                - float(numeric(params.get("outlet_pressure_mpa")))
+            )
+        corrosive = corrosivity in {
+            "moderate", "medium", "high", "severe", "true", "yes",
+            "中", "中等", "高", "严重",
+        }
+        hard_seat_duty = (
+            bool(temperatures) and max(temperatures) > 200.0
+        ) or (pressure_drop is not None and pressure_drop > 2.0)
+        cut_off = any(
+            marker in function_text
+            for marker in ("cutoff", "shutoff", "isolation", "切断", "截断", "隔离")
+        )
+        evidence.extend([
+            f"corrosive_service:{corrosive}",
+            f"hard_seat_duty:{hard_seat_duty}",
+            f"cut_off_service:{cut_off}",
+        ])
+        if choice_id == "valve:package:cf8m_316_hardseat_flanged" and (
+            corrosive or hard_seat_duty
+        ):
+            return result(
+                "SUPPORTED",
+                "Explicit corrosion, temperature or pressure-drop facts support "
+                "the registered hard-seat route.",
+            )
+        if (
+            choice_id == "valve:package:wcb_316_softseat_flanged"
+            and cut_off
+            and corrosivity in {
+                "none", "noncorrosive", "low", "false", "no", "无", "低",
+            }
+            and (not temperatures or max(temperatures) <= 200.0)
+        ):
+            return result(
+                "SUPPORTED",
+                "Explicit cut-off duty and low/noncorrosive service support the "
+                "registered soft-seat route.",
+            )
+        blockers.append("valve_package_trigger_not_positively_proven")
+        return result(
+            "INSUFFICIENT_EVIDENCE",
+            "The current valve facts do not positively prove this material/seat package.",
+        )
+
+    blockers.append(f"no_deterministic_trigger_predicate_for_choice:{choice_id}")
+    return result(
+        "INSUFFICIENT_EVIDENCE",
+        "This registered choice has no implemented deterministic trigger predicate; "
+        "free-text trigger interpretation cannot authorize automatic write-back.",
+    )
+
+
 def _build_ai_engineering_choice_context(
     family_id: str,
     params: dict[str, Any],
     selection_context_sha256: str | None,
+    recommended_type: str | None = None,
 ) -> dict[str, Any]:
     """Bind frozen material/component choices to the current deterministic case.
 
@@ -2148,12 +2541,27 @@ def _build_ai_engineering_choice_context(
                 "missing_fields": missing_fields,
                 "conflicts": conflicts,
             }
-            choice["eligible_for_ai_selection"] = bool(missing_fields) and not conflicts
+            trigger_support = _engineering_choice_trigger_support(
+                family_id,
+                choice,
+                params,
+                recommended_type,
+            )
+            choice["deterministic_trigger_support"] = trigger_support
+            choice["eligible_for_ai_selection"] = (
+                bool(missing_fields)
+                and not conflicts
+                and trigger_support.get("status") == "SUPPORTED"
+            )
             choice["application_policy"] = (
-                "fill_missing_fields_only"
+                "fill_missing_fields_only_trigger_supported"
                 if choice["eligible_for_ai_selection"]
                 else "blocked_existing_value_conflict"
                 if conflicts
+                else "blocked_trigger_not_supported"
+                if trigger_support.get("status") == "NOT_SUPPORTED"
+                else "blocked_trigger_support_insufficient"
+                if trigger_support.get("status") != "SUPPORTED"
                 else "not_needed_all_registered_values_already_present"
             )
             choice["selection_context_sha256"] = selection_context_sha256
@@ -16457,6 +16865,7 @@ def build_model_recommendation(
         family_id,
         choice_authoritative_params or params,
         parameter_package.get("selection_context", {}).get("sha256"),
+        recommended_type,
     )
     return {
         "schema": "equipment-model-recommendation-v1",

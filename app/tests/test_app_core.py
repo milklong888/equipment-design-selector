@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import http.server
 import json
+import os
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -579,7 +582,7 @@ class AppCoreTests(unittest.TestCase):
             def read() -> bytes:
                 return json.dumps(response_body).encode("utf-8")
 
-        with patch.object(llm_bridge.urllib.request, "urlopen", return_value=FakeResponse()) as mocked:
+        with patch.object(llm_bridge, "_open_authenticated_request", return_value=FakeResponse()) as mocked:
             result = llm_bridge.request_review(
                 {
                     "provider": "openai_compatible",
@@ -607,9 +610,9 @@ class AppCoreTests(unittest.TestCase):
 
             @staticmethod
             def read() -> bytes:
-                return b'{"choices":[{"message":{"content":"ok"}}]}'
+                return b'{"choices":[{"message":{"content":"{\\"status\\":\\"pong\\"}"}}]}'
 
-        with patch.object(llm_bridge.urllib.request, "urlopen", return_value=FakeResponse()) as mocked:
+        with patch.object(llm_bridge, "_open_authenticated_request", return_value=FakeResponse()) as mocked:
             result = llm_bridge.test_provider_connection({
                 "provider": "openai_compatible",
                 "base_url": "https://example.invalid/v1",
@@ -624,14 +627,405 @@ class AppCoreTests(unittest.TestCase):
         self.assertEqual(mocked.call_args.kwargs["timeout"], 17)
         request_body = json.loads(mocked.call_args.args[0].data.decode("utf-8"))
         self.assertEqual(request_body["model"], "exact-model-id")
+        self.assertEqual(result["functional_probe"], "JSON_OBJECT_STATUS_PONG")
         self.assertNotIn("TOP-SECRET-KEY", json.dumps(result))
+
+    def test_llm_connection_rejects_empty_or_wrong_function_probe(self) -> None:
+        class FakeResponse:
+            def __init__(self, content: str) -> None:
+                self.content = content
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self) -> bytes:
+                return json.dumps({
+                    "choices": [{"message": {"content": self.content}}],
+                }).encode("utf-8")
+
+        for label, content in (
+            ("empty", ""),
+            ("wrong_json", '{"status":"not-ready"}'),
+            ("plain_text", "pong"),
+        ):
+            with self.subTest(label=label), patch.object(
+                llm_bridge,
+                "_open_authenticated_request",
+                return_value=FakeResponse(content),
+            ):
+                result = llm_bridge.test_provider_connection({
+                    "provider": "openai_compatible",
+                    "base_url": "https://example.invalid/v1",
+                    "model": "exact-model-id",
+                    "api_key": "TOP-SECRET-KEY",
+                })
+            self.assertEqual(result["status"], "FAILED")
+            self.assertNotIn("TOP-SECRET-KEY", json.dumps(result))
+
+    def test_authenticated_llm_request_does_not_follow_redirect_or_forward_key(self) -> None:
+        redirect_hits: list[str | None] = []
+        target_hits: list[str | None] = []
+        expected_key = "LOCAL-REDIRECT-SECRET"
+
+        class TargetHandler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802 - stdlib callback name
+                target_hits.append(self.headers.get("Authorization"))
+                response_body = b'{"choices":[{"message":{"content":"{\\"status\\":\\"pong\\"}"}}]}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response_body)))
+                self.end_headers()
+                self.wfile.write(response_body)
+
+            def log_message(self, _format: str, *_args: object) -> None:
+                return
+
+        target_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), TargetHandler)
+        target_worker = threading.Thread(target=target_server.serve_forever, daemon=True)
+        target_worker.start()
+        self.addCleanup(target_server.server_close)
+        self.addCleanup(target_server.shutdown)
+        target_url = f"http://127.0.0.1:{target_server.server_port}/captured"
+
+        class RedirectHandler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802 - stdlib callback name
+                length = int(self.headers.get("Content-Length", "0"))
+                self.rfile.read(length)
+                redirect_hits.append(self.headers.get("Authorization"))
+                self.send_response(302)
+                self.send_header("Location", target_url)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def log_message(self, _format: str, *_args: object) -> None:
+                return
+
+        redirect_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), RedirectHandler)
+        redirect_worker = threading.Thread(target=redirect_server.serve_forever, daemon=True)
+        redirect_worker.start()
+        self.addCleanup(redirect_server.server_close)
+        self.addCleanup(redirect_server.shutdown)
+
+        result = llm_bridge.test_provider_connection({
+            "provider": "local_openai_compatible",
+            "base_url": f"http://127.0.0.1:{redirect_server.server_port}/v1",
+            "model": "redirect-test-model",
+            "wire_api": "chat_completions",
+            "timeout_s": 15,
+            "api_key": expected_key,
+        })
+
+        self.assertEqual(result["status"], "FAILED")
+        self.assertIn("302", result["message"])
+        self.assertEqual(redirect_hits, [f"Bearer {expected_key}"])
+        self.assertEqual(target_hits, [])
+        self.assertNotIn(expected_key, json.dumps(result))
+
+    def test_user_entered_url_key_and_model_complete_real_http_round_trip(self) -> None:
+        received: list[dict[str, object]] = []
+        expected_key = "LOCAL-ROUNDTRIP-SECRET"
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802 - stdlib callback name
+                length = int(self.headers.get("Content-Length", "0"))
+                request_body = json.loads(self.rfile.read(length).decode("utf-8"))
+                received.append({
+                    "path": self.path,
+                    "authorization": self.headers.get("Authorization"),
+                    "body": request_body,
+                })
+                last_message = request_body.get("messages", [{}])[-1].get("content", "")
+                if '"status":"pong"' in last_message:
+                    content = json.dumps({"status": "pong"})
+                else:
+                    content = json.dumps({
+                        "summary": "URL、Key 和模型配置已完成真实 HTTP 往返。",
+                        "recommended_action": "review",
+                        "changes": [],
+                    }, ensure_ascii=False)
+                response_body = json.dumps({
+                    "choices": [{"message": {"content": content}}],
+                }, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response_body)))
+                self.end_headers()
+                self.wfile.write(response_body)
+
+            def log_message(self, _format: str, *_args: object) -> None:
+                return
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base_url = f"http://127.0.0.1:{server.server_port}/user-supplied/v1"
+        config = {
+            "provider": "openai_compatible",
+            "base_url": base_url,
+            "model": "user-selected-model",
+            "wire_api": "chat_completions",
+            "timeout_s": 15,
+            "api_key": expected_key,
+        }
+
+        connection = EquipmentDesignApi().test_llm_connection(config)
+        review = llm_bridge.request_review(
+            config,
+            {"status": "MATCHED", "candidate_model": "PROGRAM-CANDIDATE"},
+        )
+
+        self.assertTrue(connection["ok"], connection)
+        self.assertEqual(connection["value"]["status"], "CONNECTED")
+        self.assertEqual(review["proposal"]["summary"], "URL、Key 和模型配置已完成真实 HTTP 往返。")
+        self.assertEqual(len(received), 2)
+        for item in received:
+            self.assertEqual(item["path"], "/user-supplied/v1/chat/completions")
+            self.assertEqual(item["authorization"], f"Bearer {expected_key}")
+            self.assertEqual(item["body"]["model"], "user-selected-model")
+        self.assertNotIn(expected_key, json.dumps([connection, review], ensure_ascii=False))
+
+    def test_user_entered_url_key_and_model_reach_full_agent_real_http_round_trip(self) -> None:
+        received: list[dict[str, object]] = []
+        expected_key = "LOCAL-FULL-AGENT-SECRET"
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802 - stdlib callback name
+                length = int(self.headers.get("Content-Length", "0"))
+                request_body = json.loads(self.rfile.read(length).decode("utf-8"))
+                received.append({
+                    "path": self.path,
+                    "authorization": self.headers.get("Authorization"),
+                    "body": request_body,
+                })
+                user_payload = json.loads(request_body["messages"][-1]["content"])
+                step_output = {
+                    "schema": llm_bridge.STEP_OUTPUT_SCHEMA,
+                    "injection_point": user_payload["active_output_policy"]["injection_point"],
+                    "context_sha256": user_payload["context_pack"]["context_sha256"],
+                    "summary": "完整 Agent HTTP 往返成功。",
+                    "citations": [],
+                    "proposed_changes": [],
+                    "condition_assessments": [],
+                    "terminal_selection_assists": [],
+                    "engineering_choice_assists": [],
+                    "calculation_assists": [],
+                    "retrieval_plan": [],
+                    "ambiguity_decision": None,
+                    "audit_findings": [],
+                    "output_composition": {
+                        "title": "辅助计算结果",
+                        "blocks": [{
+                            "block_id": "summary",
+                            "operation": llm_bridge.OUTPUT_SECTION_OPERATIONS["summary"],
+                            "section_ref": "summary",
+                            "heading": "AI 摘要",
+                            "citations": ["deterministic_result"],
+                        }],
+                    },
+                }
+                response_body = json.dumps({
+                    "choices": [{
+                        "message": {
+                            "content": json.dumps(step_output, ensure_ascii=False),
+                        },
+                    }],
+                }, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response_body)))
+                self.end_headers()
+                self.wfile.write(response_body)
+
+            def log_message(self, _format: str, *_args: object) -> None:
+                return
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base_url = f"http://127.0.0.1:{server.server_port}/user-supplied/v1"
+        source_input = {
+            "operation": "manual_match",
+            "payload": {
+                "selection_id": "block:PUMP",
+                "values": {
+                    "equipment_tag": "P-USER-LLM",
+                    "phase": "liquid",
+                    "flow_m3_h": 20,
+                    "head_m": 45,
+                    "density_kg_m3": 900,
+                    "efficiency_percent": 75,
+                },
+            },
+        }
+        results: list[dict[str, object]] = []
+        with patch.dict(os.environ, {
+            "EQUIPMENT_DESIGN_LLM_API_KEY": "PREVIOUS-RUNTIME-KEY",
+            "EQUIPMENT_DESIGN_LLM_BASE_URL": "https://previous.invalid/v1",
+        }, clear=False):
+            for provider in ("openai_compatible", "local_openai_compatible"):
+                with self.subTest(provider=provider):
+                    response = EquipmentDesignApi().agent_hybrid_run(
+                        source_input,
+                        {
+                            "enabled": True,
+                            "provider": provider,
+                            "base_url": base_url,
+                            "model": "user-selected-agent-model",
+                            "wire_api": "chat_completions",
+                            "timeout_s": 15,
+                            "api_key": expected_key,
+                        },
+                        {"enabled": False},
+                        "audit",
+                        "minimum",
+                    )
+                    self.assertTrue(response["ok"], response)
+                    value = response["value"]
+                    self.assertEqual(value["schema"], "equipment-design-hybrid-result-v2")
+                    self.assertNotEqual(value["machine_state"]["state"], "FALLBACK_DETERMINISTIC")
+                    self.assertEqual(value["llm_review"]["status"], "COMPLETED_STRICT")
+                    self.assertEqual(
+                        value["orchestration"]["step_output"]["summary"],
+                        "完整 Agent HTTP 往返成功。",
+                    )
+                    results.append(response)
+            self.assertEqual(
+                os.environ["EQUIPMENT_DESIGN_LLM_API_KEY"],
+                "PREVIOUS-RUNTIME-KEY",
+            )
+            self.assertEqual(
+                os.environ["EQUIPMENT_DESIGN_LLM_BASE_URL"],
+                "https://previous.invalid/v1",
+            )
+
+        self.assertEqual(len(received), 2)
+        for item in received:
+            self.assertEqual(item["path"], "/user-supplied/v1/chat/completions")
+            self.assertEqual(item["authorization"], f"Bearer {expected_key}")
+            self.assertEqual(item["body"]["model"], "user-selected-agent-model")
+        self.assertNotIn(expected_key, json.dumps(results, ensure_ascii=False))
+
+    def test_disabled_llm_never_rebinds_unused_runtime_secret(self) -> None:
+        observed: list[dict[str, object]] = []
+        unused_key = "UNUSED-DISABLED-RUNTIME-SECRET"
+
+        def fake_execute(operation, payload, _api):
+            observed.append({
+                "operation": operation,
+                "payload": payload,
+                "runtime_key": os.environ.get("EQUIPMENT_DESIGN_LLM_API_KEY"),
+                "runtime_base": os.environ.get("EQUIPMENT_DESIGN_LLM_BASE_URL"),
+            })
+            return {
+                "schema": "equipment-design-hybrid-result-v2",
+                "machine_state": {"state": "COMPLETED_DETERMINISTIC_ONLY"},
+            }, []
+
+        with patch.dict(os.environ, {
+            "EQUIPMENT_DESIGN_LLM_API_KEY": "PREVIOUS-RUNTIME-KEY",
+            "EQUIPMENT_DESIGN_LLM_BASE_URL": "https://previous.invalid/v1",
+        }, clear=False), patch(
+            "equipment_design_agent.execute_operation",
+            side_effect=fake_execute,
+        ):
+            response = EquipmentDesignApi().agent_hybrid_run(
+                {
+                    "operation": "manual_match",
+                    "payload": {
+                        "selection_id": "block:PUMP",
+                        "values": {"flow_m3_h": 20},
+                    },
+                },
+                {
+                    "enabled": False,
+                    "provider": "openai_compatible",
+                    "base_url": "https://unused.invalid/v1",
+                    "model": "unused-model",
+                    "api_key": unused_key,
+                },
+                {"enabled": False},
+            )
+
+        self.assertTrue(response["ok"], response)
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(observed[0]["runtime_key"], "PREVIOUS-RUNTIME-KEY")
+        self.assertEqual(observed[0]["runtime_base"], "https://previous.invalid/v1")
+        self.assertFalse(observed[0]["payload"]["llm"]["enabled"])
+        self.assertNotIn(
+            unused_key,
+            json.dumps([observed[0]["payload"], response], ensure_ascii=False),
+        )
+
+    def test_deepseek_connection_uses_official_chat_endpoint_and_current_model(self) -> None:
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            @staticmethod
+            def read() -> bytes:
+                return b'{"choices":[{"message":{"content":"{\\"status\\":\\"pong\\"}"}}]}'
+
+        with patch.object(llm_bridge, "_open_authenticated_request", return_value=FakeResponse()) as mocked:
+            result = llm_bridge.test_provider_connection({
+                "provider": "deepseek",
+                "base_url": "https://api.deepseek.com",
+                "model": "deepseek-v4-flash",
+                "wire_api": "chat_completions",
+                "reasoning_effort": "high",
+                "timeout_s": 19,
+                "api_key": "TOP-SECRET-KEY",
+            })
+
+        request = mocked.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(request.full_url, "https://api.deepseek.com/chat/completions")
+        self.assertEqual(payload["model"], "deepseek-v4-flash")
+        self.assertEqual(payload["thinking"], {"type": "enabled"})
+        self.assertEqual(payload["reasoning_effort"], "high")
+        self.assertEqual(payload["response_format"], {"type": "json_object"})
+        self.assertEqual(payload["max_tokens"], 128)
+        self.assertNotIn("temperature", payload)
+        self.assertEqual(result["status"], "CONNECTED")
+        self.assertEqual(result["provider"], "deepseek")
+        self.assertNotIn("TOP-SECRET-KEY", json.dumps(result))
+
+    def test_deepseek_rejects_responses_protocol_and_nonofficial_host(self) -> None:
+        unsupported = llm_bridge.test_provider_connection({
+            "provider": "deepseek",
+            "base_url": "https://api.deepseek.com",
+            "model": "deepseek-v4-flash",
+            "wire_api": "responses",
+            "api_key": "TOP-SECRET-KEY",
+        })
+        wrong_host = llm_bridge.test_provider_connection({
+            "provider": "deepseek",
+            "base_url": "https://attacker.invalid",
+            "model": "deepseek-v4-flash",
+            "wire_api": "chat_completions",
+            "api_key": "TOP-SECRET-KEY",
+        })
+        self.assertEqual(unsupported["status"], "FAILED")
+        self.assertIn("不支持 responses", unsupported["message"])
+        self.assertEqual(wrong_host["status"], "FAILED")
+        self.assertIn("api.deepseek.com", wrong_host["message"])
+        self.assertNotIn("TOP-SECRET-KEY", json.dumps([unsupported, wrong_host]))
 
     def test_llm_responses_connection_uses_reasoning_and_disables_storage(self) -> None:
         response_body = {
             "id": "resp_test",
             "output": [{
                 "type": "message",
-                "content": [{"type": "output_text", "text": "pong"}],
+                "content": [{"type": "output_text", "text": '{"status":"pong"}'}],
             }],
         }
 
@@ -646,7 +1040,7 @@ class AppCoreTests(unittest.TestCase):
             def read() -> bytes:
                 return json.dumps(response_body).encode("utf-8")
 
-        with patch.object(llm_bridge.urllib.request, "urlopen", return_value=FakeResponse()) as mocked:
+        with patch.object(llm_bridge, "_open_authenticated_request", return_value=FakeResponse()) as mocked:
             result = llm_bridge.test_provider_connection({
                 "provider": "openai_compatible",
                 "base_url": "https://example.invalid/v1",
@@ -661,10 +1055,13 @@ class AppCoreTests(unittest.TestCase):
         request = mocked.call_args.args[0]
         payload = json.loads(request.data.decode("utf-8"))
         self.assertTrue(request.full_url.endswith("/v1/responses"))
-        self.assertEqual(payload["input"], "Reply with exactly: pong")
+        self.assertEqual(
+            payload["input"],
+            'Return exactly one JSON object with no markdown: {"status":"pong"}',
+        )
         self.assertEqual(payload["reasoning"], {"effort": "xhigh"})
         self.assertFalse(payload["store"])
-        self.assertEqual(payload["max_output_tokens"], 16)
+        self.assertEqual(payload["max_output_tokens"], 128)
         self.assertNotIn("messages", payload)
         self.assertNotIn("temperature", payload)
         self.assertEqual(result["status"], "CONNECTED")
@@ -704,7 +1101,7 @@ class AppCoreTests(unittest.TestCase):
             captured["timeout"] = timeout
             return FakeResponse()
 
-        with patch.object(llm_bridge.urllib.request, "urlopen", side_effect=fake_urlopen):
+        with patch.object(llm_bridge, "_open_authenticated_request", side_effect=fake_urlopen):
             result = llm_bridge.request_review(
                 {
                     "provider": "openai_compatible",
@@ -731,7 +1128,7 @@ class AppCoreTests(unittest.TestCase):
         self.assertNotIn("TOP-SECRET-KEY", json.dumps(result))
 
     def test_mock_connection_check_never_accesses_network_and_api_wraps_it(self) -> None:
-        with patch.object(llm_bridge.urllib.request, "urlopen", side_effect=AssertionError("network used")) as mocked:
+        with patch.object(llm_bridge, "_open_authenticated_request", side_effect=AssertionError("network used")) as mocked:
             result = EquipmentDesignApi().test_llm_connection({"provider": "mock", "model": "offline-check"})
         self.assertTrue(result["ok"])
         self.assertEqual(result["value"]["status"], "CONNECTED")
@@ -960,6 +1357,66 @@ class AppCoreTests(unittest.TestCase):
             ]["temperature_c"],
             60.0,
         )
+
+    def test_manual_pipe_maps_s30408_to_complete_stainless_route(self) -> None:
+        result = app_core.manual_match(
+            "family:family_process_piping",
+            {
+                "equipment_tag": "L-S30408",
+                "main_medium": "water",
+                "phase": "liquid",
+                "flow_m3_h": 20.0,
+                "design_temperature_c": 60.0,
+                "design_pressure_mpa": 0.3,
+                "target_velocity_m_s": 1.5,
+                "material": "S30408",
+            },
+        )
+        specification = result["result"][
+            "programmatic_pipe_specification"
+        ]
+        fields = specification["fields"]
+        selected_material = specification["material_parameter_ledger"][
+            "selected_material"
+        ]
+
+        self.assertEqual(selected_material["material_code"], "SS304")
+        self.assertEqual(
+            selected_material["material_grade"],
+            "S30408（06Cr19Ni10）",
+        )
+        self.assertEqual(
+            specification["pressure_wall_screening"]["material_code"],
+            "SS304",
+        )
+        standard_route = specification["material_standard_table_route"]
+        self.assertEqual(standard_route["material_code"], "SS304")
+        self.assertEqual(
+            standard_route["status"],
+            "STANDARD_TABLE_FOUND_NUMERIC_REUSE_BLOCKED",
+        )
+        self.assertFalse(standard_route["standard_numeric_value_adopted"])
+        self.assertEqual(
+            fields["material_grade"]["value"],
+            "S30408（06Cr19Ni10）",
+        )
+        self.assertIn(
+            "材料路线=S30408（06Cr19Ni10）",
+            specification["designation"],
+        )
+        self.assertNotIn("材料路线=20钢", specification["designation"])
+        self.assertEqual(
+            fields["protective_layer"]["value"],
+            "酸洗钝化（程序初选）",
+        )
+        piping_class = specification["piping_class_candidate"]
+        self.assertIn("材料分支=SS304", piping_class["branch_explanation"])
+        self.assertIn(
+            "S30408（06Cr19Ni10）",
+            piping_class["components"]["pipe"],
+        )
+        self.assertIn("CF8", piping_class["components"]["manual_isolation_valve"])
+        self.assertFalse(piping_class["formal_project_piping_class"])
 
 if __name__ == "__main__":
     unittest.main()

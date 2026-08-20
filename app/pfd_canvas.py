@@ -208,7 +208,12 @@ def selection_overlay_from_derivation(derivation: Mapping[str, Any] | None) -> d
 
 
 class PFDCanvasView(ttk.Frame):
-    """Scrollable deterministic PFD view with entity-level callbacks."""
+    """Scrollable deterministic PFD view with distinct entity interactions.
+
+    A left click is always routed to the object's detail/editor callback.  A
+    right click is routed only to its context-choice callback; the canvas never
+    treats a context-menu action as parameter input.
+    """
 
     def __init__(
         self,

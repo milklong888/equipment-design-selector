@@ -3,6 +3,7 @@ param(
     [string]$PythonExe = "",
     [string]$BuildDir = "",
     [string]$KnowledgeArchiveDir = "",
+    [string]$AppVersion = "2.4.2",
     [switch]$Console,
     [switch]$OneDir,
     [switch]$PrepareOnly
@@ -19,6 +20,18 @@ else {
 $PackageMode = if ($OneDir) { '--onedir' } else { '--onefile' }
 $GuiWorkPath = Join-Path $BuildRoot 'equipment_design_app'
 $AgentWorkPath = Join-Path $BuildRoot 'equipment_design_agent'
+if ($AppVersion -notmatch '^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$') {
+    throw "AppVersion must contain three or four numeric components: $AppVersion"
+}
+$VersionParts = @(
+    [int]$Matches[1],
+    [int]$Matches[2],
+    [int]$Matches[3],
+    $(if ($Matches[4]) { [int]$Matches[4] } else { 0 })
+)
+$NormalizedVersion = $VersionParts -join '.'
+$GuiVersionFile = Join-Path $BuildRoot 'EquipmentDesignGraphApp.version.txt'
+$AgentVersionFile = Join-Path $BuildRoot 'EquipmentDesignAgentCLI.version.txt'
 $Python = if ([string]::IsNullOrWhiteSpace($PythonExe)) {
     (Get-Command python -ErrorAction Stop).Source
 }
@@ -28,6 +41,7 @@ else {
 $GuideName = -join ([char[]]@(0x4F7F, 0x7528, 0x8BF4, 0x660E, 0x002E, 0x006D, 0x0064))
 $DeliverySidecars = @($GuideName, 'THIRD_PARTY_NOTICES.md')
 $DeliveryScripts = @(
+    'audit_llm_multiflow_bridge.py',
     'audit_multi_bkp_model_gate.py',
     'audit_multi_bkp_overview_gate.py',
     'audit_stage1_detailed_reliability.py'
@@ -143,6 +157,49 @@ function Reset-BundleDirectory {
     New-LongPathDirectory -Path $Path
 }
 
+function New-PyInstallerVersionFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$InternalName,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+    Assert-ChildPath -ChildPath $Path -ParentPath $BuildRoot
+    New-LongPathDirectory -Path (Split-Path -Parent $Path)
+    $tuple = $VersionParts -join ', '
+    $content = @"
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=($tuple),
+    prodvers=($tuple),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        '080404b0',
+        [
+          StringStruct('CompanyName', 'Equipment Design Selector'),
+          StringStruct('FileDescription', '$Description'),
+          StringStruct('FileVersion', '$NormalizedVersion'),
+          StringStruct('InternalName', '$InternalName'),
+          StringStruct('OriginalFilename', '$InternalName.exe'),
+          StringStruct('ProductName', 'Equipment Design Selector'),
+          StringStruct('ProductVersion', '$NormalizedVersion')
+        ]
+      )
+    ]),
+    VarFileInfo([VarStruct('Translation', [2052, 1200])])
+  ]
+)
+"@
+    Set-Content -LiteralPath $Path -Value $content -Encoding UTF8
+}
+
 function Copy-RuntimeKnowledgeAssets {
     param(
         [Parameter(Mandatory = $true)][string]$SourceRoot,
@@ -245,6 +302,14 @@ function Assert-SourceCodeAuthorityCurrent {
 }
 
 Reset-BundleDirectory -Path $BundleRoot
+New-PyInstallerVersionFile `
+    -Path $GuiVersionFile `
+    -InternalName 'EquipmentDesignGraphApp' `
+    -Description 'Equipment Design Selector Graphical Application'
+New-PyInstallerVersionFile `
+    -Path $AgentVersionFile `
+    -InternalName 'EquipmentDesignAgentCLI' `
+    -Description 'Equipment Design Selector Agent CLI'
 $archiveKnowledgeFileCount = 0
 if ($KnowledgeArchive) {
     $archiveKnowledgeFileCount = Copy-RuntimeKnowledgeAssets `
@@ -341,6 +406,7 @@ try {
     & $Python -m PyInstaller --noconfirm --clean $WindowMode $PackageMode `
         --name 'EquipmentDesignGraphApp' `
         --icon $AppIcon `
+        --version-file $GuiVersionFile `
         --distpath $OutputDir `
         --workpath $GuiWorkPath `
         --specpath $BuildRoot `
@@ -363,6 +429,7 @@ try {
     & $Python -m PyInstaller --noconfirm --clean --console $PackageMode `
         --name 'EquipmentDesignAgentCLI' `
         --icon $AppIcon `
+        --version-file $AgentVersionFile `
         --distpath $OutputDir `
         --workpath $AgentWorkPath `
         --specpath $BuildRoot `
