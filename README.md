@@ -397,12 +397,12 @@ GUI“公式链”页直接显示输入、来源、代码与双哈希；HTML/Mar
 
 普通用户请从 GitHub Releases 下载：
 
-- [EquipmentDesignGraphApp v2.4.1（Windows x64）](https://github.com/milklong888/equipment-design-selector/releases/download/v2.4.1/EquipmentDesignGraphApp-v2.4.1-windows-x64.zip)：Windows 图形程序及其 `_internal` 运行资产；
-- [EquipmentDesignAgentCLI v2.4.1（Windows x64）](https://github.com/milklong888/equipment-design-selector/releases/download/v2.4.1/EquipmentDesignAgentCLI-v2.4.1-windows-x64.zip)：无界面 Agent、自动化接口、辅助脚本及其 `_internal` 运行资产。
+- [EquipmentDesignGraphApp v2.4.2（Windows x64）](https://github.com/milklong888/equipment-design-selector/releases/download/v2.4.2/EquipmentDesignGraphApp-v2.4.2-win64.zip)：Windows 图形程序及其 `_internal` 运行资产；
+- [EquipmentDesignAgentCLI v2.4.2（Windows x64）](https://github.com/milklong888/equipment-design-selector/releases/download/v2.4.2/EquipmentDesignAgentCLI-v2.4.2-win64.zip)：无界面 Agent、自动化接口、辅助脚本及其 `_internal` 运行资产。
 
 完整知识包约 1.42 GiB，正式构建采用目录包而不是单文件自解压包。目录包避免每次启动把大型 SQLite 和知识资产解压到临时目录；移动或发布时必须保留整个程序目录，不能只复制 EXE。
 
-详细操作见 [使用说明.md](使用说明.md)。当前 GitHub 已发布 Windows 成品仍见 [v2.4.1 发布与成品核验](docs/RELEASE_2_4_1_20260729.md)；v2.4.2 已在本地完成构建和成品核验、正在等待发布，成品哈希、DeepSeek 实测和边界见 [v2.4.2 本地成品核验与待发布说明](docs/RELEASE_2_4_2_20260820.md)。在 GitHub 出现对应 tag 和资产前，不应把本地 ZIP 写成已经发布。早期阶段核验见 [2.4.0 交付核验](docs/STAGE1_2_4_0_RELEASE_VERIFICATION_20260724.md)。
+详细操作见 [使用说明.md](使用说明.md)。当前 Windows 成品见 [GitHub v2.4.2 Release](https://github.com/milklong888/equipment-design-selector/releases/tag/v2.4.2)，构建、哈希、DeepSeek 实测、远端重新下载复核和工程边界见 [v2.4.2 发布与远端成品复核说明](docs/RELEASE_2_4_2_20260820.md)。历史版本见 [v2.4.1 发布与成品核验](docs/RELEASE_2_4_1_20260729.md)，早期阶段核验见 [2.4.0 交付核验](docs/STAGE1_2_4_0_RELEASE_VERIFICATION_20260724.md)。
 
 ### 源码运行
 
@@ -468,9 +468,9 @@ CLI 接收 `equipment-design-agent-request-v1` JSON，可执行：
 - 17/17 个设备族具体型式覆盖通过；
 - 数据库权威审计：2/2 个活动消费者通过；RAG 库和当前结构化库的大小、SHA-256、`quick_check`、表计数、构建清单及必需数据集均匹配；
 - v2.4.1 运行时知识资产：6759 个文件、1,489,355,669 bytes，SQLite `quick_check=ok`；
-- v2.4.2 本地 GUI/CLI 两个 EXE 的文件版本与产品版本均为 `2.4.2.0`；核心源码集合 SHA-256 为 `26EB4249728C20F3D57CA6830C7A4EA168FAFA2A5DB45D2C4E8354CF88D0B446`，知识包修订为 `96566D7F5CAD64569B1679F413E4D3683AE4B149BD5D5D131460F557BC1A2E41`；
-- v2.4.2 CLI 原成品目录与 UTF-8 ZIP 解压目录的 `selftest` 均为 17/17；GUI 原成品目录与 ZIP 解压目录均在隐藏启动 12 秒后保持存活并通过响应检查；
-- v2.4.2 待发布 GraphApp ZIP：181,152,115 bytes，7,773 个条目，SHA-256 `D6A373F83FB5DCADAB46BD812455AC4A02C2299560EBE2E1D34BE032D584DF8E`；CLI ZIP：181,252,005 bytes，7,777 个条目，SHA-256 `5629DA5E0AD9AC0F5C1FF5F1AF60DE6EC34F44F24C9A036C4A8663E0A0AE8136`；
+- v2.4.2 GUI/CLI 两个 EXE 的文件版本与产品版本均为 `2.4.2.0`；核心源码集合 SHA-256 为 `26EB4249728C20F3D57CA6830C7A4EA168FAFA2A5DB45D2C4E8354CF88D0B446`，知识包修订为 `96566D7F5CAD64569B1679F413E4D3683AE4B149BD5D5D131460F557BC1A2E41`；
+- v2.4.2 CLI 原成品、本地 ZIP 解压件和 GitHub 远端重新下载件的 `selftest` 均为 17/17；GUI 三个对应位置均在隐藏启动 12 秒后保持存活并通过响应检查；
+- v2.4.2 GitHub GraphApp ZIP：181,152,115 bytes，7,773 个条目，SHA-256 `D6A373F83FB5DCADAB46BD812455AC4A02C2299560EBE2E1D34BE032D584DF8E`；CLI ZIP：181,252,005 bytes，7,777 个条目，SHA-256 `5629DA5E0AD9AC0F5C1FF5F1AF60DE6EC34F44F24C9A036C4A8663E0A0AE8136`；GitHub 资产元数据和实际重新下载哈希均一致；
 - v2.4.2 ZIP 内运行时知识包为 6,759 个文件、1,489,355,669 bytes，SQLite `quick_check=ok`；ZIP 元数据使用 UTF-8，中文说明文件名已验证可正确读取；
 - 核心源码、知识包与独立程序 SHA-256 见交付核验文档。
 
@@ -478,7 +478,7 @@ CLI 接收 `equipment-design-agent-request-v1` JSON，可执行：
 
 - 充值或更换具备可用余额的授权账号后，重新执行未完成的调节阀与 GUI 真空塔步骤，再完成整套 GUI 网络矩阵；今后的审计流程优先运行 `--tk-smoke`，先关闭本地窗口/PFD 状态问题，再消耗远程调用额度；
 - 在用户批准的数据边界内，用生产项目 Aspen 案例完成 GUI 人工操作、远程 Agent、单设备重算、报告导出与人工签收的端到端验收；真实 Aspen 两案目前仍仅本地核验；
-- 将已经通过本地核验的 v2.4.2 GUI/CLI ZIP 发布到 GitHub，并在发布后按本文记录的大小、条目数和 SHA-256 复核远端资产；当前尚未发布，下载区仍以 v2.4.1 为准；
+- v2.4.2 已发布并完成远端重新下载复核；以后若源码集合、知识包或构建环境发生变化，必须重新构建、重新验收并发布新版本，不能覆盖复用本次哈希；
 - 厂家曲线、EDR、塔内件水力学和正式机械设计的项目级闭合。
 
 当前 Aspen 实测的逐案状态、哈希和证据边界见
