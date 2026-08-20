@@ -407,16 +407,30 @@ PROGRAMMATIC_FAMILY_SUPPLEMENTAL_FIELDS: dict[str, tuple[str, ...]] = {
         "impeller_diameter_mm",
         "baffle_count",
         "rotational_speed_rpm",
+        "density_kg_m3",
+        "dynamic_viscosity_mpa_s",
+        "reynolds_number",
+        "power_number",
+        "power_number_branch_id",
+        "impeller_family",
+        "type_selection_basis",
+        "power_number_estimated_shaft_power_kw",
+        "agitator_power_density_kw_m3",
+        "power_basis",
+        "power_deviation_percent",
         "shaft_power_kw",
         "motor_power_kw",
         "torque_nm",
         "shaft_diameter_mm",
+        "shaft_diameter_basis",
         "gearbox_ratio",
         "agitator_material_grade",
         "shaft_material_grade",
         "seal_type",
         "material",
         "mixing_metric",
+        "adjustment_recommendation",
+        "selection_branch_narrative",
         "quantity_count",
         "technical_specification",
     ),
@@ -426,11 +440,21 @@ PROGRAMMATIC_FAMILY_SUPPLEMENTAL_FIELDS: dict[str, tuple[str, ...]] = {
         "model_designation",
         "medium_name",
         "flow_m3_h",
+        "single_train_flow_m3_h",
+        "parallel_train_count",
         "target_velocity_m_s",
         "required_inner_diameter_mm",
+        "required_inner_diameter_per_train_mm",
         "selected_dn",
         "selected_outer_diameter_mm",
         "selected_wall_thickness_mm",
+        "selected_wall_basis",
+        "selected_dn_standard_id",
+        "selected_dn_standard_version",
+        "selected_dn_source_pdf_sha256",
+        "selected_dn_source_table_asset_id",
+        "selected_dn_source_row_1based",
+        "dn_selection_basis",
         "actual_velocity_m_s",
         "element_type",
         "element_count",
@@ -442,7 +466,13 @@ PROGRAMMATIC_FAMILY_SUPPLEMENTAL_FIELDS: dict[str, tuple[str, ...]] = {
         "reynolds_number",
         "flow_regime",
         "pressure_drop_kpa",
+        "predicted_pressure_drop_kpa",
         "allowable_pressure_drop_kpa",
+        "pressure_drop_ratio",
+        "hydraulic_status",
+        "element_count_basis",
+        "adjustment_recommendation",
+        "selection_branch_narrative",
         "mixing_metric",
         "blockage_cleaning_boundary",
         "material",
@@ -599,6 +629,21 @@ PROGRAMMATIC_PROFILE_SUPPLEMENTAL_FIELDS: dict[str, tuple[str, ...]] = {
         "elements_per_pressure_vessel",
         "pressure_vessel_count",
         "membrane_area_m2",
+        "required_membrane_area_m2",
+        "design_membrane_area_m2",
+        "required_element_count",
+        "design_margin_percent",
+        "elements_per_train",
+        "parallel_train_count",
+        "array_stage_count",
+        "skid_count",
+        "array_sizing_status",
+        "area_basis",
+        "arrangement_basis",
+        "target_flow_basis",
+        "geometry_consistency_warning",
+        "adjustment_recommendation",
+        "selection_branch_narrative",
         "flux",
         "selectivity",
         "recovery_percent",
@@ -679,12 +724,28 @@ PROGRAMMATIC_PROFILE_SUPPLEMENTAL_FIELDS: dict[str, tuple[str, ...]] = {
         "cycle_time_h",
         "adsorption_time_h",
         "tower_count",
+        "parallel_train_count",
+        "required_tower_count_per_train",
         "vessel_diameter_mm",
         "bed_volume_m3_per_tower",
+        "required_bed_volume_m3_per_tower",
         "bed_height_mm",
         "adsorbent_type",
         "adsorbent_bulk_density_kg_m3",
         "adsorbent_mass_kg_per_tower",
+        "required_adsorbent_mass_kg_per_tower",
+        "required_total_adsorbent_mass_kg",
+        "required_total_bed_volume_m3",
+        "contaminant_load_kg_h",
+        "adsorbent_working_capacity_kg_kg",
+        "design_margin_percent",
+        "cycle_phase_sum_h",
+        "cycle_balance_status",
+        "bed_loading_margin_percent",
+        "capacity_branch_id",
+        "physical_capacity_basis_supplied",
+        "adjustment_recommendation",
+        "selection_branch_narrative",
         "regeneration_method",
         "allowable_pressure_drop_kpa",
         "shell_material_grade",
@@ -740,16 +801,34 @@ PROGRAMMATIC_PROFILE_SUPPLEMENTAL_FIELDS: dict[str, tuple[str, ...]] = {
         "compressibility_factor",
         "heat_capacity_ratio_k",
         "gas_density_kg_m3",
+        "eos_gas_density_kg_m3",
+        "density_basis",
+        "mass_flow_kg_h",
         "mass_flow_kg_s",
+        "mass_flow_basis",
         "inlet_temperature_c",
         "outlet_temperature_c",
         "stage_count",
         "per_stage_pressure_ratio",
         "expander_isentropic_specific_work_kj_kg",
         "expander_actual_specific_work_kj_kg",
+        "calculated_shaft_power_kw",
         "shaft_power_kw",
         "efficiency_percent",
+        "efficiency_basis",
+        "type_selection_basis",
         "rotational_speed_rpm",
+        "rotational_speed_basis",
+        "normal_bypass_fraction_percent",
+        "protective_bypass_capacity_percent",
+        "bypass_required",
+        "bypass_control_strategy",
+        "operating_envelope_status",
+        "maximum_stage_pressure_ratio",
+        "minimum_outlet_temperature_c",
+        "maximum_recoverable_power_kw",
+        "adjustment_recommendation",
+        "selection_branch_narrative",
         "generator_efficiency_percent",
         "electrical_power_kw",
         "generator_power_kw",
@@ -851,16 +930,53 @@ FALLBACK_FIELD_METADATA: dict[str, dict[str, Any]] = {
     "volume_basis": {"label": "容积计算基准"},
     "inner_diameter_mm": {"label": "适配容器内径初算", "unit": "mm"},
     "impeller_diameter_mm": {"label": "搅拌桨直径候选", "unit": "mm"},
+    "dynamic_viscosity_mpa_s": {
+        "label": "动力黏度",
+        "unit": "mPa·s",
+    },
+    "power_number": {"label": "搅拌功率准数 Np", "unit": "-"},
+    "power_number_branch_id": {"label": "Np-Re 计算分支"},
+    "impeller_family": {"label": "程序选择的桨叶族"},
+    "type_selection_basis": {"label": "具体型式选择依据"},
+    "power_number_estimated_shaft_power_kw": {
+        "label": "Np-Re 公式初算轴功率",
+        "unit": "kW",
+    },
+    "power_basis": {"label": "采用轴功率的数值基准"},
+    "power_deviation_percent": {
+        "label": "采用轴功率相对 Np 初算偏差",
+        "unit": "%",
+    },
     "torque_nm": {"label": "程序计算轴扭矩", "unit": "N·m"},
     "shaft_diameter_mm": {"label": "搅拌轴直径候选", "unit": "mm"},
+    "shaft_diameter_basis": {"label": "搅拌轴径计算适用边界"},
     "gearbox_ratio": {"label": "减速机传动比候选", "unit": "-"},
     "mixing_metric": {"label": "混合任务/验收指标"},
     "medium_name": {"label": "介质名称"},
+    "single_train_flow_m3_h": {
+        "label": "单列静态混合器流量",
+        "unit": "m3/h",
+    },
+    "parallel_train_count": {"label": "程序选择并联列数", "unit": "列"},
     "target_velocity_m_s": {"label": "设计目标流速", "unit": "m/s"},
     "required_inner_diameter_mm": {"label": "水力所需最小内径", "unit": "mm"},
+    "required_inner_diameter_per_train_mm": {
+        "label": "单列水力所需最小内径",
+        "unit": "mm",
+    },
     "selected_dn": {"label": "程序选择公称直径", "unit": "DN"},
     "selected_outer_diameter_mm": {"label": "程序选择管外径", "unit": "mm"},
     "selected_wall_thickness_mm": {"label": "程序选择壁厚", "unit": "mm"},
+    "selected_wall_basis": {"label": "壁厚数值依据与适用边界"},
+    "selected_dn_standard_id": {"label": "DN/外径来源标准"},
+    "selected_dn_standard_version": {"label": "DN/外径来源标准版本"},
+    "selected_dn_source_pdf_sha256": {"label": "DN 来源文件 SHA-256"},
+    "selected_dn_source_table_asset_id": {"label": "DN 来源数据表标识"},
+    "selected_dn_source_row_1based": {
+        "label": "DN 来源数据表行号",
+        "unit": "行",
+    },
+    "dn_selection_basis": {"label": "DN 选择依据"},
     "element_type": {"label": "静态混合元件具体型式"},
     "element_count": {"label": "静态混合元件数量", "unit": "个"},
     "element_length_to_diameter_ratio": {
@@ -874,7 +990,19 @@ FALLBACK_FIELD_METADATA: dict[str, dict[str, Any]] = {
     },
     "flow_regime": {"label": "程序判定流态"},
     "pressure_drop_kpa": {"label": "程序计算压降", "unit": "kPa"},
+    "predicted_pressure_drop_kpa": {
+        "label": "静态混合器预测压降",
+        "unit": "kPa",
+    },
     "allowable_pressure_drop_kpa": {"label": "允许压降", "unit": "kPa"},
+    "pressure_drop_ratio": {
+        "label": "预测压降/允许压降",
+        "unit": "-",
+    },
+    "hydraulic_status": {"label": "水力约束判定状态"},
+    "element_count_basis": {"label": "混合元件数量选择依据"},
+    "adjustment_recommendation": {"label": "程序调整与替代方案"},
+    "selection_branch_narrative": {"label": "程序实际分支自然语言说明"},
     "blockage_cleaning_boundary": {"label": "堵塞与清洗结构边界"},
     "service_route": {"label": "程序选择的膜分离服务路线"},
     "element_standard_designation": {"label": "膜元件具体规格"},
@@ -889,6 +1017,24 @@ FALLBACK_FIELD_METADATA: dict[str, dict[str, Any]] = {
         "unit": "支",
     },
     "pressure_vessel_count": {"label": "膜壳数量", "unit": "支"},
+    "required_membrane_area_m2": {
+        "label": "目标流量所需膜面积",
+        "unit": "m2",
+    },
+    "design_membrane_area_m2": {
+        "label": "含设计裕量膜面积",
+        "unit": "m2",
+    },
+    "required_element_count": {"label": "计算所需膜元件数", "unit": "支"},
+    "design_margin_percent": {"label": "程序采用设计裕量", "unit": "%"},
+    "elements_per_train": {"label": "每列膜元件数", "unit": "支/列"},
+    "array_stage_count": {"label": "膜阵列段数", "unit": "段"},
+    "skid_count": {"label": "膜装置橇块数量", "unit": "套"},
+    "array_sizing_status": {"label": "膜面积与整数阵列校核状态"},
+    "area_basis": {"label": "膜面积数值基准"},
+    "arrangement_basis": {"label": "膜阵列布置基准"},
+    "target_flow_basis": {"label": "膜通量计算目标流量基准"},
+    "geometry_consistency_warning": {"label": "膜几何一致性警告"},
     "permeate_flow_m3_h": {"label": "程序计算产水/渗透液量", "unit": "m3/h"},
     "feed_flow_m3_h": {"label": "程序计算膜装置进料量", "unit": "m3/h"},
     "concentrate_flow_m3_h": {"label": "程序计算浓水量", "unit": "m3/h"},
@@ -937,6 +1083,44 @@ FALLBACK_FIELD_METADATA: dict[str, dict[str, Any]] = {
         "label": "单塔吸附剂装填量",
         "unit": "kg",
     },
+    "required_tower_count_per_train": {
+        "label": "每列循环所需吸附塔数",
+        "unit": "台/列",
+    },
+    "required_bed_volume_m3_per_tower": {
+        "label": "单塔所需床层容积",
+        "unit": "m3",
+    },
+    "required_adsorbent_mass_kg_per_tower": {
+        "label": "单塔所需吸附剂质量",
+        "unit": "kg",
+    },
+    "required_total_adsorbent_mass_kg": {
+        "label": "全套所需吸附剂总质量",
+        "unit": "kg",
+    },
+    "required_total_bed_volume_m3": {
+        "label": "全套所需床层总体积",
+        "unit": "m3",
+    },
+    "contaminant_load_kg_h": {
+        "label": "待脱除污染物负荷",
+        "unit": "kg/h",
+    },
+    "adsorbent_working_capacity_kg_kg": {
+        "label": "吸附剂动态工作容量",
+        "unit": "kg/kg",
+    },
+    "cycle_phase_sum_h": {"label": "循环各步骤时间合计", "unit": "h"},
+    "cycle_balance_status": {"label": "吸附循环与床层容量校核状态"},
+    "bed_loading_margin_percent": {
+        "label": "选定床层装填容量裕量",
+        "unit": "%",
+    },
+    "capacity_branch_id": {"label": "床层容量计算分支"},
+    "physical_capacity_basis_supplied": {
+        "label": "是否已提供物理床层容量依据"
+    },
     "regeneration_method": {"label": "程序选择吸附剂再生方式"},
     "generator_efficiency_percent": {"label": "发电机效率", "unit": "%"},
     "generator_power_kw": {"label": "发电机额定功率候选", "unit": "kW"},
@@ -944,6 +1128,41 @@ FALLBACK_FIELD_METADATA: dict[str, dict[str, Any]] = {
     "bearing_type": {"label": "程序选择轴承型式"},
     "coupling_type": {"label": "程序选择联轴器/齿轮箱型式"},
     "mass_flow_kg_s": {"label": "气体质量流量初算", "unit": "kg/s"},
+    "eos_gas_density_kg_m3": {
+        "label": "状态方程复核气体密度",
+        "unit": "kg/m3",
+    },
+    "density_basis": {"label": "膨胀机采用气体密度来源"},
+    "mass_flow_basis": {"label": "膨胀机采用质量流量来源"},
+    "calculated_shaft_power_kw": {
+        "label": "膨胀机公式计算轴功率",
+        "unit": "kW",
+    },
+    "efficiency_basis": {"label": "等熵效率数值来源"},
+    "rotational_speed_basis": {"label": "转速候选数值来源与边界"},
+    "normal_bypass_fraction_percent": {
+        "label": "正常工况连续旁路比例初算",
+        "unit": "%",
+    },
+    "protective_bypass_capacity_percent": {
+        "label": "启停/跳车保护旁路容量",
+        "unit": "%",
+    },
+    "bypass_required": {"label": "是否要求膨胀机旁路"},
+    "bypass_control_strategy": {"label": "膨胀机旁路控制策略"},
+    "operating_envelope_status": {"label": "膨胀机工况安全门状态"},
+    "maximum_stage_pressure_ratio": {
+        "label": "允许单级最大压比",
+        "unit": "-",
+    },
+    "minimum_outlet_temperature_c": {
+        "label": "允许最低出口温度",
+        "unit": "°C",
+    },
+    "maximum_recoverable_power_kw": {
+        "label": "系统允许最大回收功率",
+        "unit": "kW",
+    },
     "expander_isentropic_specific_work_kj_kg": {
         "label": "气体膨胀等熵比功",
         "unit": "kJ/kg",
@@ -2555,6 +2774,41 @@ def _verified_programmatic_storage_vessel_specification(
     return specification
 
 
+_PROGRAMMATIC_AUXILIARY_DISPLAY_STATUSES = frozenset({
+    "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+    "BLOCKED_STATIC_MIXER_PRESSURE_DROP_CONSTRAINT",
+    "BLOCKED_STATIC_MIXER_VELOCITY_CONSTRAINT",
+})
+
+_PROGRAMMATIC_MEMBRANE_PACKAGE_DISPLAY_STATUSES = frozenset({
+    "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+    "PRELIMINARY_CAPACITY_ESTIMATE_WITHOUT_TARGET_FLOW",
+    "BLOCKED_MEMBRANE_ARRAY_CONSTRAINT",
+    "BLOCKED_CAPACITY_BASIS_OPEN",
+    "BLOCKED_TSA_CYCLE_OR_BED_CONSTRAINT",
+    "BLOCKED_PHYSICAL_BED_BASIS_OPEN",
+    "BLOCKED_PACKAGE_PROCESS_FUNCTION_UNRESOLVED",
+})
+
+_PROGRAMMATIC_TURBINE_DISPLAY_STATUSES = frozenset({
+    "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+    "BLOCKED_EXPANDER_OPERATING_ENVELOPE",
+})
+
+_PROGRAMMATIC_SPECIFICATION_CONTEXT_KEYS = (
+    "programmatic_pipe_specification",
+    "programmatic_valve_specification",
+    "programmatic_tower_specification",
+    "programmatic_vessel_separator_specification",
+    "programmatic_reactor_specification",
+    "programmatic_crystallizer_specification",
+    "programmatic_storage_vessel_specification",
+    "programmatic_auxiliary_specification",
+    "programmatic_membrane_package_specification",
+    "programmatic_turbine_specification",
+)
+
+
 def _verified_programmatic_auxiliary_specification(
     value: Any,
 ) -> dict[str, Any]:
@@ -2577,10 +2831,7 @@ def _verified_programmatic_auxiliary_specification(
         raise CustomerDeliveryError(
             "programmatic auxiliary-equipment specification is not deterministic"
         )
-    if (
-        specification.get("status")
-        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
-    ):
+    if specification.get("status") not in _PROGRAMMATIC_AUXILIARY_DISPLAY_STATUSES:
         return specification
     if specification.get("program_generated") is not True:
         raise CustomerDeliveryError(
@@ -2657,7 +2908,7 @@ def _verified_programmatic_membrane_package_specification(
         )
     if (
         specification.get("status")
-        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        not in _PROGRAMMATIC_MEMBRANE_PACKAGE_DISPLAY_STATUSES
     ):
         return specification
     if specification.get("program_generated") is not True:
@@ -2730,10 +2981,7 @@ def _verified_programmatic_turbine_specification(
         raise CustomerDeliveryError(
             "programmatic turbine specification is not deterministic"
         )
-    if (
-        specification.get("status")
-        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
-    ):
+    if specification.get("status") not in _PROGRAMMATIC_TURBINE_DISPLAY_STATUSES:
         return specification
     if specification.get("program_generated") is not True:
         raise CustomerDeliveryError(
@@ -3051,7 +3299,7 @@ def _context(
     )
     if (
         auxiliary_specification.get("status")
-        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        in _PROGRAMMATIC_AUXILIARY_DISPLAY_STATUSES
         and isinstance(auxiliary_specification.get("fields"), Mapping)
     ):
         for field_id, descriptor in auxiliary_specification["fields"].items():
@@ -3070,7 +3318,7 @@ def _context(
     )
     if (
         membrane_package_specification.get("status")
-        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        in _PROGRAMMATIC_MEMBRANE_PACKAGE_DISPLAY_STATUSES
         and isinstance(
             membrane_package_specification.get("fields"),
             Mapping,
@@ -3093,7 +3341,7 @@ def _context(
     )
     if (
         turbine_specification.get("status")
-        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        in _PROGRAMMATIC_TURBINE_DISPLAY_STATUSES
         and isinstance(turbine_specification.get("fields"), Mapping)
     ):
         for field_id, descriptor in turbine_specification["fields"].items():
@@ -3317,6 +3565,28 @@ def _union_fields(selected_profiles: Sequence[Mapping[str, Any]]) -> list[dict[s
     return sorted(fields.values(), key=lambda item: (int(item.get("order", 1_000_000)), item["field_id"]))
 
 
+def _calculation_or_constraint_gate_blocked(
+    context: Mapping[str, Any],
+) -> bool:
+    package = context.get("package", {})
+    package_status = str(
+        package.get("status") if isinstance(package, Mapping) else ""
+    ).strip().upper()
+    specification_statuses = [
+        str(specification.get("status") or "").strip().upper()
+        for key in _PROGRAMMATIC_SPECIFICATION_CONTEXT_KEYS
+        for specification in [context.get(key)]
+        if isinstance(specification, Mapping)
+    ]
+    return (
+        package_status.startswith(("BLOCKED", "FAIL"))
+        or any(
+            status.startswith(("BLOCKED", "FAIL"))
+            for status in specification_statuses
+        )
+    )
+
+
 def _model_status(context: Mapping[str, Any]) -> str:
     pipe_specification = context.get("programmatic_pipe_specification", {})
     if (
@@ -3325,6 +3595,11 @@ def _model_status(context: Mapping[str, Any]) -> str:
         == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
     ):
         return "preliminary_concrete_specification_selected"
+    if _calculation_or_constraint_gate_blocked(context):
+        # A calculation/constraint hard gate is stronger than an adjustment
+        # proposal or a stale upstream candidate.  Keep the preliminary
+        # designation visible, but never describe the result as review-ready.
+        return "calculation_blocked"
     adjustment_plan = context.get("engineering_adjustment_plan", {})
     if (
         isinstance(adjustment_plan, Mapping)
@@ -3649,11 +3924,16 @@ def _model_value(context: Mapping[str, Any]) -> tuple[Any, str]:
         )
     )
     if (
-        isinstance(adjustment_plan, Mapping)
+        not _calculation_or_constraint_gate_blocked(context)
+        and isinstance(adjustment_plan, Mapping)
         and adjustment_plan.get("triggered") is True
         and isinstance(adjustment_configuration, Mapping)
         and adjustment_designation_is_concrete
     ):
+        # When the equipment calculation itself remains valid, a triggered
+        # multi-train/split-equipment plan is the customer-facing system
+        # designation.  A blocked program specification still takes priority
+        # below so its concrete preliminary candidate cannot be hidden.
         return (
             adjustment_designation,
             "ALGORITHMIC_SYSTEM_MODIFICATION_DESIGNATION",
@@ -3759,8 +4039,20 @@ def _model_value(context: Mapping[str, Any]) -> tuple[Any, str]:
     if (
         isinstance(membrane_package_specification, Mapping)
         and membrane_package_specification.get("status")
-        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        in _PROGRAMMATIC_MEMBRANE_PACKAGE_DISPLAY_STATUSES
         and _present(membrane_package_designation)
+    ):
+        return (
+            membrane_package_designation,
+            "PROGRAMMATIC_MEMBRANE_PACKAGE_ENGINEERING_DESIGNATION",
+        )
+    if (
+        isinstance(membrane_package_specification, Mapping)
+        and membrane_package_specification.get("status")
+        == "BLOCKED_PACKAGE_PROCESS_FUNCTION_UNRESOLVED"
+        and str(membrane_package_designation or "").startswith(
+            "PKG-ROUTE-OPEN"
+        )
     ):
         return (
             membrane_package_designation,
@@ -3784,7 +4076,7 @@ def _model_value(context: Mapping[str, Any]) -> tuple[Any, str]:
     if (
         isinstance(turbine_specification, Mapping)
         and turbine_specification.get("status")
-        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        in _PROGRAMMATIC_TURBINE_DISPLAY_STATUSES
         and _present(turbine_designation)
     ):
         return (
@@ -3837,12 +4129,22 @@ def _model_value(context: Mapping[str, Any]) -> tuple[Any, str]:
     if (
         isinstance(auxiliary_specification, Mapping)
         and auxiliary_specification.get("status")
-        == "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        in _PROGRAMMATIC_AUXILIARY_DISPLAY_STATUSES
         and _present(auxiliary_designation)
     ):
         return (
             auxiliary_designation,
             "PROGRAMMATIC_AUXILIARY_ENGINEERING_DESIGNATION",
+        )
+    if (
+        isinstance(adjustment_plan, Mapping)
+        and adjustment_plan.get("triggered") is True
+        and isinstance(adjustment_configuration, Mapping)
+        and adjustment_designation_is_concrete
+    ):
+        return (
+            adjustment_designation,
+            "ALGORITHMIC_SYSTEM_MODIFICATION_DESIGNATION",
         )
     model = context["model"]
     status = _model_status(context)
@@ -4319,10 +4621,7 @@ def _programmatic_auxiliary_spec_cell(
     specification = context.get("programmatic_auxiliary_specification")
     if not isinstance(specification, Mapping):
         return None
-    if (
-        specification.get("status")
-        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
-    ):
+    if specification.get("status") not in _PROGRAMMATIC_AUXILIARY_DISPLAY_STATUSES:
         return None
     fields = specification.get("fields")
     descriptor = (
@@ -4364,6 +4663,11 @@ def _programmatic_auxiliary_spec_cell(
         ),
         "warning": descriptor.get("warning"),
         "basis": _json_safe(descriptor.get("basis", [])),
+        "family_calculation_id": descriptor.get("family_calculation_id"),
+        "formula_id": descriptor.get("formula_id"),
+        "source_refs": _json_safe(descriptor.get("source_refs", [])),
+        "formula_trace_sha256": descriptor.get("formula_trace_sha256"),
+        "traceability_status": descriptor.get("traceability_status"),
     }
     lineage = (
         context.get("aspen_parameter_lineage", {}).get(source_field)
@@ -4408,7 +4712,7 @@ def _programmatic_membrane_package_spec_cell(
         return None
     if (
         specification.get("status")
-        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+        not in _PROGRAMMATIC_MEMBRANE_PACKAGE_DISPLAY_STATUSES
     ):
         return None
     fields = specification.get("fields")
@@ -4451,6 +4755,11 @@ def _programmatic_membrane_package_spec_cell(
         ),
         "warning": descriptor.get("warning"),
         "basis": _json_safe(descriptor.get("basis", [])),
+        "family_calculation_id": descriptor.get("family_calculation_id"),
+        "formula_id": descriptor.get("formula_id"),
+        "source_refs": _json_safe(descriptor.get("source_refs", [])),
+        "formula_trace_sha256": descriptor.get("formula_trace_sha256"),
+        "traceability_status": descriptor.get("traceability_status"),
     }
     lineage = (
         context.get("aspen_parameter_lineage", {}).get(source_field)
@@ -4491,10 +4800,7 @@ def _programmatic_turbine_spec_cell(
     specification = context.get("programmatic_turbine_specification")
     if not isinstance(specification, Mapping):
         return None
-    if (
-        specification.get("status")
-        != "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
-    ):
+    if specification.get("status") not in _PROGRAMMATIC_TURBINE_DISPLAY_STATUSES:
         return None
     fields = specification.get("fields")
     descriptor = (
@@ -4536,6 +4842,11 @@ def _programmatic_turbine_spec_cell(
         ),
         "warning": descriptor.get("warning"),
         "basis": _json_safe(descriptor.get("basis", [])),
+        "family_calculation_id": descriptor.get("family_calculation_id"),
+        "formula_id": descriptor.get("formula_id"),
+        "source_refs": _json_safe(descriptor.get("source_refs", [])),
+        "formula_trace_sha256": descriptor.get("formula_trace_sha256"),
+        "traceability_status": descriptor.get("traceability_status"),
     }
     lineage = (
         context.get("aspen_parameter_lineage", {}).get(source_field)
@@ -6606,6 +6917,10 @@ def _field_cell(
             model_source = {
                 "kind": "deterministic_programmatic_pipe_specification",
                 "program_generated": True,
+                "designation_scope": "PRELIMINARY_TYPE_SCREENING",
+                "promotion_cap": "TYPE_SCREENING",
+                "formal_design_evidence": False,
+                "purchase_ready": False,
                 "program_specification_sha256": (
                     pipe_specification.get("program_specification_sha256")
                     if isinstance(pipe_specification, Mapping)
@@ -6620,6 +6935,10 @@ def _field_cell(
             model_source = {
                 "kind": "deterministic_programmatic_valve_specification",
                 "program_generated": True,
+                "designation_scope": "PRELIMINARY_TYPE_SCREENING",
+                "promotion_cap": "TYPE_SCREENING",
+                "formal_design_evidence": False,
+                "purchase_ready": False,
                 "program_specification_sha256": (
                     valve_specification.get(
                         "program_specification_sha256"
@@ -6648,6 +6967,8 @@ def _field_cell(
                 ),
                 "promotion_cap": "TYPE_SCREENING",
                 "formal_design_evidence": False,
+                "designation_scope": "PRELIMINARY_TYPE_SCREENING",
+                "purchase_ready": False,
                 **candidate_source_metadata,
             }
         elif (
@@ -6666,6 +6987,10 @@ def _field_cell(
                 "program_generated": True,
                 "deterministic": True,
                 "llm_used": False,
+                "designation_scope": "PRELIMINARY_TYPE_SCREENING",
+                "promotion_cap": "TYPE_SCREENING",
+                "formal_design_evidence": False,
+                "purchase_ready": False,
                 "program_specification_sha256": (
                     membrane_package_specification.get(
                         "program_specification_sha256"
@@ -6675,6 +7000,25 @@ def _field_cell(
                         Mapping,
                     )
                     else None
+                ),
+                "specification_status": (
+                    membrane_package_specification.get("status")
+                    if isinstance(membrane_package_specification, Mapping)
+                    else None
+                ),
+                "selection_branch": _json_safe(
+                    membrane_package_specification.get(
+                        "selection_branch", {}
+                    )
+                    if isinstance(membrane_package_specification, Mapping)
+                    else {}
+                ),
+                "selection_branch_sha256": _sha256_json(
+                    membrane_package_specification.get(
+                        "selection_branch", {}
+                    )
+                    if isinstance(membrane_package_specification, Mapping)
+                    else {}
                 ),
                 **candidate_source_metadata,
             }
@@ -6691,12 +7035,31 @@ def _field_cell(
                 "program_generated": True,
                 "deterministic": True,
                 "llm_used": False,
+                "designation_scope": "PRELIMINARY_TYPE_SCREENING",
+                "promotion_cap": "TYPE_SCREENING",
+                "formal_design_evidence": False,
+                "purchase_ready": False,
                 "program_specification_sha256": (
                     turbine_specification.get(
                         "program_specification_sha256"
                     )
                     if isinstance(turbine_specification, Mapping)
                     else None
+                ),
+                "specification_status": (
+                    turbine_specification.get("status")
+                    if isinstance(turbine_specification, Mapping)
+                    else None
+                ),
+                "selection_branch": _json_safe(
+                    turbine_specification.get("selection_branch", {})
+                    if isinstance(turbine_specification, Mapping)
+                    else {}
+                ),
+                "selection_branch_sha256": _sha256_json(
+                    turbine_specification.get("selection_branch", {})
+                    if isinstance(turbine_specification, Mapping)
+                    else {}
                 ),
                 **candidate_source_metadata,
             }
@@ -6716,6 +7079,10 @@ def _field_cell(
                 "program_generated": True,
                 "deterministic": True,
                 "llm_used": False,
+                "designation_scope": "PRELIMINARY_TYPE_SCREENING",
+                "promotion_cap": "TYPE_SCREENING",
+                "formal_design_evidence": False,
+                "purchase_ready": False,
                 "program_specification_sha256": (
                     storage_vessel_specification.get(
                         "program_specification_sha256"
@@ -6741,12 +7108,31 @@ def _field_cell(
                 "program_generated": True,
                 "deterministic": True,
                 "llm_used": False,
+                "designation_scope": "PRELIMINARY_TYPE_SCREENING",
+                "promotion_cap": "TYPE_SCREENING",
+                "formal_design_evidence": False,
+                "purchase_ready": False,
                 "program_specification_sha256": (
                     auxiliary_specification.get(
                         "program_specification_sha256"
                     )
                     if isinstance(auxiliary_specification, Mapping)
                     else None
+                ),
+                "specification_status": (
+                    auxiliary_specification.get("status")
+                    if isinstance(auxiliary_specification, Mapping)
+                    else None
+                ),
+                "selection_branch": _json_safe(
+                    auxiliary_specification.get("selection_branch", {})
+                    if isinstance(auxiliary_specification, Mapping)
+                    else {}
+                ),
+                "selection_branch_sha256": _sha256_json(
+                    auxiliary_specification.get("selection_branch", {})
+                    if isinstance(auxiliary_specification, Mapping)
+                    else {}
                 ),
                 **candidate_source_metadata,
             }
@@ -8556,6 +8942,10 @@ def _authority_overview_projection(
     formal_gate_blockers = list(formal_blockers)
     if model_status != "final_model":
         formal_gate_blockers.append("FORMAL_MODEL_NOT_ESTABLISHED")
+    if model_status == "calculation_blocked":
+        formal_gate_blockers.append(
+            "CALCULATION_OR_CONSTRAINT_GATE_BLOCKED"
+        )
     if specificity_state != "PASS":
         formal_gate_blockers.append("SPECIFIC_SELECTION_GATE_NOT_PASSED")
     merged_cells_by_id = {

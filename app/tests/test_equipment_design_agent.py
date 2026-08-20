@@ -967,6 +967,13 @@ class EquipmentDesignAgentTests(unittest.TestCase):
         )
         self.assertTrue(response["ok"])
         self.assertEqual(response["exit_code"], 0)
+        schema_check = next(
+            item for item in response["result"]["checks"]
+            if item["id"] == "strict_schema_catalog"
+        )
+        self.assertTrue(schema_check["pass"], schema_check)
+        self.assertIn("aspen-equipment-export-v1", schema_check["detail"])
+        self.assertIn("aspen-com-extraction-coverage-v1", schema_check["detail"])
 
     def test_all_families_return_a_concrete_deterministic_type_without_placeholders(self) -> None:
         fixture = agent.load_json_file(
@@ -1155,6 +1162,9 @@ class EquipmentDesignAgentTests(unittest.TestCase):
             f"app/schemas/{path.name}"
             for path in (APP_DIR / "schemas").glob("*.json")
         }
+        expected_schema_paths.update(
+            agent.authority_revision.REQUIRED_KNOWLEDGE_SCHEMA_PATHS
+        )
         self.assertEqual(
             set(revision["schema_asset_sha256"]),
             expected_schema_paths,
@@ -1386,6 +1396,10 @@ class EquipmentDesignAgentTests(unittest.TestCase):
             {item["schema_id"] for item in capabilities["result"]["schemas"]},
         )
         self.assertIn(
+            "aspen-com-extraction-coverage-v1",
+            {item["schema_id"] for item in capabilities["result"]["schemas"]},
+        )
+        self.assertIn(
             "equipment-formula-trace-v1",
             {item["schema_id"] for item in capabilities["result"]["schemas"]},
         )
@@ -1403,6 +1417,24 @@ class EquipmentDesignAgentTests(unittest.TestCase):
         self.assertEqual(
             schema_response["result"]["document"]["$id"],
             "equipment-design-llm-step-output-v1",
+        )
+        coverage_catalog_entry = next(
+            item for item in capabilities["result"]["schemas"]
+            if item["schema_id"] == "aspen-com-extraction-coverage-v1"
+        )
+        coverage_response, code = agent.execute_request({
+            "schema": "equipment-design-agent-request-v1",
+            "operation": "schema_get",
+            "payload": {"schema_id": "aspen-com-extraction-coverage-v1"},
+        })
+        self.assertEqual(code, 0, coverage_response)
+        self.assertEqual(
+            coverage_response["result"]["sha256"],
+            coverage_catalog_entry["sha256"],
+        )
+        self.assertEqual(
+            coverage_response["result"]["document"]["$id"],
+            "aspen-com-extraction-coverage-v1",
         )
 
         response, code = agent.execute_request({

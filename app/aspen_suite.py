@@ -20,6 +20,15 @@ RUN_STATUS_FIELDS = (
     "errors",
     "warnings",
 )
+SELECTION_ALLOWED_WORKER_STATUSES = frozenset({
+    "PASS",
+    "PASS_MOCK",
+    "BLOCKED_TRANSPORT_PROPERTY_VERIFICATION",
+})
+SELECTION_ALLOWED_COVERAGE_STATUSES = frozenset({
+    "SCORED_REGISTERED_OBJECTS",
+    "REVIEW_OBJECT_DISCOVERY_GAPS",
+})
 
 
 def utc_now() -> str:
@@ -32,6 +41,61 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest().upper()
+
+
+def worker_allows_equipment_selection(worker: Mapping[str, Any]) -> bool:
+    """Fail closed when Aspen COM extraction itself is incomplete.
+
+    Transport-property or run-history gates may still leave a preliminary
+    selection result available for review.  COM tree/root extraction failures
+    are different: downstream code must not consume even a populated-looking
+    derivation payload because its equipment/stream inventory is incomplete.
+    """
+
+    status = str(worker.get("status") or "").strip().upper()
+    if status not in SELECTION_ALLOWED_WORKER_STATUSES:
+        return False
+    blockers = worker.get("com_extraction_blockers")
+    if blockers:
+        return False
+    coverage = worker.get("com_extraction_coverage_summary")
+    if not isinstance(coverage, Mapping):
+        case = worker.get("case")
+        if isinstance(case, Mapping):
+            coverage = case.get("com_extraction_coverage_summary")
+    if isinstance(coverage, Mapping):
+        coverage_status = str(
+            coverage.get("registry_completeness_status") or ""
+        ).strip().upper()
+        counts = coverage.get("counts")
+        counts = counts if isinstance(counts, Mapping) else {}
+        if coverage_status not in SELECTION_ALLOWED_COVERAGE_STATUSES:
+            return False
+        registered_error_count = counts.get("error")
+        if (
+            not isinstance(registered_error_count, int)
+            or isinstance(registered_error_count, bool)
+            or registered_error_count != 0
+        ):
+            return False
+        for identity_count_field in (
+            "unmapped_module_count",
+            "unmapped_stream_record_type_count",
+        ):
+            identity_count = coverage.get(identity_count_field)
+            if (
+                not isinstance(identity_count, int)
+                or isinstance(identity_count, bool)
+                or identity_count != 0
+            ):
+                return False
+        if bool(coverage.get("case_discovery_budget_exhausted")):
+            return False
+    result_present = isinstance(worker.get("result"), Mapping)
+    declared = worker.get("selection_result_available")
+    if isinstance(declared, bool):
+        return bool(declared and result_present)
+    return result_present
 
 
 def atomic_write_json(path: Path, value: Mapping[str, Any]) -> None:
@@ -226,6 +290,7 @@ def _artifact_paths(case_dir: Path) -> dict[str, str]:
     names = (
         "worker_result.json",
         "aspen_equipment_export.json",
+        "aspen_extraction_coverage.json",
         "aspen_equipment_derivation.json",
         "aspen_pfd_mapping.json",
         "aspen_run_status_evidence.json",
@@ -304,11 +369,30 @@ def summarize_case(
     derivation_present = bool(derivation) and (
         isinstance(equipment, list) or isinstance(piping, list)
     )
-    worker_failed = str(worker.get("status") or "").upper() == "FAILED"
+    worker_status = str(worker.get("status") or "").upper()
+    worker_selection_available = worker_allows_equipment_selection(worker)
+    coverage_summary = worker.get("com_extraction_coverage_summary")
+    if not isinstance(coverage_summary, Mapping):
+        worker_case = worker.get("case")
+        coverage_summary = (
+            worker_case.get("com_extraction_coverage_summary")
+            if isinstance(worker_case, Mapping)
+            else {}
+        )
+    coverage_status = str(
+        coverage_summary.get("registry_completeness_status")
+        if isinstance(coverage_summary, Mapping)
+        else ""
+    ).strip().upper()
+    worker_extraction_blocked = bool(
+        worker_status.startswith("BLOCKED_COM_")
+        or worker.get("com_extraction_blockers")
+        or coverage_status.startswith("NOT_SCORABLE_")
+    )
     usable = bool(
         derivation_present
         and source_unchanged
-        and not worker_failed
+        and worker_selection_available
         and candidate_coverage_complete
     )
     formal_ready = bool(
@@ -324,6 +408,8 @@ def summarize_case(
         case_status = "SELECTION_READY_FORMAL_EVIDENCE_OPEN"
     elif usable:
         case_status = "SELECTION_READY_WITH_WORKER_WARNING"
+    elif worker_extraction_blocked:
+        case_status = "BLOCKED_COM_EXTRACTION"
     else:
         case_status = "FAILED_TO_PRODUCE_SELECTION_RESULT"
     return {
@@ -351,6 +437,7 @@ def summarize_case(
         "api_ok": bool(response.get("ok")),
         "api_error": response.get("error"),
         "worker_status": worker.get("status"),
+        "worker_selection_result_available": worker_selection_available,
         "worker_returncode": response.get("returncode"),
         "open_method": worker.get("open_method"),
         "progid": worker.get("progid"),

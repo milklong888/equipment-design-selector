@@ -20,6 +20,7 @@ RUNTIME_ROOTS = (
     "equipment_selection_graph",
     "data",
     "app/schemas",
+    "app/fixtures",
 )
 STANDARDS_SQLITE_PATH = (
     "knowledge_graph/standards_graph/source_layer/indexes/standards_knowledge.sqlite"
@@ -45,6 +46,7 @@ REQUIRED_RUNTIME_PATHS = {
     "knowledge_graph/equipment_service_label_derivation_contract.md",
     "knowledge_graph/equipment_service_profile.schema.json",
     "knowledge_graph/aspen_equipment_export.schema.json",
+    "knowledge_graph/aspen_extraction_coverage.schema.json",
     "knowledge_graph/equipment_type_applicability_contract.md",
     "knowledge_graph/equipment_type_applicability_graph.schema.json",
     "knowledge_graph/equipment_type_applicability_label_catalog.json",
@@ -87,6 +89,8 @@ REQUIRED_RUNTIME_PATHS = {
     "app/schemas/equipment_family_datasheet.schema.json",
     "app/schemas/equipment_evidence_index.schema.json",
     "app/schemas/equipment_database_authority_registry.schema.json",
+    "app/fixtures/agent_selftest_request.json",
+    "app/fixtures/all_family_minimum_meaningful_inputs.json",
 }
 SQLITE_COUNT_TABLES = (
     "documents",
@@ -208,6 +212,8 @@ def _asset_class(relative: str) -> str:
         return "equipment_model_authority"
     if relative.startswith("app/schemas/"):
         return "protocol_schemas"
+    if relative.startswith("app/fixtures/"):
+        return "acceptance_fixtures"
     if relative.startswith("data/"):
         return "deterministic_data"
     return "unclassified"
@@ -302,6 +308,7 @@ def create_manifest(root: Path, output: Path | None = None) -> dict[str, Any]:
                 "standards SQLite full-text authority carrier",
                 "standards Markdown/JSON and all canonical CSV audit/table assets",
                 "deterministic pump data and all Agent/LLM/presentation schemas",
+                "frozen all-family minimum-meaningful-input acceptance fixture",
             ],
             "excluded_with_reason": {
                 "png": "rendering duplicates; figure captions, page/bbox metadata and source hashes remain queryable in SQLite",

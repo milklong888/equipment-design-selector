@@ -3,7 +3,7 @@ param(
     [string]$PythonExe = "",
     [string]$BuildDir = "",
     [string]$KnowledgeArchiveDir = "",
-    [string]$AppVersion = "2.4.2",
+    [string]$AppVersion = "2.4.3",
     [switch]$Console,
     [switch]$OneDir,
     [switch]$PrepareOnly
@@ -11,6 +11,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$OutputRoot = if ([IO.Path]::IsPathRooted($OutputDir)) {
+    [IO.Path]::GetFullPath($OutputDir)
+}
+else {
+    [IO.Path]::GetFullPath((Join-Path $Root $OutputDir))
+}
 $BuildRoot = if ([string]::IsNullOrWhiteSpace($BuildDir)) {
     Join-Path $Root 'build'
 }
@@ -101,6 +107,7 @@ $BundledKnowledge = Join-Path $BundleRoot 'knowledge_graph'
 $BundledModelGraph = Join-Path $BundleRoot 'equipment_selection_graph'
 $BundledData = Join-Path $BundleRoot 'data'
 $BundledSchemas = Join-Path $BundleRoot 'app\schemas'
+$BundledFixtures = Join-Path $BundleRoot 'app\fixtures'
 $BundleManifest = Join-Path $BundleRoot 'runtime_asset_manifest.json'
 $SourceCodeManifest = Join-Path $Root 'app\source_code_manifest.json'
 $BundledSourceCodeManifest = Join-Path $BundleRoot 'app\source_code_manifest.json'
@@ -301,6 +308,80 @@ function Assert-SourceCodeAuthorityCurrent {
     }
 }
 
+function Invoke-PackagedAgentSelftest {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExecutablePath,
+        [Parameter(Mandatory = $true)][string]$RequestPath,
+        [Parameter(Mandatory = $true)][string]$ResponsePath,
+        [int]$TimeoutMilliseconds = 600000
+    )
+    if (-not (Test-Path -LiteralPath $ExecutablePath -PathType Leaf)) {
+        throw "Packaged Agent CLI is missing: $ExecutablePath"
+    }
+    if (-not (Test-Path -LiteralPath $RequestPath -PathType Leaf)) {
+        throw "Packaged Agent selftest request is missing: $RequestPath"
+    }
+    Assert-ChildPath -ChildPath $ResponsePath -ParentPath $BuildRoot
+    if ($ExecutablePath.Contains('"') -or $RequestPath.Contains('"') -or $ResponsePath.Contains('"')) {
+        throw 'Packaged Agent selftest paths must not contain a double quote.'
+    }
+    if (Test-Path -LiteralPath $ResponsePath -PathType Leaf) {
+        [IO.File]::Delete((ConvertTo-LongPath -Path $ResponsePath))
+    }
+
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $ExecutablePath
+    $startInfo.Arguments = '--request "{0}" --output "{1}" --pretty' -f $RequestPath, $ResponsePath
+    $startInfo.WorkingDirectory = Split-Path -Parent $ExecutablePath
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    foreach ($name in @(
+        'EQUIPMENT_DESIGN_LLM_API_KEY',
+        'EQUIPMENT_DESIGN_LLM_BASE_URL',
+        'EQUIPMENT_DESIGN_LLM_MODEL_ID'
+    )) {
+        if ($startInfo.EnvironmentVariables.ContainsKey($name)) {
+            $startInfo.EnvironmentVariables.Remove($name)
+        }
+    }
+
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) {
+            throw 'Packaged Agent CLI selftest process did not start.'
+        }
+        if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+            $process.Kill()
+            throw "Packaged Agent CLI selftest timed out after $TimeoutMilliseconds ms."
+        }
+        $processExitCode = $process.ExitCode
+    }
+    finally {
+        $process.Dispose()
+    }
+    if ($processExitCode -ne 0) {
+        throw "PACKAGED_AGENT_SELFTEST_EXIT_NONZERO: $processExitCode"
+    }
+    if (-not (Test-Path -LiteralPath $ResponsePath -PathType Leaf)) {
+        throw "PACKAGED_AGENT_SELFTEST_RESPONSE_MISSING: $ResponsePath"
+    }
+    try {
+        $response = Get-Content -LiteralPath $ResponsePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch {
+        throw "PACKAGED_AGENT_SELFTEST_RESPONSE_INVALID_JSON: $($_.Exception.Message)"
+    }
+    if (
+        $response.ok -ne $true -or
+        [int]$response.exit_code -ne 0 -or
+        [string]$response.result.status -ne 'PASS'
+    ) {
+        throw "PACKAGED_AGENT_SELFTEST_RESPONSE_NOT_OK: $($response | ConvertTo-Json -Depth 8 -Compress)"
+    }
+    Write-Host "Packaged Agent CLI selftest: PASS ($($response.result.check_count) checks)"
+}
+
 Reset-BundleDirectory -Path $BundleRoot
 New-PyInstallerVersionFile `
     -Path $GuiVersionFile `
@@ -343,6 +424,14 @@ Get-ChildItem -LiteralPath (Join-Path $Root 'data\database_contracts') -Filter '
 New-Item -ItemType Directory -Path $BundledSchemas -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $Root 'app\schemas') -Filter '*.json' -File |
     Copy-Item -Destination $BundledSchemas -Force
+New-Item -ItemType Directory -Path $BundledFixtures -Force | Out-Null
+$fixtureFiles = @(
+    Get-ChildItem -LiteralPath $AppFixtures -File |
+        Where-Object { $_.Extension.ToLowerInvariant() -in @('.json', '.md') }
+)
+foreach ($fixtureFile in $fixtureFiles) {
+    Copy-Item -LiteralPath $fixtureFile.FullName -Destination $BundledFixtures -Force
+}
 
 & $Python (Join-Path $Root 'app\source_code_manifest.py') create `
     --root $Root `
@@ -374,7 +463,9 @@ $requiredBundleAssets = @(
     (Join-Path $BundledModelGraph '20-model-determination-card.md'),
     (Join-Path $BundledData 'database_authority_registry.json'),
     (Join-Path $BundledDatabaseContracts 'standards_knowledge_public_schema.sql'),
-    (Join-Path $BundledDatabaseContracts 'executable_standard_data_public_schema.sql')
+    (Join-Path $BundledDatabaseContracts 'executable_standard_data_public_schema.sql'),
+    (Join-Path $BundledFixtures 'agent_selftest_request.json'),
+    (Join-Path $BundledFixtures 'all_family_minimum_meaningful_inputs.json')
 )
 $missingBundleAssets = @($requiredBundleAssets | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
 if ($missingBundleAssets.Count -gt 0) {
@@ -393,6 +484,7 @@ Write-Host "  overlaid repository files:       $repositoryKnowledgeFileCount"
 Write-Host "  copied knowledge files total:    $knowledgeFileCount"
 Write-Host "  copied selector package files: $selectorFileCount"
 Write-Host "  copied model graph files:     $modelFileCount"
+Write-Host "  copied acceptance fixtures:  $($fixtureFiles.Count)"
 Write-Host "  bundle revision:              $($manifest.bundle_revision)"
 Write-Host "  manifest: $BundleManifest"
 Write-Host "  source code manifest: $BundledSourceCodeManifest"
@@ -422,7 +514,7 @@ try {
         --add-data "$BundledData;data" `
         --add-data "$BundledSchemas;app\schemas" `
         --add-data "$AppAssets;assets" `
-        --add-data "$AppFixtures;app\fixtures" `
+        --add-data "$BundledFixtures;app\fixtures" `
         (Join-Path $Root 'app\equipment_design_app.py')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Assert-SourceCodeAuthorityCurrent
@@ -445,10 +537,20 @@ try {
         --add-data "$BundledData;data" `
         --add-data "$BundledSchemas;app\schemas" `
         --add-data "$AppAssets;assets" `
-        --add-data "$AppFixtures;app\fixtures" `
+        --add-data "$BundledFixtures;app\fixtures" `
         (Join-Path $Root 'app\equipment_design_agent.py')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Assert-SourceCodeAuthorityCurrent
+    $PackagedAgentExecutable = if ($OneDir) {
+        Join-Path (Join-Path $OutputRoot 'EquipmentDesignAgentCLI') 'EquipmentDesignAgentCLI.exe'
+    }
+    else {
+        Join-Path $OutputRoot 'EquipmentDesignAgentCLI.exe'
+    }
+    Invoke-PackagedAgentSelftest `
+        -ExecutablePath $PackagedAgentExecutable `
+        -RequestPath (Join-Path $BundledFixtures 'agent_selftest_request.json') `
+        -ResponsePath (Join-Path $BuildRoot 'EquipmentDesignAgentCLI.selftest.response.json')
     foreach ($SidecarName in $DeliverySidecars) {
         $SidecarPath = Join-Path $Root $SidecarName
         Copy-Item -LiteralPath $SidecarPath -Destination $OutputDir -Force

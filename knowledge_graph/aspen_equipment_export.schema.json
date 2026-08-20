@@ -17,7 +17,8 @@
         "run_status_evidence_path": {"type": "string"},
         "run_status_evidence_sha256": {"type": "string", "pattern": "^[0-9A-Fa-f]{64}$"},
         "run_status": {
-          "type": "object",
+          "type": ["object", "null"],
+          "description": "Null is the explicit legacy-v1 value for read-only imports or runs without verifiable history; an object is allowed only when all four Aspen counts were verified.",
           "required": ["terminal_errors", "severe_errors", "errors", "warnings"],
           "properties": {
             "terminal_errors": {"type": "integer", "minimum": 0},

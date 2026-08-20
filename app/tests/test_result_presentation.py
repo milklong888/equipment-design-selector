@@ -402,6 +402,189 @@ class ResultPresentationTests(unittest.TestCase):
             self.assertIn(visible_text, html)
             self.assertIn(visible_text, markdown)
 
+    def test_five_family_branch_details_are_translated_with_units_and_narrative(
+        self,
+    ) -> None:
+        expected_branch_labels = {
+            "TURBULENT_PITCHED_BLADE_TURBINE_45_CONSTANT_POWER_NUMBER": (
+                "45°折叶涡轮充分湍流恒功率准数分支"
+            ),
+            "PRESSURE_DROP_DRIVEN_DN_UPSIZE": "压降驱动的 DN 增径分支",
+            "FLUX_RECOVERY_INTEGER_ARRAY_SIZING": (
+                "通量—回收率整数阵列定容分支"
+            ),
+            "DYNAMIC_WORKING_CAPACITY_MASS_BALANCE": (
+                "按动态工作容量进行质量衡算"
+            ),
+            "RADIAL_INFLOW_STAGE_POWER_SCREENING": (
+                "径向流膨胀机级数与功率初筛"
+            ),
+        }
+        expected_status_and_basis_labels = {
+            "power_number_branch_id": {
+                "power_basis": "程序 Re-Np 公式功率初筛",
+                "impeller_family": "45°折叶开启涡轮桨",
+            },
+            "hydraulic_branch_id": {
+                "hydraulic_status": "增径后压降通过",
+            },
+            "array_branch_id": {
+                "area_basis": "登记值或用户提供的单元有效膜面积",
+                "array_sizing_status": "膜阵列预设计能力通过",
+                "target_flow_basis": "用户给定产水/渗透流量目标",
+            },
+            "capacity_branch_id": {
+                "cycle_balance_status": "TSA 循环与床层容量预设计通过",
+                "process_route": "变温吸附路线（TSA）",
+            },
+            "expander_branch_id": {
+                "operating_envelope_status": "级数与功率预设计通过",
+                "density_basis": "用户或 Aspen 提供气体密度",
+                "mass_flow_basis": "用户或 Aspen 的 kg/h 质量流量换算为 kg/s",
+            },
+        }
+        cases = [
+            (
+                {
+                    "equipment_type": "搅拌器",
+                    "volume_m3": 10.0,
+                    "rotational_speed_rpm": 100.0,
+                    "density_kg_m3": 1000.0,
+                    "dynamic_viscosity_mpa_s": 1.0,
+                },
+                "power_number_branch_id",
+                "reynolds_number",
+                "-",
+            ),
+            (
+                {
+                    "equipment_type": "静态混合器",
+                    "flow_m3_h": 10.0,
+                    "target_velocity_m_s": 1.5,
+                    "allowable_pressure_drop_kpa": 2.0,
+                },
+                "hydraulic_branch_id",
+                "selected_dn",
+                "DN",
+            ),
+            (
+                {
+                    "equipment_type": "膜组件",
+                    "flux": 20.0,
+                    "recovery_percent": 80.0,
+                    "design_margin_percent": 10.0,
+                    "permeate_flow_m3_h": 10.0,
+                },
+                "array_branch_id",
+                "array_stage_count",
+                "段",
+            ),
+            (
+                {
+                    "equipment_type": "成套设备",
+                    "process_function": "TSA变温吸附脱水",
+                    "capacity": 100.0,
+                    "capacity_basis": "100 Nm3/h feed; H2O load 1 kg/h",
+                    "contaminant_load_kg_h": 1.0,
+                    "adsorbent_working_capacity_kg_kg": 0.08,
+                    "cycle_time_h": 8.0,
+                    "adsorption_time_h": 4.0,
+                },
+                "capacity_branch_id",
+                "parallel_train_count",
+                "列",
+            ),
+            (
+                {
+                    "equipment_type": "气体膨胀机",
+                    "phase": "vapor",
+                    "flow_m3_h": 1000.0,
+                    "mass_flow_kg_h": 7200.0,
+                    "gas_density_kg_m3": 3.6,
+                    "gas_molecular_weight": 28.97,
+                    "compressibility_factor": 1.0,
+                    "heat_capacity_ratio_k": 1.3,
+                    "inlet_temperature_c": 25.0,
+                    "inlet_pressure_mpa": 1.0,
+                    "outlet_pressure_mpa": 0.3,
+                    "pressure_basis": "absolute",
+                    "efficiency_percent": 80.0,
+                },
+                "expander_branch_id",
+                "protective_bypass_capacity_percent",
+                "%",
+            ),
+        ]
+        for raw, branch_key, unit_key, expected_unit in cases:
+            with self.subTest(branch_key=branch_key):
+                response = app_core.auto_match(raw)
+                presentation = result_presentation.build_presentation(response)
+                card = presentation["equipment"][0]
+                branches = card["branch_selection"][
+                    "programmatic_selection_branches"
+                ]
+                self.assertEqual(len(branches), 1)
+                branch = branches[0]
+                self.assertEqual(
+                    branch["specification_status_label"],
+                    "已形成具体初步规格",
+                )
+                self.assertIn(
+                    str(branch["specification_status"]),
+                    branch["branch_narrative"],
+                )
+                choices = {
+                    item["field_id"]: item for item in branch["choices"]
+                }
+                self.assertNotEqual(
+                    choices[branch_key]["label"], branch_key
+                )
+                self.assertEqual(choices[unit_key]["unit"], expected_unit)
+                raw_branch_code = str(
+                    branch["selection_branch"][branch_key]
+                )
+                self.assertEqual(
+                    choices[branch_key]["raw_value"], raw_branch_code
+                )
+                self.assertEqual(
+                    choices[branch_key]["value_label"],
+                    expected_branch_labels[raw_branch_code],
+                )
+                for field_id, expected_label in (
+                    expected_status_and_basis_labels[branch_key].items()
+                ):
+                    self.assertEqual(
+                        choices[field_id]["value_label"], expected_label
+                    )
+                detailed_narrative = str(
+                    branch["selection_branch"]["branch_narrative"]
+                )
+                self.assertIn(raw_branch_code, branch["branch_narrative"])
+                self.assertIn(
+                    detailed_narrative, branch["branch_narrative"]
+                )
+                self.assertIn(
+                    branch["branch_narrative"],
+                    card["branch_selection"]["natural_language"],
+                )
+                html = result_presentation.render_html(presentation)
+                self.assertIn(raw_branch_code, html)
+                self.assertIn(expected_branch_labels[raw_branch_code], html)
+                for expected_label in expected_status_and_basis_labels[
+                    branch_key
+                ].values():
+                    self.assertIn(expected_label, html)
+                self.assertIn(detailed_narrative, html)
+                if "power_calculation_id" in choices:
+                    self.assertEqual(
+                        choices["power_calculation_id"]["label"],
+                        "功率计算链",
+                    )
+                if "stage_count" in choices:
+                    self.assertEqual(
+                        choices["stage_count"]["label"], "膨胀级数"
+                    )
+
     def test_program_selected_main_equipment_and_small_component_branches_are_visible(self) -> None:
         result = app_core.manual_match("block:PUMP", {
             "equipment_tag": "P-BRANCH-OUTPUT",

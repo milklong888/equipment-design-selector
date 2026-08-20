@@ -6,13 +6,13 @@
       "source_path": "app/app_core.py"
     },
     {
-      "sha256": "FBA1B95C1C8AC1001C05E2BF079CED70227D74EF9126BC8EE8BCEB383AA6F821",
-      "size_bytes": 94945,
+      "sha256": "9858C998CFA5CAC2CB7F56C79DA8C0F5E8FFC97FE21C20BAFC8E0556E2FC35CD",
+      "size_bytes": 187310,
       "source_path": "app/aspen_com_import.py"
     },
     {
-      "sha256": "3FBEDBA5F5EE92F7B067F285C046832D097BD09ECBEC23CD32ADA2220B29EF82",
-      "size_bytes": 24858,
+      "sha256": "FF91EBBCC0E81C2E3FE9853659FA354E3D517585117A474B8FB16509B5B25C45",
+      "size_bytes": 28346,
       "source_path": "app/aspen_suite.py"
     },
     {
@@ -21,13 +21,13 @@
       "source_path": "app/aspen_pfd.py"
     },
     {
-      "sha256": "C7BCB12E5DCA64CB776340D53B01C11A3487F3C023FD6268F9963082C6E7E85D",
-      "size_bytes": 14767,
+      "sha256": "4A4746BDCCDE6C518E9480F224CDF537B8A2DABCFAE1D69EC32AB28D7485C20A",
+      "size_bytes": 18818,
       "source_path": "app/authority_revision.py"
     },
     {
-      "sha256": "2FE00E2436ECEB96446FAA59A00FC45F091533D8B5ED10EFF154C44CDF760D06",
-      "size_bytes": 398186,
+      "sha256": "22B6EB220D0EADD712E183FF653A955C8AF157B5FE4827BD1294E79E00616A4F",
+      "size_bytes": 414601,
       "source_path": "app/customer_delivery.py"
     },
     {
@@ -41,13 +41,13 @@
       "source_path": "app/derivation_workbench.py"
     },
     {
-      "sha256": "EE6A4E027C0C01EB27E8FD5397D5D0A4D696635748371F46009FF51AC5D07407",
-      "size_bytes": 149678,
+      "sha256": "BD3762032207279E27247D3DB769C59BE1136C105A5929082289534CDDEE77F2",
+      "size_bytes": 150045,
       "source_path": "app/equipment_design_agent.py"
     },
     {
-      "sha256": "8B806086087C9CA76A059AA8E1BF3DC5E8F43A296A76632ACCAC529FF928E968",
-      "size_bytes": 44982,
+      "sha256": "4C7BC6F6C998BEB41FB26D56B50929B34D4D36FAB1E5B20B824F90008A1B16A0",
+      "size_bytes": 45966,
       "source_path": "app/equipment_design_app.py"
     },
     {
@@ -61,13 +61,13 @@
       "source_path": "app/pfd_canvas.py"
     },
     {
-      "sha256": "447DF87AE70A4A994F33BF812E241076C7190877D8E3C19FD64CB2715834A553",
-      "size_bytes": 109470,
+      "sha256": "AA0C82CB1FE188C75CE7E1626A254D30C99C1BC36E081BA31CBA9D54C7E02D39",
+      "size_bytes": 120497,
       "source_path": "app/result_presentation.py"
     },
     {
-      "sha256": "04C2814991A0447EB93F2CA1A1ED599FD8920B8768EC603C6B07BDAC57F0F4A8",
-      "size_bytes": 23168,
+      "sha256": "7A67CC64D1DB3187F3ED869F631C123E21A0928AB1FE0C7A3FEE04C9518D4102",
+      "size_bytes": 23522,
       "source_path": "app/runtime_bundle.py"
     },
     {
@@ -106,8 +106,8 @@
       "source_path": "scripts/equipment_calc.py"
     },
     {
-      "sha256": "62CB51C7D52C8AAB7355EB60C444F37183EDEB48FEABAC1698688A85B7FD785E",
-      "size_bytes": 808129,
+      "sha256": "13AC7157A38A899353ECFF0EC299DBF46FFE37F96C4A4B303B20F1CC6DA78CA4",
+      "size_bytes": 947842,
       "source_path": "scripts/equipment_design_match.py"
     },
     {
@@ -116,10 +116,10 @@
       "source_path": "scripts/equipment_service_profile.py"
     }
   ],
-  "manifest_payload_sha256": "EECA13B85A47149EC87EC0E7CB27936C03FE6F583C1FF679D862E934C5306D0A",
+  "manifest_payload_sha256": "A776184F569ACD7F2119B0990C1FA9BC4E04418807970C7FB80007ECB9186AF1",
   "path_set_sha256": "E069DC540C721AD17E97BF97FAE9507EAB278FD2CAB135C0013B284AAD9554A0",
   "schema": "equipment-design-source-code-manifest-v1",
-  "source_code_set_sha256": "26EB4249728C20F3D57CA6830C7A4EA168FAFA2A5DB45D2C4E8354CF88D0B446",
+  "source_code_set_sha256": "DCC20B5788CF89106BB964BD38C6A05B1AAC13BA253A3FF6519545D006C793ED",
   "source_paths": [
     "app/app_core.py",
     "app/aspen_com_import.py",

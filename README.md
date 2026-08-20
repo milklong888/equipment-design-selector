@@ -25,6 +25,18 @@
 - Aspen 不建模的管线由程序根据流量、目标流速、标准 DN/外径目录和校核公式计算；
 - 缺失黏度等物性允许使用登记公式估算时，固定标记“内置公式计算”和暂定警告；连流量、相态、压力和温度都缺失时，仅给出带最高级警告的最低完整管线规格占位分支，禁止直接采购、施工或报审。
 
+#### v2.4.3：Aspen 提取覆盖（生产实机仍待验）
+
+以下改造已经进入 v2.4.3；它们通过了本地、Schema、打包和严格 fake-tree 验证，但尚未替代生产 Aspen COM 实机验收：
+
+- 流股和已登记模块改由字段注册表驱动提取；每个请求字段在覆盖旁车中记录 `path`、`unit`、`status` 和 `provenance`，并汇总 requested/found/missing/error/unsupported 与注册字段命中率；
+- 未登记模块保持 unknown/unmapped，不静默套用笼统设备角色或工艺功能；发现到的未映射节点只保存 `value_type`、`value_size`、`value_sha256` 等元数据，不保存原始值；
+- 主文件继续严格保持 `aspen-equipment-export-v1` 旧形状，完整覆盖信息单独写入 `aspen_extraction_coverage.json`；案例与 worker 输出记录该旁车的路径和 SHA-256，既保留追溯能力，也不破坏既有 v1 消费者；
+- 流股/模块根节点访问、枚举或截断异常，组分非法、不闭合或枚举异常，以及全案例节点数/元数据字节预算耗尽，都会形成显式阻断或不可评分状态；没有提取到物料流也不能以空集校核冒充 PASS；
+- v2.4.3 源码统一全量回归为 542 项通过、1 项按环境条件跳过；这些自动化证据仍不能替代真实生产 Aspen 验收。
+
+仍需在生产机验证不同 Aspen 版本的真实 COM 行为、用户自定义/厂家模型、真实多相组分树，以及大案例下的遍历性能和预算阈值；通过这些验证前，不能宣称对所有项目通用可靠。
+
 ### 设备计算与具体型式选择
 
 - 采用“先计算、后选型”，不会仅凭设备存在就宣称完成；
@@ -355,9 +367,11 @@ ID、字段和值是否与冻结登记表完全一致，拒绝冲突项，仅补
 这意味着用户可以复算数值，并能判断“公式来源已绑定”与“只是程序里写了一条式子”的区别。需要特别说明：**可复算不等于来源全部闭合**。如果匹配器只收到一个规范化数值、但没有 Aspen 节点或用户签名输入的来源绑定，结果会明确标记
 `REPRODUCIBLE_TRACE_WITH_OPEN_PROVENANCE`，不会伪装为完全追溯。
 
-GUI“公式链”页直接显示输入、来源、代码与双哈希；HTML/Markdown 报告和 Agent 组织答案也保留完整 `formula_trace`。40 条已登记计算规则均要求有公式 ID、适用范围、不能证明的结论和至少一个来源路由。
+GUI“公式链”页直接显示输入、来源、代码与双哈希；HTML/Markdown 报告和 Agent 组织答案也保留完整 `formula_trace`。v2.4.3 共有 45 条已登记计算规则，均要求有公式 ID、适用范围、不能证明的结论和至少一个来源路由；其中包含搅拌器、静态混合器、膜阵列、TSA 床层和气体膨胀机五条专用链。
 
-追溯字段解释、哈希复核方法、40 条公式覆盖表和仍存在的边界见
+这 45 条采用同一机器结构：`calculation_id → formula_id → 输入值及来源 → 表达式/适用范围 → 代码文件与函数 → 开放证据 → 双 SHA-256`。新增设备族测试不只检查“有结果”，还核对专用计算 ID、具体型式、阻断状态和分支字段；Aspen 主导出与提取覆盖则分别由 `aspen-equipment-export-v1` 和 `aspen-com-extraction-coverage-v1` 两个 Schema 约束，避免把兼容主文件与覆盖诊断混为一个对象。
+
+追溯字段解释、哈希复核方法、45 条公式覆盖表和仍存在的边界见
 [内置公式可追溯性](docs/FORMULA_TRACEABILITY.md)。
 
 ## 检索机理
@@ -397,16 +411,23 @@ GUI“公式链”页直接显示输入、来源、代码与双哈希；HTML/Mar
 
 普通用户请从 GitHub Releases 下载：
 
-- [EquipmentDesignGraphApp v2.4.2（Windows x64）](https://github.com/milklong888/equipment-design-selector/releases/download/v2.4.2/EquipmentDesignGraphApp-v2.4.2-win64.zip)：Windows 图形程序及其 `_internal` 运行资产；
-- [EquipmentDesignAgentCLI v2.4.2（Windows x64）](https://github.com/milklong888/equipment-design-selector/releases/download/v2.4.2/EquipmentDesignAgentCLI-v2.4.2-win64.zip)：无界面 Agent、自动化接口、辅助脚本及其 `_internal` 运行资产。
+- [EquipmentDesignGraphApp v2.4.3（Windows x64）](https://github.com/milklong888/equipment-design-selector/releases/download/v2.4.3/EquipmentDesignGraphApp-v2.4.3-win64.zip)：Windows 图形程序及其 `_internal` 运行资产；
+- [EquipmentDesignAgentCLI v2.4.3（Windows x64）](https://github.com/milklong888/equipment-design-selector/releases/download/v2.4.3/EquipmentDesignAgentCLI-v2.4.3-win64.zip)：无界面 Agent、自动化接口、辅助脚本及其 `_internal` 运行资产。
 
 完整知识包约 1.42 GiB，正式构建采用目录包而不是单文件自解压包。目录包避免每次启动把大型 SQLite 和知识资产解压到临时目录；移动或发布时必须保留整个程序目录，不能只复制 EXE。
 
-详细操作见 [使用说明.md](使用说明.md)。当前 Windows 成品见 [GitHub v2.4.2 Release](https://github.com/milklong888/equipment-design-selector/releases/tag/v2.4.2)，构建、哈希、DeepSeek 实测、远端重新下载复核和工程边界见 [v2.4.2 发布与远端成品复核说明](docs/RELEASE_2_4_2_20260820.md)。历史版本见 [v2.4.1 发布与成品核验](docs/RELEASE_2_4_1_20260729.md)，早期阶段核验见 [2.4.0 交付核验](docs/STAGE1_2_4_0_RELEASE_VERIFICATION_20260724.md)。
+详细操作见 [使用说明.md](使用说明.md)。当前 Windows 成品见 [GitHub v2.4.3 Release](https://github.com/milklong888/equipment-design-selector/releases/tag/v2.4.3)，构建、哈希、公式链、Aspen 提取边界和成品复验见 [v2.4.3 发布与成品核验说明](docs/RELEASE_2_4_3_20260820.md)。历史版本见 [v2.4.2 发布与远端成品复核说明](docs/RELEASE_2_4_2_20260820.md)和 [v2.4.1 发布与成品核验](docs/RELEASE_2_4_1_20260729.md)。
 
 ### 源码运行
 
-依赖见 `requirements-app.txt`。完整冻结知识资产没有进入普通 Git 历史，而是随正式独立程序打包，并在启动时用运行时清单校验。
+运行/构建依赖见 `requirements-app.txt`，其中包含 Aspen 覆盖旁车在运行时使用的 JSON Schema 校验器；执行自动化测试时使用 `requirements-test.txt`，该入口复用完整运行/构建依赖：
+
+```powershell
+python -m pip install -r requirements-test.txt
+python -m unittest discover -s app\tests -p "test_*.py"
+```
+
+完整冻结知识资产没有进入普通 Git 历史，而是随正式独立程序打包，并在启动时用运行时清单校验。v2.4.3 构建生成 CLI 后会自动运行已打包的 `agent_selftest_request.json`，进程非零、响应 `ok` 非真或自检状态非 `PASS` 都会使构建失败；后续发布必须提升版本号，不能覆盖 v2.4.3 资产。
 
 主要目录与执行关系：
 
@@ -426,6 +447,8 @@ GUI“公式链”页直接显示输入、来源、代码与双哈希；HTML/Mar
 ├─ docs/                算法导航、项目结构、数据库拆解、检索边界和交付核验
 ├─ build_equipment_design_app.ps1
 │                       Windows 独立程序构建与打包入口；大型知识包使用 `-OneDir`
+├─ requirements-app.txt  源码运行和构建依赖
+├─ requirements-test.txt 自动化测试依赖（包含 requirements-app.txt）
 └─ 使用说明.md          面向最终用户的操作说明
 ```
 
@@ -454,12 +477,16 @@ CLI 接收 `equipment-design-agent-request-v1` JSON，可执行：
 
 ## 验证状态
 
+- v2.4.3 当前源码全量回归：542 项通过、1 项按环境条件跳过、0 失败；源码、打包目录和 ZIP 解压件的 Agent 自检均为 17/17；冻结夹具覆盖 17 个设备族、62 条计算；
+- v2.4.3 GUI/CLI 文件版本与产品版本均为 `2.4.3.0`；核心源码集合 SHA-256 为 `DCC20B5788CF89106BB964BD38C6A05B1AAC13BA253A3FF6519545D006C793ED`，运行资产修订为 `6DB894F93F95368DF03FA652A7BDF6850C54D2A8201C107A2ABD9BCB05AC6B83`；
+- v2.4.3 运行资产为 6,776 个文件、1,489,398,598 bytes，SQLite `quick_check=ok`；GUI 原目录和 ZIP 解压件均隐藏冷启动 15 秒正常；
+- v2.4.3 GraphApp ZIP：182,879,485 bytes、7,828 条目、SHA-256 `E9BDF93A61558756A2B231B8662C9472EDF72EA4FAE074BE0531D90406DC1992`；CLI ZIP：182,919,788 bytes、7,828 条目、SHA-256 `8544FE44277D4016120C3D370DB5304523433CF0105133FD0CCD22AA2337C47A`；
 - Aspen V14 真实烟雾批处理：S01–S06 严格串行完成，6/6 可继续选型、6/6 设备具体候选、19/19 物理管线具体候选、6/6 源文件哈希不变；3 案为正式工艺基础就绪，3 案保留明确阻断；
 - 本次 Aspen/批任务/Agent/长路径清单非窗口专项回归：141 项通过；另有 30 项真实 Tk 窗口测试通过，合计 171 项；
 - 本次非 GUI 全量回归：413 项执行成功，其中 411 项通过、2 项按环境条件跳过；泵/换热器完整保底、等价守恒和展示链定向回归 53 项全部通过；
 - v2.4.1 发布时的受控 AI 选择链专项回归：40 项全部通过，覆盖 17/17 设备族、登记项应用、冲突/虚构项拒绝和确定性重算；
 - v2.4.1 发布时的源码全量回归：460 项执行，其中 459 项通过、1 项按真实 BKP 交付物是否存在的环境条件跳过；最终 GUI 定向回归 36/36 项通过；
-- 2026-08-20 当前源码全量回归：499 项通过、1 项按环境条件跳过；受控 AI 选择与编排全族矩阵 45/45 通过；
+- 已发布 v2.4.2 的冻结源码在 2026-08-20 发布前全量回归中为 499 项通过、1 项按环境条件跳过；当时受控 AI 选择与编排全族矩阵 45/45 通过。该数字只属于 v2.4.2 历史证据，不代表上面列出的 v2.4.3 验收结果；
 - 2026-08-20 远程证据分层：较早一次 DeepSeek bridge 合成矩阵 6/6 通过；最新严格网络复验前 5 个合成设备通过，第 6 个调节阀及后续 GUI 真空塔因 HTTP 402 `Insufficient Balance` 未完成，不能计为最新完整 GUI 通过；
 - 官方 URL、用户 Key、模型目录和连接探针均已成功；认证信息没有写入工作区、报告或测试输出；
 - 两份真实 Aspen 派生案例仅做本地核验：均能产生具体初选候选并保留正式证据缺口，未向远程 LLM 发送项目数据；
@@ -478,7 +505,8 @@ CLI 接收 `equipment-design-agent-request-v1` JSON，可执行：
 
 - 充值或更换具备可用余额的授权账号后，重新执行未完成的调节阀与 GUI 真空塔步骤，再完成整套 GUI 网络矩阵；今后的审计流程优先运行 `--tk-smoke`，先关闭本地窗口/PFD 状态问题，再消耗远程调用额度；
 - 在用户批准的数据边界内，用生产项目 Aspen 案例完成 GUI 人工操作、远程 Agent、单设备重算、报告导出与人工签收的端到端验收；真实 Aspen 两案目前仍仅本地核验；
-- v2.4.2 已发布并完成远端重新下载复核；以后若源码集合、知识包或构建环境发生变化，必须重新构建、重新验收并发布新版本，不能覆盖复用本次哈希；
+- 在生产机上对 v2.4.3 的 registry-driven Aspen 提取链验证不同 Aspen 版本、用户自定义/厂家模块、真实多相组分树和超大案例；当前只有 fake-tree、本地联动和打包证据；
+- v2.4.3 已独立构建并完成本地目录包与 ZIP 解压复核；以后若源码集合、知识包或构建环境发生变化，必须提升版本、重新构建和重新验收，不能覆盖复用本次哈希；
 - 厂家曲线、EDR、塔内件水力学和正式机械设计的项目级闭合。
 
 当前 Aspen 实测的逐案状态、哈希和证据边界见

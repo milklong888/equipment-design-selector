@@ -14,6 +14,7 @@ from unittest import mock
 
 
 APP_DIR = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
@@ -146,6 +147,49 @@ class RuntimeBundleTests(unittest.TestCase):
             "RUNTIME_ASSET_HASH_MISMATCH",
             {item["code"] for item in verification["issues"]},
         )
+
+    def test_all_family_acceptance_fixture_is_manifested_and_tamper_fails_closed(self) -> None:
+        fixture_path = "app/fixtures/all_family_minimum_meaningful_inputs.json"
+        self.assertIn(fixture_path, runtime_bundle.REQUIRED_RUNTIME_PATHS)
+        self.assertIn(
+            "app/fixtures/agent_selftest_request.json",
+            runtime_bundle.REQUIRED_RUNTIME_PATHS,
+        )
+        self.assertIn(
+            "knowledge_graph/aspen_extraction_coverage.schema.json",
+            runtime_bundle.REQUIRED_RUNTIME_PATHS,
+        )
+        with writable_temp_directory() as root:
+            _create_minimum_bundle(root)
+            manifest = runtime_bundle.create_manifest(root)
+            record = next(
+                item for item in manifest["files"]
+                if item["runtime_path"] == fixture_path
+            )
+            self.assertEqual(record["asset_class"], "acceptance_fixtures")
+
+            target = root / Path(fixture_path)
+            original = target.read_bytes()
+            target.write_bytes(b"X" * len(original))
+            verification = runtime_bundle.verify_runtime_bundle(root, required=True)
+
+        self.assertFalse(verification["verified"])
+        self.assertIn(
+            "RUNTIME_ASSET_HASH_MISMATCH",
+            {item["code"] for item in verification["issues"]},
+        )
+
+    def test_release_build_defaults_to_new_version_and_runs_packaged_cli_selftest(self) -> None:
+        script = (PROJECT_ROOT / "build_equipment_design_app.ps1").read_text(
+            encoding="utf-8-sig"
+        )
+        self.assertIn('[string]$AppVersion = "2.4.3"', script)
+        self.assertIn("function Invoke-PackagedAgentSelftest", script)
+        self.assertIn("agent_selftest_request.json", script)
+        self.assertIn("PACKAGED_AGENT_SELFTEST_EXIT_NONZERO", script)
+        self.assertIn("PACKAGED_AGENT_SELFTEST_RESPONSE_NOT_OK", script)
+        self.assertIn("$response.result.status -ne 'PASS'", script)
+        self.assertIn("Invoke-PackagedAgentSelftest `", script)
 
     def test_unmanifested_asset_and_manifest_record_removal_fail(self) -> None:
         with writable_temp_directory() as root:

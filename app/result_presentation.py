@@ -289,6 +289,55 @@ _PROGRAM_BRANCH_FIELD_LABELS = {
     "auxiliary_branch_id": "辅助设备结构分支",
     "membrane_package_branch_id": "膜/成套设备结构分支",
     "turbine_branch_id": "透平结构分支",
+    "power_calculation_id": "功率计算链",
+    "power_number_branch_id": "Np-Re 功率准数分支",
+    "reynolds_number": "雷诺数 Re",
+    "power_number": "功率准数 Np",
+    "power_basis": "采用轴功率基准",
+    "impeller_family": "程序选择桨叶族",
+    "type_selection_basis": "具体型式选择依据",
+    "oversized_screening_load": "是否超出单台初筛负荷",
+    "hydraulic_calculation_id": "静态混合器水力计算链",
+    "hydraulic_branch_id": "水力配置分支",
+    "hydraulic_status": "水力约束状态",
+    "parallel_train_count": "并联列数",
+    "selected_dn": "程序选定公称直径",
+    "pressure_drop_ratio": "预测压降/允许压降",
+    "array_calculation_id": "膜通量与整数阵列计算链",
+    "array_branch_id": "膜阵列配置分支",
+    "geometry_branch": "膜组件几何分支",
+    "area_basis": "膜面积基准",
+    "target_flow_basis": "目标流量基准",
+    "array_sizing_status": "膜阵列校核状态",
+    "array_stage_count": "膜阵列段数",
+    "skid_count": "橇块数量",
+    "process_route": "成套设备工艺路线",
+    "bed_calculation_id": "吸附循环与床层容量计算链",
+    "capacity_branch_id": "床层容量计算分支",
+    "cycle_balance_status": "循环与床层容量状态",
+    "physical_capacity_basis_supplied": "是否给出物理床层容量依据",
+    "route_status": "成套工艺路线状态",
+    "expander_branch_id": "膨胀机级数/功率/旁路分支",
+    "operating_envelope_status": "膨胀机工况安全门",
+    "stage_count": "膨胀级数",
+    "normal_bypass_fraction_percent": "正常连续旁路比例",
+    "protective_bypass_capacity_percent": "保护旁路容量",
+    "density_basis": "采用气体密度来源",
+    "mass_flow_basis": "采用质量流量来源",
+    "branch_narrative": "程序分支说明",
+}
+
+_PROGRAM_BRANCH_FIELD_UNITS = {
+    "reynolds_number": "-",
+    "power_number": "-",
+    "parallel_train_count": "列",
+    "selected_dn": "DN",
+    "pressure_drop_ratio": "-",
+    "array_stage_count": "段",
+    "skid_count": "套",
+    "stage_count": "级",
+    "normal_bypass_fraction_percent": "%",
+    "protective_bypass_capacity_percent": "%",
 }
 
 _PROGRAM_BRANCH_VALUE_LABELS = {
@@ -346,6 +395,117 @@ _PROGRAM_BRANCH_VALUE_LABELS = {
     "multistage_radial_inflow_gas_expander_preliminary": (
         "多级径向流气体膨胀透平预选参数包"
     ),
+    "agitator_re_np_power_screening": "搅拌器 Re-Np 功率初算链",
+    "TURBULENT_PITCHED_BLADE_TURBINE_45_CONSTANT_POWER_NUMBER": (
+        "45°折叶涡轮充分湍流恒功率准数分支"
+    ),
+    "TRANSITIONAL_PITCHED_BLADE_TURBINE_45_COMPOSITE_POWER_NUMBER": (
+        "45°折叶涡轮过渡流复合功率准数分支"
+    ),
+    "LAMINAR_HELICAL_RIBBON_NP_RE_CORRELATION": (
+        "双螺带层流 Np·Re 关联式分支"
+    ),
+    "LAMINAR_ANCHOR_NP_RE_CORRELATION": "锚式桨层流 Np·Re 关联式分支",
+    "DETERMINISTIC_RE_NP_POWER_SCREENING": "程序 Re-Np 公式功率初筛",
+    "PITCHED_BLADE_TURBINE_45": "45°折叶开启涡轮桨",
+    "RUSHTON_DISC_TURBINE": "Rushton 直叶圆盘涡轮桨",
+    "HELICAL_RIBBON": "双螺带桨",
+    "ANCHOR": "锚式桨",
+    "GENERAL_LOW_VISCOSITY_BLEND_PBT_BRANCH": "低黏通用混合折叶涡轮分支",
+    "SOLID_SUSPENSION_PBT_BRANCH": "固体悬浮折叶涡轮分支",
+    "GAS_DISPERSION_TASK_BRANCH": "气体分散圆盘涡轮分支",
+    "USER_FIXED_HELICAL_RIBBON_TYPE": "用户指定双螺带型式",
+    "USER_FIXED_ANCHOR_TYPE": "用户指定锚式桨型式",
+    "USER_FIXED_DISC_TURBINE_TYPE": "用户指定圆盘涡轮型式",
+    "static_mixer_hydraulic_train_screening": "静态混合器水力与列数初算链",
+    "PRESSURE_DROP_DRIVEN_DN_UPSIZE": "压降驱动的 DN 增径分支",
+    "PARALLEL_TRAIN_HYDRAULIC_RELIEF": "增加并联列数的水力降载分支",
+    "SINGLE_TRAIN_REGISTERED_DN": "单列登记 DN 通过分支",
+    "USER_FIXED_CONFIGURATION_CONSTRAINT_FAILURE": "用户锁定配置未通过约束",
+    "REGISTERED_HYDRAULIC_ENVELOPE_EXCEEDED": "超出登记水力包络",
+    "PASS_AFTER_PRESSURE_DROP_DRIVEN_DN_UPSIZE": "增径后压降通过",
+    "PASS_AFTER_PARALLEL_TRAIN_SPLIT": "增加并联列数后通过",
+    "PASS_SINGLE_TRAIN_REGISTERED_DN": "单列登记 DN 校核通过",
+    "FAIL_USER_FIXED_CONFIGURATION_EXCEEDS_ALLOWABLE_PRESSURE_DROP": (
+        "用户锁定配置超过允许压降"
+    ),
+    "FAIL_USER_FIXED_CONFIGURATION_EXCEEDS_TARGET_VELOCITY": (
+        "用户锁定配置超过目标流速容差"
+    ),
+    "FAIL_NO_REGISTERED_DN_OR_PARALLEL_SOLUTION": "登记 DN/并联组合无可行解",
+    "membrane_flux_recovery_array_screening": "膜通量—回收率整数阵列初算链",
+    "FLUX_RECOVERY_INTEGER_ARRAY_SIZING": "通量—回收率整数阵列定容分支",
+    "USER_FIXED_UNDERSIZED_MEMBRANE_ARRAY": "用户锁定膜元件数不足分支",
+    "REGISTERED_ARRAY_CAPACITY_REPORT_ONLY": "无目标流量时仅报告登记阵列能力",
+    "EXPLICIT_GEOMETRY_AREA_BASIS_HARD_GATE": "指定几何的有效膜面积硬门",
+    "spiral_wound": "卷式膜组件",
+    "cylindrical_channels": "管式/圆柱流道膜组件",
+    "hollow_fiber": "中空纤维膜组件",
+    "flat_sheet": "平板膜组件",
+    "REGISTERED_OR_SUPPLIED_ELEMENT_AREA": "登记值或用户提供的单元有效膜面积",
+    "NON_SPIRAL_ONE_MODULE_PER_HOUSING_SCREENING": "非卷式一壳一模块布置初筛",
+    "USER_PERMEATE_FLOW_TARGET": "用户给定产水/渗透流量目标",
+    "USER_FEED_FLOW_TARGET": "用户给定膜进料流量目标",
+    "FLOW_M3_H_INTERPRETED_AS_MEMBRANE_FEED": "将通用体积流量解释为膜进料",
+    "NO_TARGET_FLOW_FALLBACK_ARRAY": "未给目标流量的保底阵列",
+    "PASS_PRELIMINARY_ARRAY_CAPACITY": "膜阵列预设计能力通过",
+    "FALLBACK_ARRAY_WITHOUT_TARGET_FLOW": "缺目标流量，仅给保底阵列能力",
+    "FAIL_USER_ELEMENT_COUNT_BELOW_REQUIRED": "用户锁定元件数小于计算需求",
+    "BLOCKED_GEOMETRY_SPECIFIC_ELEMENT_AREA_OPEN": "指定几何的有效膜面积未闭合",
+    "tsa_cycle_bed_capacity_screening": "TSA 循环与床层容量初算链",
+    "DYNAMIC_WORKING_CAPACITY_MASS_BALANCE": "按动态工作容量进行质量衡算",
+    "CAPACITY_UNIT_SPECIFIC_BED_VOLUME_FALLBACK": "按处理能力比床容积保底",
+    "PASS_PRELIMINARY_CYCLE_AND_BED_CAPACITY": "TSA 循环与床层容量预设计通过",
+    "PASS_WITH_PARALLEL_TSA_TRAINS": "采用并联 TSA 列车后通过",
+    "FALLBACK_SPECIFIC_BED_VOLUME_WITH_EXPLICIT_CAPACITY_BASIS": (
+        "有明确能力单位时采用比床容积保底"
+    ),
+    "BLOCKED_CAPACITY_BASIS_OPEN": "处理能力物理量/单位未闭合",
+    "TSA": "变温吸附路线（TSA）",
+    "PSA": "变压吸附路线（PSA）",
+    "GUARD_BED": "保护床路线",
+    "MEMBRANE": "膜分离路线",
+    "FILTER": "固液过滤路线",
+    "DRYER": "连续干燥路线",
+    "UNRESOLVED": "工艺路线待确定",
+    "gas_expander_stage_power_bypass_screening": "气体膨胀机级数、功率与旁路初算链",
+    "RADIAL_INFLOW_STAGE_POWER_SCREENING": "径向流膨胀机级数与功率初筛",
+    "POWER_LIMITED_CONTINUOUS_BYPASS": "回收功率受限的连续旁路分支",
+    "HIGH_PRESSURE_RATIO_MULTIBODY_REVIEW": "高压比多机体评审分支",
+    "LOW_TEMPERATURE_REHEAT_OR_BYPASS_REVIEW": "低温再热或旁路评审分支",
+    "USER_FIXED_STAGE_COUNT_CONSTRAINT_FAILURE": "用户锁定级数未通过单级压比约束",
+    "NONVAPOR_PHASE_HARD_GATE": "非单相气体输入硬门",
+    "PASS_PRELIMINARY_STAGE_AND_POWER_SCREENING": "级数与功率预设计通过",
+    "PASS_POWER_LIMIT_WITH_CONTINUOUS_BYPASS": "配置连续旁路后满足功率上限",
+    "PASS_POWER_WITH_MULTIBODY_REVIEW": "功率可算但需多机体专项评审",
+    "FAIL_LOW_OUTLET_TEMPERATURE_REVIEW_REQUIRED": "出口温度过低，需再热/旁路评审",
+    "FAIL_USER_STAGE_COUNT_EXCEEDS_STAGE_RATIO_LIMIT": "用户级数导致单级压比超限",
+    "FAIL_TWO_PHASE_OR_NONVAPOR_EXPANDER_INPUT": "非单相气体输入，不适用气体膨胀式",
+    "USER_OR_ASPEN_GAS_DENSITY": "用户或 Aspen 提供气体密度",
+    "EOS_DENSITY_PMW_OVER_ZRT": "由状态方程 ρ=PMW/(ZRT) 计算密度",
+    "USER_OR_ASPEN_MASS_FLOW": "用户或 Aspen 提供质量流量",
+    "USER_OR_ASPEN_MASS_FLOW_KG_H_CONVERTED_TO_KG_S": (
+        "用户或 Aspen 的 kg/h 质量流量换算为 kg/s"
+    ),
+    "DENSITY_TIMES_ACTUAL_VOLUME_FLOW": "由密度×实际体积流量计算质量流量",
+    "REGISTERED_FALLBACK_ISENTROPIC_EFFICIENCY": "登记保底等熵效率",
+    "USER_OR_ASPEN_ISENTROPIC_EFFICIENCY": "用户或 Aspen 提供等熵效率",
+    "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED": "已形成具体初步规格",
+    "PRELIMINARY_CAPACITY_ESTIMATE_WITHOUT_TARGET_FLOW": (
+        "缺目标流量，仅形成初步能力估算"
+    ),
+    "BLOCKED_STATIC_MIXER_PRESSURE_DROP_CONSTRAINT": (
+        "静态混合器压降约束未通过"
+    ),
+    "BLOCKED_STATIC_MIXER_VELOCITY_CONSTRAINT": (
+        "静态混合器流速约束未通过"
+    ),
+    "BLOCKED_MEMBRANE_ARRAY_CONSTRAINT": "膜阵列约束未通过",
+    "BLOCKED_CAPACITY_BASIS_OPEN": "处理能力物理量/单位未闭合",
+    "BLOCKED_TSA_CYCLE_OR_BED_CONSTRAINT": "TSA 循环或床层约束未通过",
+    "BLOCKED_PHYSICAL_BED_BASIS_OPEN": "TSA 物理床层依据未闭合",
+    "BLOCKED_PACKAGE_PROCESS_FUNCTION_UNRESOLVED": "成套设备工艺功能待确定",
+    "BLOCKED_EXPANDER_OPERATING_ENVELOPE": "膨胀机工况包络未通过",
 }
 
 
@@ -390,23 +550,49 @@ def _build_programmatic_selection_branches(
                 ),
                 "raw_value": raw_value,
                 "value_label": _program_branch_value_label(raw_value),
+                "unit": _PROGRAM_BRANCH_FIELD_UNITS.get(str(field_id)),
             })
         recommended_type = selection_branch.get("recommended_type")
+        branch_explanation = selection_branch.get("branch_narrative")
+        specification_status = str(
+            specification.get("status") or "UNKNOWN"
+        )
+        specification_status_label = _program_branch_value_label(
+            specification_status
+        )
+        specification_status_text = specification_status_label + (
+            f" [{specification_status}]"
+            if specification_status_label != specification_status
+            else ""
+        )
         choice_text = "；".join(
-            f"{item['label']}={item['value_label']} [{item['raw_value']}]"
+            f"{item['label']}={item['value_label']}"
+            f"{(' ' + item['unit']) if item.get('unit') else ''}"
+            f" [{item['raw_value']}]"
             if (
                 isinstance(item["raw_value"], str)
                 and str(item["raw_value"]) != item["value_label"]
             )
-            else f"{item['label']}={item['value_label']}"
+            else (
+                f"{item['label']}={item['value_label']}"
+                f"{(' ' + item['unit']) if item.get('unit') else ''}"
+            )
             for item in choices
-            if item["field_id"] != "recommended_type"
+            if item["field_id"] not in {
+                "recommended_type",
+                "branch_narrative",
+            }
         )
         narrative = (
             f"设备专用算法分支：{_PROGRAM_SPECIFICATION_LABELS[specification_key]}"
-            f"执行“{choice_text or '未登记细分条件'}”；"
+            f"状态为“{specification_status_text}”，执行“{choice_text or '未登记细分条件'}”；"
             f"据此选择“{recommended_type or '未登记具体型式'}”。"
-            f"原始分支值保留在 {specification_key}.selection_branch，可逐项追溯。"
+            + (
+                f"程序分支说明：{branch_explanation}；"
+                if branch_explanation not in (None, "")
+                else ""
+            )
+            + f"原始分支值保留在 {specification_key}.selection_branch，可逐项追溯。"
         )
         rows.append({
             "specification_key": specification_key,
@@ -414,6 +600,7 @@ def _build_programmatic_selection_branches(
                 specification_key
             ],
             "specification_status": specification.get("status"),
+            "specification_status_label": specification_status_label,
             "specification_sha256": specification.get(
                 "program_specification_sha256"
             ),
@@ -1303,6 +1490,12 @@ _CODE_LABELS = {
     "CONTROLLED_CALCULATE_THEN_SELECT": "已执行计算后选型控制",
     "algorithmic_modification_screening_only": "算法多台/非标方案（仅初筛）",
     "algorithmic_configuration_review_required": "算法配置需专项评审",
+    "CALCULATION_OR_CONSTRAINT_GATE_BLOCKED": "计算或约束硬门未通过",
+    "BLOCKED_STATIC_MIXER_PRESSURE_DROP_CONSTRAINT": "静态混合器压降约束未通过",
+    "BLOCKED_STATIC_MIXER_VELOCITY_CONSTRAINT": "静态混合器流速约束未通过",
+    "BLOCKED_MEMBRANE_ARRAY_CONSTRAINT": "膜阵列约束未通过",
+    "BLOCKED_TSA_CYCLE_OR_BED_CONSTRAINT": "TSA 循环或床层约束未通过",
+    "BLOCKED_EXPANDER_OPERATING_ENVELOPE": "膨胀机工况包络未通过",
 }
 
 _AXIS_LABELS = {

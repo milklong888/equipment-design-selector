@@ -69,8 +69,9 @@ Aspen COM / 提取 JSON / 人工输入
 | `.gitignore` | 排除真实 Aspen 文件、知识包、构建缓存、运行输出、旧发布目录和临时数据库；只允许明确列出的脱敏数据进入 Git。 |
 | `README.md` | 项目总说明，描述系统目标、功能、工作机理、设备族覆盖、可靠性边界、运行方式和验证状态。 |
 | `THIRD_PARTY_NOTICES.md` | 记录程序使用的第三方组件、许可证和再分发提示，供打包与交付审查。 |
-| `build_equipment_design_app.ps1` | Windows 构建入口；收集 Python/Tk 运行时、应用资源和冻结知识包，生成图形版与 CLI 版独立程序；`-OneDir` 用于大型知识资产的可靠目录包，`-BuildDir` 可把 1.42 GiB 构建缓存放到其他磁盘。 |
-| `requirements-app.txt` | 源码运行和构建所需的最小 Python 依赖清单。 |
+| `build_equipment_design_app.ps1` | Windows 构建入口；默认生成 2.4.3 以避免覆盖 v2.4.2，收集 Python/Tk 运行时、应用资源、验收夹具和冻结知识包，生成图形版与 CLI 版独立程序，并在完成后以非交互方式运行打包 CLI 自检；`-OneDir` 用于大型知识资产的可靠目录包，`-BuildDir` 可把 1.42 GiB 构建缓存放到其他磁盘。 |
+| `requirements-app.txt` | 源码运行和构建所需的最小 Python 依赖清单；包含 Aspen 覆盖旁车在运行时使用的 JSON Schema 校验器。 |
+| `requirements-test.txt` | 自动化测试依赖入口；复用 `requirements-app.txt` 的完整运行/构建依赖。 |
 | `使用说明.md` | 面向非开发用户说明拖入 Aspen 文件、人工录入、运行选型、改参重算、导出报告和 Agent 设置。 |
 
 ## 4. `app/` 应用核心
@@ -123,8 +124,8 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/fixtures/agent_render_packaged_formula_report_request.json` | 请求在打包环境中输出带工程公式链的报告。 |
 | `app/fixtures/agent_render_representative_report_request.json` | 多类代表设备报告请求，用于检查设备卡片、一览表和警告展示。 |
 | `app/fixtures/agent_representative_parameter_chain_request.json` | 多设备人工批处理请求，用于展示来源、公式、候选和结果的完整参数链。 |
-| `app/fixtures/agent_selftest_request.json` | 调用 `system.selftest` 的最小请求，用于安装后快速检查运行环境。 |
-| `app/fixtures/all_family_minimum_meaningful_inputs.json` | 17 类设备各自能够启动有效初筛的最小有意义输入集合。 |
+| `app/fixtures/agent_selftest_request.json` | 调用 `system.selftest` 的最小请求；构建完成后由脚本自动交给刚生成的 CLI，安装后也可重复执行。 |
+| `app/fixtures/all_family_minimum_meaningful_inputs.json` | 17 类设备各自能够启动有效初筛的最小有意义输入集合；它属于运行时清单必需资产，缺失或同尺寸篡改都会关闭自检。 |
 | `app/fixtures/generate_protocol_1_6_hybrid_fixtures.py` | 运行受控混合协议并重新生成固定请求/响应样例，同时审计模型步骤输出。 |
 | `app/fixtures/mock_aspen_pump.json` | 脱离 COM 的泵 Aspen 模拟导出，包含流股、模块、单位和泵工况。 |
 | `app/fixtures/protocol_1_6_hybrid_prepare_request.json` | 混合协作第一阶段请求：由程序准备不可变上下文和允许模型处理的步骤。 |
@@ -181,6 +182,7 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/tests/test_database_authority.py` | 验证活动库绑定、旧库/候选库禁用、路径逃逸、文件替换、表合同、构建清单和数据集晋升门均 fail-closed。 |
 | `app/tests/test_engineering_adjustment_workbench.py` | 验证大换热器、奇异泵、大塔调整方案，以及工作台改参、中文选项和组织答案。 |
 | `app/tests/test_equipment_design_agent.py` | 验证 CLI/JSONL 协议、打包运行、自检、人工批处理、错误封装和运行时 fail-closed。 |
+| `app/tests/test_equipment_family_calculation_completion.py` | 逐类验证搅拌器、静态混合器、膜系统、TSA 成套设备和气体膨胀机新增专用计算链、具体型式、分支叙述与安全阻断。 |
 | `app/tests/test_equipment_design_app.py` | 验证 GUI API 的 Aspen 前置检查、子进程调用和报告状态旁路文件。 |
 | `app/tests/test_equipment_design_match_safety.py` | 验证 NPSH、喘振、容积、阀 Cv、反应器尺寸和塔高等约束失败时不伪造终选。 |
 | `app/tests/test_icon_assets.py` | 验证图标源、派生资源和图标清单哈希一致，并能在打包布局中找到。 |
@@ -190,7 +192,7 @@ Aspen COM / 提取 JSON / 人工输入
 | `app/tests/test_public_algorithm_source.py` | 验证公开源码确实包含可执行的 17 类设备匹配规则、型号规则、参数模板和设备选择图谱。 |
 | `app/tests/test_public_rag_contract_bundle.py` | 验证 RAG 公开合同包可重复构建、文件哈希一致，并且不含 SQLite、PDF、图片或 Aspen 工程。 |
 | `app/tests/test_result_presentation.py` | 验证一览表字段、公式显示、候选门、终端型式来源和 HTML/Markdown 展示。 |
-| `app/tests/test_runtime_bundle.py` | 验证知识包清单对缺失、篡改、同尺寸替换和额外文件均能关闭运行。 |
+| `app/tests/test_runtime_bundle.py` | 验证知识包清单对缺失、篡改、同尺寸替换和额外文件均能关闭运行，并确认 17 类验收夹具被验签、构建默认版本递增且打包后 CLI 自检门存在。 |
 | `app/tests/test_source_code_manifest.py` | 验证源码及打包快照的缺失、修改、额外文件和清单漂移检测。 |
 | `app/tests/test_static_aspen_ui.py` | 验证浏览器界面不默认压力基准或大气压，并在提交前阻止含糊输入。 |
 | `app/tests/test_tk_gui.py` | 验证真实 Tk 窗口、四种入口、中文下拉、公式、完整一览表、LLM 连接测试和人工字段。 |
@@ -236,6 +238,7 @@ Aspen COM / 提取 JSON / 人工输入
 | --- | --- |
 | `knowledge_graph/aspen_equipment_derivation_chain.md` | 解释 Aspen 导出到设备/管线推导结果的字段链、状态和边界。 |
 | `knowledge_graph/aspen_equipment_export.schema.json` | 约束 Aspen COM/模拟导出中的案例、单位、流股、模块、拓扑和运行状态。 |
+| `knowledge_graph/aspen_extraction_coverage.schema.json` | 约束 Aspen COM 提取覆盖旁车中的逐字段路径、单位、状态、来源、未映射元数据、完整度和阻断诊断；主导出仍保持旧 v1 结构。 |
 | `knowledge_graph/ai_engineering_choice_registry.json` | 登记 17 个设备族的 AI 可选具体型式与材料/零部件包；保存精确 ID、背景、触发条件、选择依据、来源、固定字段值和预设计警告，模型不得在表外自由生成。 |
 | `knowledge_graph/equipment_connection_selection_package.schema.json` | 约束法兰、密封面、垫片、紧固件和连接证据包。 |
 | `knowledge_graph/equipment_customer_output_profiles.json` | 登记 17 个设备族在客户一览表/数据表中应公开的字段及来源。 |
@@ -277,7 +280,7 @@ Aspen COM / 提取 JSON / 人工输入
 
 | 文件 | 作用 |
 | --- | --- |
-| `docs/FORMULA_TRACEABILITY.md` | 说明内置公式的机器追溯合同、输入/来源/代码绑定、哈希复核、40 条规则覆盖和剩余边界。 |
+| `docs/FORMULA_TRACEABILITY.md` | 说明内置公式的机器追溯合同、输入/来源/代码绑定、哈希复核、45 条规则覆盖和剩余边界；45 条均采用“计算 ID—公式 ID—输入来源—适用范围—代码定位—开放证据—双哈希”结构。 |
 | `docs/ALGORITHM_GUIDE.md` | 按真实执行顺序说明算法入口、文件分工、关键函数、公式位置、规则 JSON、管线主链和泵实例。 |
 | `docs/DATABASE_STRUCTURE.md` | 公开拆解数据库版本、路径、哈希、业务表、记录数、调用方、晋升/隔离原因、Git/Release 边界和后续接手检查单。 |
 | `docs/PROJECT_STRUCTURE.md` | 当前文档；说明目录边界、阅读顺序、执行链和所有受 Git 追踪文件的职责。 |

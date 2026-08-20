@@ -562,17 +562,38 @@ class EquipmentDesignApi:
                 result = json.loads(result_path.read_text(encoding="utf-8"))
                 selection_result_available = bool(
                     isinstance(result, dict)
-                    and isinstance(result.get("result"), dict)
-                    and str(result.get("status") or "").upper() != "FAILED"
+                    and aspen_suite.worker_allows_equipment_selection(result)
                 )
-                operation_completed = process.returncode == 0 or selection_result_available
+                operation_completed = selection_result_available
+                worker_status = str(result.get("status") or "").upper()
+                coverage_summary = result.get("com_extraction_coverage_summary")
+                coverage_summary = (
+                    coverage_summary
+                    if isinstance(coverage_summary, Mapping)
+                    else {}
+                )
+                coverage_status = str(
+                    coverage_summary.get("registry_completeness_status") or ""
+                ).upper()
+                blocked_extraction = bool(
+                    worker_status.startswith("BLOCKED_COM_")
+                    or result.get("com_extraction_blockers")
+                    or coverage_status.startswith("NOT_SCORABLE_")
+                )
                 return {
                     "ok": operation_completed,
                     "value": result,
                     "error": (
                         None
                         if operation_completed
-                        else result.get("error", "Aspen 自动导入失败，可切换其他模式。")
+                        else (
+                            result.get("error")
+                            or (
+                                "Aspen COM 提取不完整，已阻断设备选型结果；请查看提取覆盖旁车与阻断项。"
+                                if blocked_extraction
+                                else "Aspen 自动导入失败，可切换其他模式。"
+                            )
+                        )
                     ),
                     "completed_with_warnings": bool(
                         operation_completed and process.returncode != 0

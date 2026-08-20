@@ -6,6 +6,7 @@ import unittest
 import uuid
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 
 APP_DIR = Path(__file__).resolve().parents[1]
@@ -18,6 +19,119 @@ import equipment_design_agent
 
 
 class EquipmentDesignAppAspenTests(unittest.TestCase):
+    def test_import_rejects_com_extraction_blocker_even_with_result_payload(self) -> None:
+        api = equipment_design_app.EquipmentDesignApi()
+        fixture = APP_DIR / "fixtures" / "mock_aspen_pump.json"
+        with TemporaryDirectory() as temporary_text:
+            output = Path(temporary_text) / "blocked-import"
+
+            class BlockedProcess:
+                returncode = 3
+                pid = 424242
+
+                def __init__(self, command: list[str], **_: object) -> None:
+                    out_dir = Path(command[command.index("--out-dir") + 1])
+                    worker = {
+                        "status": "PASS",
+                        "selection_result_available": True,
+                        "com_extraction_blockers": [
+                            {"code": "BLOCKED_COM_TREE_ROOT_BLOCKS_ENUMERATION"}
+                        ],
+                        "result": {"status": "PASS", "equipment": [], "piping": []},
+                    }
+                    (out_dir / "worker_result.json").write_text(
+                        json.dumps(worker), encoding="utf-8"
+                    )
+
+                def communicate(self, timeout: int | None = None) -> tuple[str, str]:
+                    del timeout
+                    return "", ""
+
+                def poll(self) -> int:
+                    return self.returncode
+
+            with patch.object(equipment_design_app.subprocess, "Popen", BlockedProcess):
+                response = api.import_aspen({
+                    "mock_fixture": str(fixture),
+                    "output_dir": str(output),
+                    "pressure_basis": "absolute",
+                    "run": False,
+                })
+
+            self.assertFalse(response["ok"])
+            self.assertIn("COM 提取不完整", response["error"])
+            self.assertFalse(response.get("completed_with_warnings", False))
+            self.assertEqual(api.active_worker_count(), 0)
+
+    def test_import_rejects_non_scorable_coverage_and_unlisted_worker_status(self) -> None:
+        fixture = APP_DIR / "fixtures" / "mock_aspen_pump.json"
+        cases = (
+            (
+                "coverage",
+                {
+                    "status": "PASS",
+                    "selection_result_available": True,
+                    "com_extraction_coverage_summary": {
+                        "registry_completeness_status": (
+                            "NOT_SCORABLE_UNSUPPORTED_REGISTRY_IDENTITIES"
+                        ),
+                        "counts": {"error": 0},
+                        "unmapped_module_count": 1,
+                        "unmapped_stream_record_type_count": 0,
+                        "case_discovery_budget_exhausted": False,
+                    },
+                    "result": {"status": "PASS", "equipment": [], "piping": []},
+                },
+                "COM 提取不完整",
+            ),
+            (
+                "failed-partial",
+                {
+                    "status": "FAILED_PARTIAL",
+                    "selection_result_available": True,
+                    "result": {"status": "PASS", "equipment": [], "piping": []},
+                },
+                "自动导入失败",
+            ),
+        )
+        for label, worker, expected_error in cases:
+            with self.subTest(label=label), TemporaryDirectory() as temporary_text:
+                api = equipment_design_app.EquipmentDesignApi()
+                output = Path(temporary_text) / label
+
+                class RejectedProcess:
+                    returncode = 3
+                    pid = 424243
+
+                    def __init__(self, command: list[str], **_: object) -> None:
+                        out_dir = Path(command[command.index("--out-dir") + 1])
+                        (out_dir / "worker_result.json").write_text(
+                            json.dumps(worker),
+                            encoding="utf-8",
+                        )
+
+                    def communicate(self, timeout: int | None = None) -> tuple[str, str]:
+                        del timeout
+                        return "", ""
+
+                    def poll(self) -> int:
+                        return self.returncode
+
+                with patch.object(
+                    equipment_design_app.subprocess,
+                    "Popen",
+                    RejectedProcess,
+                ):
+                    response = api.import_aspen({
+                        "mock_fixture": str(fixture),
+                        "output_dir": str(output),
+                        "pressure_basis": "absolute",
+                        "run": False,
+                    })
+                self.assertFalse(response["ok"])
+                self.assertIn(expected_error, response["error"])
+                self.assertEqual(api.active_worker_count(), 0)
+
     def test_report_status_sidecar_accepts_normal_deterministic_report(self) -> None:
         with TemporaryDirectory() as temporary_text:
             temporary = Path(temporary_text)

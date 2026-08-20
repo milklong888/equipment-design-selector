@@ -67,7 +67,7 @@ SOURCE_LAYER_DOCUMENTS = (
     / "source_layer"
     / "documents"
 )
-ENGINE_VERSION = "2.4.2"
+ENGINE_VERSION = "2.4.3"
 EXCHANGER_DEFAULT_PARAMETER_POLICY_ID = "HEX-DEFAULT-PARAMETERS-2026-01"
 TOWER_DEFAULT_PARAMETER_POLICY_ID = "TOWER-DEFAULT-PARAMETERS-2026-01"
 VESSEL_SEPARATOR_DEFAULT_PARAMETER_POLICY_ID = (
@@ -181,12 +181,51 @@ CALCULATION_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     "filter_area_from_cake_flux": ("solids_feed_kg_h", "filtration_flux_kg_m2_h"),
     "dryer_water_evaporation": ("water_component_mapping", "inlet_water_kg_h", "outlet_water_kg_h"),
     "dryer_specific_duty": ("heat_duty_kw", "evaporation_rate_kg_h"),
+    # These five family-specific screening chains deliberately use only the
+    # smallest deterministic basis that the application can reproduce.  Every
+    # missing engineering constant is inserted by ``apply_design_fallbacks``
+    # first, so the calculation trace records it as provisional input rather
+    # than hiding a literal inside the formula branch.
+    "agitator_re_np_power_screening": (
+        "volume_m3", "rotational_speed_rpm", "density_kg_m3",
+        "dynamic_viscosity_mpa_s",
+    ),
+    "static_mixer_hydraulic_train_screening": (
+        "flow_m3_h", "target_velocity_m_s", "density_kg_m3",
+        "dynamic_viscosity_mpa_s",
+        "element_length_to_diameter_ratio",
+        "local_resistance_coefficient_per_element",
+        "allowable_pressure_drop_kpa",
+    ),
+    "membrane_flux_recovery_array_screening": (
+        "flux", "recovery_percent", "design_margin_percent",
+    ),
+    "tsa_cycle_bed_capacity_screening": (
+        "capacity", "cycle_time_h", "adsorption_time_h",
+        "adsorbent_bulk_density_kg_m3", "design_margin_percent",
+    ),
+    "gas_expander_stage_power_bypass_screening": (
+        "flow_m3_h", "inlet_pressure_mpa", "outlet_pressure_mpa",
+        "pressure_basis", "gas_molecular_weight", "compressibility_factor",
+        "heat_capacity_ratio_k", "inlet_temperature_c",
+        "efficiency_percent",
+    ),
 }
 
 BLOCK_TYPE_CALCULATION_RULES: dict[str, tuple[str, ...]] = {
     "CRYSTALLIZER": ("crystallizer_working_volume",),
     "FILTER": ("filter_area_from_cake_flux",),
     "DRYER": ("dryer_water_evaporation", "dryer_specific_duty"),
+}
+
+FAMILY_PROGRAMMATIC_CALCULATION_RULES: dict[str, tuple[str, ...]] = {
+    "family_agitator": ("agitator_re_np_power_screening",),
+    "family_static_mixer": ("static_mixer_hydraulic_train_screening",),
+    "family_membrane": ("membrane_flux_recovery_array_screening",),
+    "family_package_equipment": ("tsa_cycle_bed_capacity_screening",),
+    "family_gas_expander_turbine": (
+        "gas_expander_stage_power_bypass_screening",
+    ),
 }
 
 CALCULATION_OUTPUT_FIELDS: dict[str, str] = {
@@ -229,6 +268,11 @@ CALCULATION_OUTPUT_FIELDS: dict[str, str] = {
     "filter_area_from_cake_flux": "filter_area_m2",
     "dryer_water_evaporation": "evaporation_rate_kg_h",
     "dryer_specific_duty": "specific_drying_duty_kj_kg",
+    "agitator_re_np_power_screening": "power_number_estimated_shaft_power_kw",
+    "static_mixer_hydraulic_train_screening": "pressure_drop_kpa",
+    "membrane_flux_recovery_array_screening": "required_element_count",
+    "tsa_cycle_bed_capacity_screening": "required_adsorbent_mass_kg_per_tower",
+    "gas_expander_stage_power_bypass_screening": "shaft_power_kw",
 }
 
 # Formula release policy. Class A is an exact
@@ -730,6 +774,126 @@ CALCULATION_POLICIES.update({
         "promotion_cap": "TYPE_SCREENING",
         "source_refs": ["knowledge_graph/chapter_04_08_late_equipment_graph.md"],
     },
+    "agitator_re_np_power_screening": {
+        "formula_id": "AGITATOR_RE_NP_POWER_SCREENING",
+        "release_class": "B",
+        "evidence_class": "J",
+        "result_status": "PROVISIONAL",
+        "title": "搅拌器 Re—功率准数—轴功率分支初算",
+        "message": (
+            "程序先按用户锁定型式、混合任务和Re选择双螺带、锚式、三叶推进式、"
+            "直叶圆盘或45°折叶涡轮，再按该桨族的显式Np-Re保底式，用"
+            "P=Np*rho*N^3*D^5生成轴功率初算。各K值/Np常数均是无试验时"
+            "的几何相关保底，不是厂家保证值。"
+        ),
+        "applicability": (
+            "单相或低含固液体预设计；密度、动力黏度、转速、桨径和"
+            "桨型和混合任务必须与同一工况一致；气体分散、悬浮和高黏任务"
+            "采用不同分支。"
+        ),
+        "does_not_prove": [
+            "blend_time", "solid_suspension", "gas_dispersion",
+            "critical_speed", "shaft_strength", "vendor_impeller_rating",
+        ],
+        "promotion_cap": "TYPE_SCREENING",
+        "source_refs": [
+            "knowledge_graph/selection_learning_graph_20260622/equipment_selection_parameter_calculation_matrix.md",
+            "knowledge_graph/ai_engineering_choice_registry.json",
+        ],
+    },
+    "static_mixer_hydraulic_train_screening": {
+        "formula_id": "STATIC_MIXER_HYDRAULIC_TRAIN_SCREENING",
+        "release_class": "B",
+        "evidence_class": "J",
+        "result_status": "PROVISIONAL",
+        "title": "静态混合器 DN—元件数—压降—并联列车联合初算",
+        "message": (
+            "程序先按目标流速选登记 DN，超出单管能力时增加并联列车，"
+            "然后计算 Re、元件总长和 dP=N*K*rho*v^2/2。单元 K 和元件数"
+            "均是无厂家曲线时的保底。"
+        ),
+        "applicability": "单相管内连续混合初筛；非牛顿、含固、结晶或聚合物料必须试验。",
+        "does_not_prove": [
+            "mixing_uniformity", "residence_time_distribution",
+            "fouling_pass", "cleanability", "vendor_pressure_drop_curve",
+        ],
+        "promotion_cap": "TYPE_SCREENING",
+        "source_refs": [
+            "data/pipe_gbt12459_2025_dn_od_catalog.csv",
+            "knowledge_graph/formula_family_nodes.md#formula_mixer_pressure_drop",
+            "knowledge_graph/selection_learning_graph_20260622/equipment_selection_parameter_calculation_matrix.md",
+        ],
+    },
+    "membrane_flux_recovery_array_screening": {
+        "formula_id": "MEMBRANE_FLUX_RECOVERY_ARRAY_SCREENING",
+        "release_class": "B",
+        "evidence_class": "J",
+        "result_status": "PROVISIONAL",
+        "title": "膜通量—回收率—几何一致元件/模块阵列初算",
+        "message": (
+            "程序按 Qp=Qfeed*R、Areq=Qp*1000/J，再加显式设计裕量并"
+            "向上取整膜元件/模块和并联列数。8040单支面积只允许在卷式"
+            "支路使用；显式管式、中空纤维或平板几何必须采用自身面积。"
+        ),
+        "applicability": (
+            "已明确几何且有该几何有效膜面积的通量—面积—整数模块初筛；"
+            "通量与回收率必须在同介质温压下使用。"
+        ),
+        "does_not_prove": [
+            "permeate_quality", "salt_rejection", "concentration_polarization",
+            "scaling_pass", "geometry_specific_module_hydraulics",
+            "pressure_vessel_hydraulics", "vendor_projection",
+        ],
+        "promotion_cap": "TYPE_SCREENING",
+        "source_refs": [
+            "knowledge_graph/selection_learning_graph_20260622/equipment_selection_parameter_calculation_matrix.md",
+            "knowledge_graph/formula_family_nodes.md#formula_membrane_area_geometry",
+        ],
+    },
+    "tsa_cycle_bed_capacity_screening": {
+        "formula_id": "TSA_CYCLE_BED_CAPACITY_SCREENING",
+        "release_class": "B",
+        "evidence_class": "J",
+        "result_status": "PROVISIONAL",
+        "title": "TSA循环时序—工作容量—床层装填初算",
+        "message": (
+            "有杂质负荷和动态工作容量时按 m=load*tads/qwork*(1+margin)"
+            "计算；仅在capacity有明确物理量/单位时才允许退化到登记比床容积。"
+            "capacity_basis缺失时数值只作为布置占位并将床层设计硬阻断，不冒充穿透计算。"
+        ),
+        "applicability": "双塔或多塔变温吸附成套预设计；同一吸附剂、杂质和周期基准。",
+        "does_not_prove": [
+            "breakthrough_time", "mass_transfer_zone", "regeneration_energy",
+            "product_dew_point", "adsorbent_life", "vendor_guarantee",
+        ],
+        "promotion_cap": "TYPE_SCREENING",
+        "source_refs": [
+            "knowledge_graph/ai_engineering_choice_registry.json",
+            "knowledge_graph/equipment_customer_output_profiles.json",
+        ],
+    },
+    "gas_expander_stage_power_bypass_screening": {
+        "formula_id": "GAS_EXPANDER_STAGE_POWER_BYPASS_SCREENING",
+        "release_class": "B",
+        "evidence_class": "J",
+        "result_status": "PROVISIONAL",
+        "title": "气体膨胀机级数—等熵比功—功率—旁路初算",
+        "message": (
+            "程序从绝压比、k、MW、Z、入口温度和等熵效率初算"
+            "比功、级数与轴功率；若给定可回收功率上限，再给出正常旁路分率。"
+            "必须另设100%容量启停/跳车旁路，本式不是厂家膨胀机图谱。"
+        ),
+        "applicability": "单相气体、Pin,abs>Pout,abs>0，k>1，且无冷凝/两相穿越的预设计。",
+        "does_not_prove": [
+            "vendor_efficiency_map", "choke_margin", "condensation_margin",
+            "rotordynamics", "overspeed_trip", "low_temperature_material_pass",
+        ],
+        "promotion_cap": "TYPE_SCREENING",
+        "source_refs": [
+            "knowledge_graph/formula_family_nodes.md#formula_pressure_ratio",
+            "knowledge_graph/chapter_04_08_late_equipment_graph.md",
+        ],
+    },
 })
 
 # The incompressible Cv expression is a liquid-only screening branch.  Keep
@@ -793,6 +957,9 @@ CALCULATION_TARGET_TOLERANCES: dict[str, tuple[float, float]] = {
     "heat_transfer_area_m2": (0.005, 0.01),
     "tube_or_plate_count": (0.0, 0.0),
     "tower_internal_height_m": (0.005, 0.001),
+    "power_number_estimated_shaft_power_kw": (0.01, 0.01),
+    "required_element_count": (0.0, 0.0),
+    "required_adsorbent_mass_kg_per_tower": (0.01, 0.1),
 }
 
 HARD_CALCULATION_STATUSES = {
@@ -802,9 +969,20 @@ HARD_CALCULATION_STATUSES = {
     "BLOCKED_EXTERNAL_PRESSURE_BRANCH_REQUIRED",
     "BLOCKED_NONPOSITIVE_DENOMINATOR",
     "BLOCKED_INVALID_INPUT",
+    "BLOCKED_AGITATOR_OVERSIZED_SCREENING_LOAD",
     "BLOCKED_ZERO_DUTY_NO_EQUIPMENT_LOAD",
     "BLOCKED_NONPOSITIVE_PRESSURE_DROP",
     "BLOCKED_INVALID_AREA_CLOSURE",
+    "BLOCKED_PHASE_INCOMPATIBLE_FORMULA",
+    "BLOCKED_STATIC_MIXER_PRESSURE_DROP_CONSTRAINT",
+    "BLOCKED_STATIC_MIXER_VELOCITY_CONSTRAINT",
+    "BLOCKED_MEMBRANE_ARRAY_CONSTRAINT",
+    "BLOCKED_TSA_CAPACITY_BASIS_OPEN",
+    "BLOCKED_TSA_CAPACITY_BASIS_INVALID",
+    "BLOCKED_TSA_CYCLE_OR_BED_CONSTRAINT",
+    "BLOCKED_EXPANDER_OPERATING_ENVELOPE",
+    "BLOCKED_PACKAGE_PHYSICAL_BED_BASIS",
+    "BLOCKED_PACKAGE_PROCESS_FUNCTION_UNRESOLVED",
 }
 
 
@@ -929,6 +1107,7 @@ FIELD_UNITS: dict[str, str] = {
     "gas_flow_m3_h": "m3/h",
     "liquid_flow_m3_h": "m3/h",
     "gas_density_kg_m3": "kg/m3",
+    "eos_gas_density_kg_m3": "kg/m3",
     "liquid_density_kg_m3": "kg/m3",
     "design_droplet_size_um": "um",
     "souders_brown_k_m_s": "m/s",
@@ -973,6 +1152,7 @@ FIELD_UNITS: dict[str, str] = {
     "expander_isentropic_specific_work_kj_kg": "kJ/kg",
     "expander_actual_specific_work_kj_kg": "kJ/kg",
     "mass_flow_kg_s": "kg/s",
+    "calculated_shaft_power_kw": "kW",
     "runaway_speed_rpm": "r/min",
     "intercooler_count": "count",
     "per_stage_pressure_ratio": "dimensionless",
@@ -1017,6 +1197,39 @@ FIELD_UNITS: dict[str, str] = {
     "adsorbent_bulk_density_kg_m3": "kg/m3",
     "adsorbent_mass_kg_per_tower": "kg",
     "cycle_time_h": "h",
+    "reynolds_number": "dimensionless",
+    "power_number": "dimensionless",
+    "power_number_estimated_shaft_power_kw": "kW",
+    "power_deviation_percent": "%",
+    "parallel_train_count": "count",
+    "single_train_flow_m3_h": "m3/h",
+    "required_inner_diameter_per_train_mm": "mm",
+    "pressure_drop_ratio": "dimensionless",
+    "predicted_pressure_drop_kpa": "kPa",
+    "required_membrane_area_m2": "m2",
+    "design_membrane_area_m2": "m2",
+    "required_element_count": "count",
+    "design_margin_percent": "%",
+    "elements_per_train": "count",
+    "array_stage_count": "count",
+    "skid_count": "count",
+    "contaminant_load_kg_h": "kg/h",
+    "adsorbent_working_capacity_kg_kg": "kg/kg",
+    "required_adsorbent_mass_kg_per_tower": "kg",
+    "required_total_adsorbent_mass_kg": "kg",
+    "required_bed_volume_m3_per_tower": "m3",
+    "required_total_bed_volume_m3": "m3",
+    "heating_time_h": "h",
+    "cooling_time_h": "h",
+    "switching_time_h": "h",
+    "cycle_phase_sum_h": "h",
+    "bed_loading_margin_percent": "%",
+    "maximum_bed_volume_m3_per_tower": "m3",
+    "specific_bed_volume_m3_per_capacity_unit": "m3/capacity_unit",
+    "maximum_stage_pressure_ratio": "dimensionless",
+    "maximum_recoverable_power_kw": "kW",
+    "normal_bypass_fraction_percent": "%",
+    "protective_bypass_capacity_percent": "%",
     "slurry_flow_m3_h": "m3/h",
     "working_volume_m3": "m3",
     "crystal_yield_kg_h": "kg/h",
@@ -1235,6 +1448,18 @@ FIELD_ALIASES: dict[str, list[str]] = {
     "impeller_diameter_mm": ["impeller_diameter_mm", "叶轮直径", "搅拌桨直径"],
     "shaft_diameter_mm": ["shaft_diameter_mm", "轴径", "搅拌轴直径"],
     "gearbox_ratio": ["gearbox_ratio", "减速比", "传动比"],
+    "reynolds_number": ["reynolds_number", "reynolds", "re", "雷诺数"],
+    "power_number": ["power_number", "np", "功率准数"],
+    "power_number_branch_id": [
+        "power_number_branch_id", "功率准数分支"
+    ],
+    "power_number_estimated_shaft_power_kw": [
+        "power_number_estimated_shaft_power_kw", "功率准数轴功率初算"
+    ],
+    "power_deviation_percent": [
+        "power_deviation_percent", "搅拌功率偏差百分比"
+    ],
+    "power_basis": ["power_basis", "搅拌功率基准"],
     "element_type": ["element_type", "元件型式", "混合元件型式"],
     "length_mm": ["length_mm", "设备长度", "混合器长度"],
     "element_length_to_diameter_ratio": [
@@ -1247,6 +1472,18 @@ FIELD_ALIASES: dict[str, list[str]] = {
     "blockage_cleaning_boundary": [
         "blockage_cleaning_boundary", "堵塞清洗边界", "清洗边界"
     ],
+    "parallel_train_count": [
+        "parallel_train_count", "并联列车数", "并联台数"
+    ],
+    "single_train_flow_m3_h": [
+        "single_train_flow_m3_h", "单列流量"
+    ],
+    "required_inner_diameter_per_train_mm": [
+        "required_inner_diameter_per_train_mm", "单列所需内径"
+    ],
+    "pressure_drop_ratio": ["pressure_drop_ratio", "压降占许用比"],
+    "hydraulic_status": ["hydraulic_status", "水力状态"],
+    "element_count_basis": ["element_count_basis", "混合元件数基准"],
     "element_standard_designation": [
         "element_standard_designation", "膜元件规格", "膜元件标准规格"
     ],
@@ -1280,6 +1517,19 @@ FIELD_ALIASES: dict[str, list[str]] = {
         "center_tube_material_grade", "膜中心管材料"
     ],
     "service_route": ["service_route", "膜分离路线", "服务路线"],
+    "required_membrane_area_m2": [
+        "required_membrane_area_m2", "所需膜面积"
+    ],
+    "required_element_count": [
+        "required_element_count", "所需膜元件数"
+    ],
+    "design_margin_percent": [
+        "design_margin_percent", "设计裕量百分比", "设计裕量"
+    ],
+    "elements_per_train": ["elements_per_train", "单列膜元件数"],
+    "array_stage_count": ["array_stage_count", "膜阵列段数"],
+    "skid_count": ["skid_count", "橇块数", "撬装数"],
+    "array_sizing_status": ["array_sizing_status", "膜阵列选型状态"],
     "calculated_filter_area_m2": [
         "calculated_filter_area_m2", "计算过滤面积"
     ],
@@ -1335,6 +1585,29 @@ FIELD_ALIASES: dict[str, list[str]] = {
     ],
     "regeneration_method": ["regeneration_method", "再生方式"],
     "capacity_basis": ["capacity_basis", "处理能力基准"],
+    "contaminant_load_kg_h": [
+        "contaminant_load_kg_h", "杂质负荷", "吸附负荷"
+    ],
+    "adsorbent_working_capacity_kg_kg": [
+        "adsorbent_working_capacity_kg_kg", "吸附剂动态工作容量"
+    ],
+    "required_adsorbent_mass_kg_per_tower": [
+        "required_adsorbent_mass_kg_per_tower", "单塔所需吸附剂量"
+    ],
+    "heating_time_h": ["heating_time_h", "加热再生时间"],
+    "cooling_time_h": ["cooling_time_h", "冷吹时间", "冷却时间"],
+    "switching_time_h": ["switching_time_h", "均压切换时间"],
+    "cycle_phase_sum_h": ["cycle_phase_sum_h", "循环步序合计时间"],
+    "cycle_balance_status": ["cycle_balance_status", "循环时序状态"],
+    "bed_loading_margin_percent": [
+        "bed_loading_margin_percent", "床层装填裕量"
+    ],
+    "maximum_bed_volume_m3_per_tower": [
+        "maximum_bed_volume_m3_per_tower", "单塔最大床层容积"
+    ],
+    "specific_bed_volume_m3_per_capacity_unit": [
+        "specific_bed_volume_m3_per_capacity_unit", "单位处理能力比床容积"
+    ],
     "generator_efficiency_percent": [
         "generator_efficiency_percent", "发电机效率"
     ],
@@ -1347,9 +1620,40 @@ FIELD_ALIASES: dict[str, list[str]] = {
         "expander_actual_specific_work_kj_kg", "膨胀机实际比功"
     ],
     "mass_flow_kg_s": ["mass_flow_kg_s", "质量流量kgs"],
+    "calculated_shaft_power_kw": [
+        "calculated_shaft_power_kw", "程序计算轴功率"
+    ],
     "runaway_speed_rpm": ["runaway_speed_rpm", "飞逸转速"],
     "bearing_type": ["bearing_type", "轴承型式"],
     "coupling_type": ["coupling_type", "联轴器型式", "联轴器"],
+    "efficiency_basis": ["efficiency_basis", "效率基准"],
+    "maximum_recoverable_power_kw": [
+        "maximum_recoverable_power_kw", "最大可回收功率", "发电输入上限"
+    ],
+    "normal_bypass_fraction_percent": [
+        "normal_bypass_fraction_percent", "正常旁路分率"
+    ],
+    "protective_bypass_capacity_percent": [
+        "protective_bypass_capacity_percent", "保护旁路容量"
+    ],
+    "bypass_control_strategy": [
+        "bypass_control_strategy", "旁路控制策略"
+    ],
+    "operating_envelope_status": [
+        "operating_envelope_status", "运行包络状态"
+    ],
+    "minimum_outlet_temperature_c": [
+        "minimum_outlet_temperature_c", "最低允许出口温度"
+    ],
+    "maximum_stage_pressure_ratio": [
+        "maximum_stage_pressure_ratio", "单级最大压比"
+    ],
+    "adjustment_recommendation": [
+        "adjustment_recommendation", "调整建议", "修改方案"
+    ],
+    "selection_branch_narrative": [
+        "selection_branch_narrative", "分支选择说明"
+    ],
     "crystallizer_height_to_diameter_ratio": [
         "crystallizer_height_to_diameter_ratio", "结晶器高径比"
     ],
@@ -1549,6 +1853,11 @@ STRING_FIELDS = {
     "frame_material_grade", "washing_arrangement",
     "enclosure_material_grade", "adsorbent_type", "regeneration_method",
     "capacity_basis", "bearing_type", "coupling_type",
+    "power_number_branch_id", "power_basis", "hydraulic_status",
+    "element_count_basis", "array_sizing_status", "cycle_balance_status",
+    "efficiency_basis", "bypass_control_strategy",
+    "operating_envelope_status", "adjustment_recommendation",
+    "selection_branch_narrative",
     "tube_layout", "heat_transfer_plate_material_grade",
     "plate_gasket_material_grade", "plate_pattern", "plate_pass_arrangement",
     "wall_series", "fitting_type", "head_type", "membrane_geometry_type",
@@ -1620,6 +1929,7 @@ def unit_group(field: str) -> str | None:
         "permeate_flow_m3_h",
         "feed_flow_m3_h",
         "concentrate_flow_m3_h",
+        "single_train_flow_m3_h",
     }:
         return "volume_flow"
     if field == "mass_flow_kg_h":
@@ -1632,6 +1942,7 @@ def unit_group(field: str) -> str | None:
         "selected_wall_thickness_mm", "channel_inner_diameter_mm",
         "element_outer_diameter_mm", "element_length_mm", "plate_size_mm",
         "vessel_diameter_mm", "bed_height_mm",
+        "required_inner_diameter_per_train_mm",
         "cylinder_calculated_thickness_mm", "head_calculated_thickness_mm",
     }:
         return "length_mm"
@@ -1641,6 +1952,9 @@ def unit_group(field: str) -> str | None:
         "recovery_percent",
         "surge_margin_percent",
         "required_surge_margin_percent",
+        "design_margin_percent", "power_deviation_percent",
+        "bed_loading_margin_percent", "normal_bypass_fraction_percent",
+        "protective_bypass_capacity_percent",
     }:
         return "percent"
     if field in {
@@ -1655,6 +1969,7 @@ def unit_group(field: str) -> str | None:
         "pressure_drop_power_component_kw", "pressure_component_shaft_power_screening_kw",
         "fan_power_kw", "belt_drive_power_kw", "total_installed_power_kw",
         "electrical_power_kw", "generator_power_kw",
+        "power_number_estimated_shaft_power_kw", "maximum_recoverable_power_kw",
     }:
         return "power"
     if field in {
@@ -1665,6 +1980,7 @@ def unit_group(field: str) -> str | None:
         "selected_filter_area_m2",
         "filter_area_per_chamber_m2",
         "belt_area_m2",
+        "required_membrane_area_m2",
     }:
         return "area"
     if field == "retention_time_min":
@@ -4082,6 +4398,130 @@ def apply_design_fallbacks(
 
     conditional_defaults = dict(family_defaults) if isinstance(family_defaults, dict) else {}
 
+    # Family-specific formula inputs must enter through the same fallback
+    # ledger as every other provisional value.  Keeping them here (instead of
+    # as literals inside the builders) makes the GUI formula trace state which
+    # values were supplied and which were only used to keep preliminary sizing
+    # running.
+    if family_id == "family_agitator":
+        agitator_profile = (
+            policy.get("auxiliary_equipment_preliminary_fallback_profiles", {})
+            .get("top_entry_agitator", {})
+        )
+        if not isinstance(agitator_profile, dict):
+            agitator_profile = {}
+        for field, value, warning in (
+            (
+                "density_kg_m3", 1000.0,
+                "搅拌介质密度暂按水1000 kg/m³保底；必须用同温同组成物性替换。",
+            ),
+            (
+                "dynamic_viscosity_mpa_s", 1.0,
+                "动力黏度暂按1 mPa·s保底；Re、桨型分支和功率对黏度敏感。",
+            ),
+            (
+                "impeller_diameter_ratio",
+                agitator_profile.get("impeller_diameter_ratio", 0.33),
+                "D/T暂按45°折叶涡轮保底；高黏、含固或散气任务须换桨型后重算。",
+            ),
+        ):
+            add(
+                field, value, "EXPLICIT_FINAL_FALLBACK_DEFAULT",
+                "Registered agitator Re/Np screening input was absent.",
+                warning,
+                ["formula:AGITATOR_RE_NP_POWER_SCREENING"],
+            )
+    elif family_id == "family_static_mixer":
+        mixer_profile = (
+            policy.get("auxiliary_equipment_preliminary_fallback_profiles", {})
+            .get("helical_static_mixer", {})
+        )
+        if not isinstance(mixer_profile, dict):
+            mixer_profile = {}
+        for field, default_value, warning in (
+            ("density_kg_m3", 1000.0, "密度按水样低黏液体保底；压降与密度成正比。"),
+            ("dynamic_viscosity_mpa_s", 1.0, "黏度按水样物性保底；Re分支、元件数与堵塞边界必须重算。"),
+            ("element_count", 6, "6个元件是湍流均匀混合保底；程序会按Re改为6/12/18元件分支。"),
+            ("element_length_to_diameter_ratio", 1.5, "单元L/D=1.5为无厂家几何时的保底。"),
+            ("local_resistance_coefficient_per_element", 1.5, "单元K=1.5为压降初算保底，正式值必须用所选元件曲线替换。"),
+        ):
+            add(
+                field, mixer_profile.get(field, default_value),
+                "EXPLICIT_FINAL_FALLBACK_DEFAULT",
+                "Registered static-mixer hydraulic input was absent.",
+                warning,
+                ["formula:STATIC_MIXER_HYDRAULIC_TRAIN_SCREENING"],
+            )
+    elif family_id == "family_membrane":
+        membrane_profile = (
+            policy.get("membrane_package_preliminary_fallback_profiles", {})
+            .get("spiral_wound_8040_membrane", {})
+        )
+        if not isinstance(membrane_profile, dict):
+            membrane_profile = {}
+        for field, default_value, warning in (
+            ("membrane_area_per_element_m2", 37.0, "37 m²/支仅对登记8040卷式保底支路；其他几何使用本案已算面积。"),
+            ("elements_per_pressure_vessel", 5, "每支膜壳5芯是布置保底，必须由压降和厂家膜壳限值复核。"),
+            ("design_margin_percent", 10.0, "10%膜面积裕量仅用于预设计，不代替污染通量衰减和寿命投影。"),
+        ):
+            add(
+                field, membrane_profile.get(field, default_value),
+                "EXPLICIT_FINAL_FALLBACK_DEFAULT",
+                "Registered membrane array sizing input was absent.",
+                warning,
+                ["formula:MEMBRANE_FLUX_RECOVERY_ARRAY_SCREENING"],
+            )
+    elif (
+        family_id == "family_package_equipment"
+        and _package_process_route(work) == "TSA"
+    ):
+        tsa_profile = (
+            policy.get("membrane_package_preliminary_fallback_profiles", {})
+            .get("twin_tower_tsa_package", {})
+        )
+        if not isinstance(tsa_profile, dict):
+            tsa_profile = {}
+        for field, default_value, warning in (
+            ("adsorption_time_h", 4.0, "单塔吸附4 h为无穿透曲线时的保底。"),
+            ("adsorbent_bulk_density_kg_m3", 750.0, "活性氧化铝堆积密度750 kg/m³为预布置保底。"),
+            ("design_margin_percent", 20.0, "20%床层装填裕量不代替动态容量、传质区和老化校核。"),
+            ("heating_time_h", 2.0, "加热再生2 h为循环时序保底。"),
+            ("cooling_time_h", 1.5, "冷吹1.5 h为循环时序保底。"),
+            ("switching_time_h", 0.5, "均压/切换0.5 h为循环时序保底。"),
+            ("maximum_bed_volume_m3_per_tower", 50.0, "单塔50 m³只是超大床层分列报警线，不是标准型谱上限。"),
+            ("specific_bed_volume_m3_per_capacity_unit", 0.002, "处理能力单位未闭合时才使用0.002 m³/单位的保底比床容积。"),
+        ):
+            add(
+                field, tsa_profile.get(field, default_value),
+                "EXPLICIT_FINAL_FALLBACK_DEFAULT",
+                "Registered TSA cycle/bed sizing input was absent.",
+                warning,
+                ["formula:TSA_CYCLE_BED_CAPACITY_SCREENING"],
+            )
+        if present(work, "contaminant_load_kg_h"):
+            add(
+                "adsorbent_working_capacity_kg_kg", 0.08,
+                "EXPLICIT_FINAL_FALLBACK_DEFAULT",
+                "Contaminant load was supplied without same-contaminant dynamic working capacity.",
+                "0.08 kg/kg是活性氧化铝无穿透试验时的显式保底；必须用同杂质、温压和再生深度的动态容量替换。",
+                ["formula:TSA_CYCLE_BED_CAPACITY_SCREENING"],
+            )
+    elif family_id == "family_gas_expander_turbine":
+        turbine_profile = (
+            policy.get("turbine_preliminary_fallback_profiles", {})
+            .get("radial_inflow_gas_expander", {})
+        )
+        if not isinstance(turbine_profile, dict):
+            turbine_profile = {}
+        add(
+            "maximum_stage_pressure_ratio",
+            turbine_profile.get("maximum_stage_pressure_ratio", 3.0),
+            "EXPLICIT_FINAL_FALLBACK_DEFAULT",
+            "No vendor stage-loading map was available for preliminary staging.",
+            "单级压比上限3.0是径向流膨胀机预设计保底，不代表厂家级负荷图已通过。",
+            ["formula:GAS_EXPANDER_STAGE_POWER_BYPASS_SCREENING"],
+        )
+
     # Aspen solid-processing blocks identify the process task but do not prove
     # a mechanical size, cycle, or loading basis.  Keep the terminal type
     # available, while suppressing generic family numbers that would look like
@@ -4856,6 +5296,18 @@ def validate_parameters(params: dict[str, Any]) -> list[dict[str, Any]]:
         "expander_isentropic_specific_work_kj_kg",
         "expander_actual_specific_work_kj_kg", "mass_flow_kg_s",
         "runaway_speed_rpm",
+        "power_number", "power_number_estimated_shaft_power_kw",
+        "parallel_train_count", "single_train_flow_m3_h",
+        "required_inner_diameter_per_train_mm",
+        "required_membrane_area_m2", "required_element_count",
+        "elements_per_train", "array_stage_count", "skid_count",
+        "contaminant_load_kg_h", "adsorbent_working_capacity_kg_kg",
+        "required_adsorbent_mass_kg_per_tower",
+        "heating_time_h", "cooling_time_h", "switching_time_h",
+        "cycle_phase_sum_h", "maximum_bed_volume_m3_per_tower",
+        "maximum_recoverable_power_kw",
+        "specific_bed_volume_m3_per_capacity_unit",
+        "maximum_stage_pressure_ratio",
     }
     nonnegative = {
         "head_m", "pressure_drop_kpa", "allowable_pressure_drop_kpa", "maximum_pressure_drop_kpa", "npshr_m",
@@ -4865,6 +5317,9 @@ def validate_parameters(params: dict[str, Any]) -> list[dict[str, Any]]:
         "demister_pressure_drop_kpa",
         "intercooler_count",
         "concentrate_flow_m3_h",
+        "design_margin_percent", "power_deviation_percent",
+        "bed_loading_margin_percent", "normal_bypass_fraction_percent",
+        "protective_bypass_capacity_percent", "pressure_drop_ratio",
     }
     for field in strictly_positive:
         if present(params, field) and field not in invalid_numeric and float(params[field]) <= 0:
@@ -4890,6 +5345,20 @@ def validate_parameters(params: dict[str, Any]) -> list[dict[str, Any]]:
         })
     if present(params, "recovery_percent") and "recovery_percent" not in invalid_numeric and not 0 <= float(params["recovery_percent"]) <= 100:
         errors.append({"field": "recovery_percent", "code": "OUT_OF_RANGE_0_100", "value": params["recovery_percent"]})
+    for field in (
+        "design_margin_percent", "bed_loading_margin_percent",
+        "normal_bypass_fraction_percent", "protective_bypass_capacity_percent",
+    ):
+        if (
+            present(params, field)
+            and field not in invalid_numeric
+            and not 0 <= float(params[field]) <= 100
+        ):
+            errors.append({
+                "field": field,
+                "code": "OUT_OF_RANGE_0_100",
+                "value": params[field],
+            })
     if (
         present(params, "normal_liquid_level_percent")
         and "normal_liquid_level_percent" not in invalid_numeric
@@ -5727,6 +6196,1084 @@ def calculation_record(
     }
 
 
+STATIC_MIXER_PROVISIONAL_WALL_BY_DN: dict[int, float] = {
+    15: 3.2, 20: 3.2, 25: 3.6, 32: 3.6, 40: 3.7, 50: 4.0,
+    65: 5.0, 80: 5.5, 90: 5.7, 100: 6.0, 125: 6.5,
+    150: 7.1, 200: 8.2, 250: 9.3, 300: 10.3,
+}
+
+
+def _registered_static_mixer_dn_series() -> list[dict[str, Any]]:
+    """Return DN/OD only from the promoted GB/T catalog.
+
+    GB/T 12459 proves the DN-to-OD mapping but does not prove wall thickness.
+    The wall used by this preliminary hydraulic screen therefore remains an
+    explicit provisional allowance and may not be presented as a pipe class.
+    """
+
+    series: list[dict[str, Any]] = []
+    for source_row in load_pipe_standard_dn_od():
+        dn = int(float(source_row["dn"]))
+        wall = STATIC_MIXER_PROVISIONAL_WALL_BY_DN.get(
+            dn,
+            max(4.0, round(dn * 0.03, 1)),
+        )
+        outer_diameter = float(source_row["outer_diameter_mm"])
+        if outer_diameter - 2.0 * wall <= 0:
+            continue
+        series.append({
+            "dn": dn,
+            "outer_diameter_mm": outer_diameter,
+            "provisional_wall_thickness_mm": wall,
+            "standard_id": source_row.get("standard_id"),
+            "standard_version": source_row.get("standard_version"),
+            "source_pdf_sha256": source_row.get("source_pdf_sha256"),
+            "source_table_asset_id": source_row.get("source_table_asset_id"),
+            "source_row_1based": source_row.get("source_row_1based"),
+            "application_boundary": source_row.get("application_boundary"),
+        })
+    if not series:
+        raise ValueError("registered GB/T DN/OD catalog has no usable rows")
+    return series
+
+
+def _screening_round_up(value: float, step: float) -> float:
+    if not math.isfinite(value) or value <= 0 or step <= 0:
+        raise ValueError("screening round-up inputs must be positive and finite")
+    return math.ceil(value / step) * step
+
+
+def _agitator_re_np_power_chain(
+    values: dict[str, Any],
+    fallback_fields: set[str] | None = None,
+) -> dict[str, Any]:
+    """Return a visible task/viscosity -> impeller -> Re/Np/power chain."""
+
+    fallback_fields = set(fallback_fields or ())
+    volume = numeric(values.get("volume_m3"))
+    speed_rpm = numeric(values.get("rotational_speed_rpm"))
+    density = numeric(values.get("density_kg_m3"))
+    viscosity_mpa_s = numeric(values.get("dynamic_viscosity_mpa_s"))
+    ratio = numeric(values.get("impeller_diameter_ratio"))
+    if None in (volume, speed_rpm, density, viscosity_mpa_s, ratio):
+        raise ValueError("agitator volume, speed, density, viscosity and D/T are required")
+    if min(volume, speed_rpm, density, viscosity_mpa_s, ratio) <= 0:
+        raise ValueError("agitator Re/Np inputs must be positive")
+    vessel_diameter_mm = numeric(values.get("inner_diameter_mm"))
+    if vessel_diameter_mm is None:
+        vessel_diameter_mm = _screening_round_up(
+            (4.0 * volume / (math.pi * 1.20)) ** (1.0 / 3.0) * 1000.0,
+            100.0,
+        )
+    supplied_impeller_diameter = numeric(values.get("impeller_diameter_mm"))
+    provisional_impeller_diameter = (
+        supplied_impeller_diameter
+        if supplied_impeller_diameter is not None
+        else _screening_round_up(vessel_diameter_mm * ratio, 50.0)
+    )
+    speed_s = speed_rpm / 60.0
+    viscosity_pa_s = viscosity_mpa_s / 1000.0
+    provisional_re = (
+        density * speed_s * (provisional_impeller_diameter / 1000.0) ** 2
+        / viscosity_pa_s
+    )
+    task_text = " ".join(
+        str(values.get(field) or "")
+        for field in (
+            "agitator_type", "equipment_type", "equipment_name",
+            "process_function", "mixing_metric",
+        )
+    ).casefold()
+    explicit_type = (
+        present(values, "agitator_type")
+        and "agitator_type" not in fallback_fields
+    )
+    gas_task = any(
+        marker in task_text
+        for marker in ("气体分散", "曝气", "gas dispersion", "gas-liquid")
+    )
+    suspension_task = any(
+        marker in task_text
+        for marker in ("固体悬浮", "颗粒悬浮", "solid suspension", "suspend")
+    )
+    ribbon_named = any(
+        marker in task_text
+        for marker in ("螺带", "helical ribbon", "ribbon")
+    )
+    anchor_named = any(marker in task_text for marker in ("锚式", "anchor"))
+    rushton_named = any(
+        marker in task_text
+        for marker in ("rushton", "圆盘涡轮", "直叶圆盘")
+    )
+    propeller_named = any(
+        marker in task_text
+        for marker in ("三叶推进", "推进式", "propeller")
+    )
+    pitched_blade_named = any(
+        marker in task_text
+        for marker in ("斜叶涡轮", "折叶涡轮", "pitched blade", "pbt45")
+    )
+    if ribbon_named or (not explicit_type and provisional_re < 10.0):
+        impeller_family = "HELICAL_RIBBON"
+        recommended_type = "顶入式双螺带搅拌器"
+        impeller_code = "HR2"
+        type_basis = (
+            "USER_FIXED_HELICAL_RIBBON_TYPE"
+            if explicit_type else "LAMINAR_HIGH_VISCOSITY_RE_BRANCH"
+        )
+        default_ratio = 0.90
+        laminar_constant, turbulent_constant = 300.0, 0.0
+    elif anchor_named:
+        impeller_family = "ANCHOR"
+        recommended_type = "顶入式锚式搅拌器"
+        impeller_code = "ANCHOR"
+        type_basis = "USER_FIXED_ANCHOR_TYPE"
+        default_ratio = 0.90
+        laminar_constant, turbulent_constant = 100.0, 0.0
+    elif rushton_named or (gas_task and not explicit_type):
+        impeller_family = "RUSHTON_DISC_TURBINE"
+        recommended_type = "顶入式六叶直叶圆盘涡轮气体分散搅拌器"
+        impeller_code = "RDT6"
+        type_basis = (
+            "USER_FIXED_DISC_TURBINE_TYPE"
+            if explicit_type else "GAS_DISPERSION_TASK_BRANCH"
+        )
+        default_ratio = 0.33
+        laminar_constant, turbulent_constant = 100.0, 5.0
+    elif propeller_named:
+        impeller_family = "THREE_BLADE_PROPELLER"
+        recommended_type = "顶入式三叶推进式轴流搅拌器"
+        impeller_code = "PROP3"
+        type_basis = "USER_FIXED_THREE_BLADE_PROPELLER_TYPE"
+        default_ratio = 0.33
+        # Registered preliminary constants for the three-blade propeller
+        # branch.  They remain a TYPE_SCREENING fallback and never replace a
+        # same-geometry vendor/test Np-Re curve.
+        laminar_constant, turbulent_constant = 41.0, 0.32
+    elif pitched_blade_named or not explicit_type:
+        impeller_family = "PITCHED_BLADE_TURBINE_45"
+        recommended_type = "顶入式六叶45°折叶开启涡轮搅拌器"
+        impeller_code = "PBT45"
+        type_basis = (
+            "USER_FIXED_PBT45_TYPE"
+            if explicit_type else
+            "SOLID_SUSPENSION_PBT_BRANCH" if suspension_task else
+            "GENERAL_LOW_VISCOSITY_BLEND_PBT_BRANCH"
+        )
+        default_ratio = 0.33
+        laminar_constant, turbulent_constant = 70.0, 1.3
+    else:
+        explicit_name = str(values.get("agitator_type") or "").strip()
+        raise ValueError(
+            "explicit agitator_type has no registered Np-Re correlation: "
+            f"{explicit_name or '<empty>'}"
+        )
+    if (
+        "impeller_diameter_ratio" in fallback_fields
+        and supplied_impeller_diameter is None
+    ):
+        ratio = default_ratio
+    impeller_diameter_mm = (
+        supplied_impeller_diameter
+        if supplied_impeller_diameter is not None
+        else _screening_round_up(vessel_diameter_mm * ratio, 50.0)
+    )
+    diameter_m = impeller_diameter_mm / 1000.0
+    reynolds = density * speed_s * diameter_m**2 / viscosity_pa_s
+    if impeller_family in {"HELICAL_RIBBON", "ANCHOR"}:
+        branch_id = f"LAMINAR_{impeller_family}_NP_RE_CORRELATION"
+        branch_label = (
+            "层流双螺带功率准数分支"
+            if impeller_family == "HELICAL_RIBBON" else "层流锚式功率准数分支"
+        )
+        power_number = laminar_constant / reynolds
+        recommendation = (
+            f"保留{recommended_type}具体候选；Np*Re={laminar_constant:g}仅为几何相关保底，"
+            "必须用所选桨型厂家/试验曲线重算功率、轴弯扭、疲劳和临界转速。"
+        )
+    elif reynolds < 10_000.0:
+        branch_id = f"TRANSITIONAL_{impeller_family}_COMPOSITE_POWER_NUMBER"
+        branch_label = "过渡流复合功率准数分支"
+        power_number = laminar_constant / reynolds + turbulent_constant
+        recommendation = f"保留{recommended_type}候选，用实验/厂家Np-Re曲线替换复合式。"
+    else:
+        branch_id = f"TURBULENT_{impeller_family}_CONSTANT_POWER_NUMBER"
+        branch_label = "充分湍流恒功率准数分支"
+        power_number = turbulent_constant
+        recommendation = f"保留{recommended_type}候选；混合任务指标仍须闭合。"
+    estimated_power_kw = (
+        power_number * density * speed_s**3 * diameter_m**5 / 1000.0
+    )
+    power_density = estimated_power_kw / volume
+    oversized = estimated_power_kw > 1000.0 or vessel_diameter_mm > 6000.0
+    adjustment = (
+        "超出单台程序预选边界：优先拆分容器/工艺列车，或做多层桨与多轴方案比较；"
+        "不生成虚构厂家型号。"
+        if oversized
+        else recommendation
+    )
+    return {
+        "calculation_id": "agitator_re_np_power_screening",
+        "vessel_diameter_mm": vessel_diameter_mm,
+        "impeller_diameter_mm": impeller_diameter_mm,
+        "impeller_diameter_ratio": ratio,
+        "reynolds_number": reynolds,
+        "power_number": power_number,
+        "power_number_branch_id": branch_id,
+        "power_number_branch_label": branch_label,
+        "impeller_family": impeller_family,
+        "impeller_code": impeller_code,
+        "recommended_agitator_type": recommended_type,
+        "type_selection_basis": type_basis,
+        "power_number_estimated_shaft_power_kw": estimated_power_kw,
+        "agitator_power_density_kw_m3": power_density,
+        "oversized_screening_load": oversized,
+        "adjustment_recommendation": adjustment,
+        "selection_branch_narrative": (
+            f"Re={reynolds:.3g}，进入{branch_label}；Np={power_number:.3g}，"
+            f"功率准数初算轴功率={estimated_power_kw:.3g} kW。{adjustment}"
+        ),
+        "formula": (
+            f"Re=rho*N*D^2/mu; Np={laminar_constant:g}/Re"
+            + (
+                f"+{turbulent_constant:g} (Re<10000), else {turbulent_constant:g}"
+                if turbulent_constant > 0 else " (geometry-specific laminar screen)"
+            )
+            + "; P=Np*rho*N^3*D^5/1000"
+        ),
+        "substitution": (
+            f"Re={density:g}*({speed_rpm:g}/60)*({impeller_diameter_mm:g}/1000)^2/"
+            f"({viscosity_mpa_s:g}/1000); Np={power_number:.12g}; "
+            f"P={power_number:.12g}*{density:g}*({speed_rpm:g}/60)^3*"
+            f"({impeller_diameter_mm:g}/1000)^5/1000"
+        ),
+    }
+
+
+def _static_mixer_hydraulic_chain(
+    values: dict[str, Any],
+    fallback_fields: set[str] | None = None,
+) -> dict[str, Any]:
+    """Select DN, element count and parallel trains against allowed dP."""
+
+    fallback_fields = set(fallback_fields or ())
+    flow = numeric(values.get("flow_m3_h"))
+    target_velocity = numeric(values.get("target_velocity_m_s"))
+    density = numeric(values.get("density_kg_m3"))
+    viscosity = numeric(values.get("dynamic_viscosity_mpa_s"))
+    element_ld = numeric(values.get("element_length_to_diameter_ratio"))
+    k_per_element = numeric(values.get("local_resistance_coefficient_per_element"))
+    allowable_dp = numeric(values.get("allowable_pressure_drop_kpa"))
+    required_values = (
+        flow, target_velocity, density, viscosity, element_ld,
+        k_per_element, allowable_dp,
+    )
+    if any(value is None for value in required_values):
+        raise ValueError("static-mixer flow, properties, geometry/K and allowable dP are required")
+    if min(required_values) <= 0:
+        raise ValueError("static-mixer hydraulic inputs must be positive")
+    explicit_dn = present(values, "selected_dn") and "selected_dn" not in fallback_fields
+    explicit_parallel = (
+        present(values, "parallel_train_count")
+        and "parallel_train_count" not in fallback_fields
+    )
+    explicit_elements = (
+        present(values, "element_count") and "element_count" not in fallback_fields
+    )
+    fixed_dn = int(float(values["selected_dn"])) if explicit_dn else None
+    requested_parallel = (
+        max(1, int(float(values["parallel_train_count"])))
+        if explicit_parallel else 1
+    )
+    dn_series = _registered_static_mixer_dn_series()
+    max_od = float(dn_series[-1]["outer_diameter_mm"])
+    max_wall = float(dn_series[-1]["provisional_wall_thickness_mm"])
+    max_id = max_od - 2.0 * max_wall
+    max_flow_at_target = (
+        math.pi * (max_id / 1000.0) ** 2 / 4.0 * target_velocity * 3600.0
+    )
+    minimum_parallel_for_diameter = max(1, math.ceil(flow / max_flow_at_target))
+    starting_parallel = requested_parallel if explicit_parallel else minimum_parallel_for_diameter
+
+    def evaluate(parallel_count: int, candidate_index: int | None = None) -> dict[str, Any]:
+        per_train_flow = flow / parallel_count
+        required_id = (
+            math.sqrt(4.0 * (per_train_flow / 3600.0) / (math.pi * target_velocity))
+            * 1000.0
+        )
+        if fixed_dn is not None:
+            selected_index = next(
+                (
+                    index for index, item in enumerate(dn_series)
+                    if int(item["dn"]) == fixed_dn
+                ),
+                None,
+            )
+            if selected_index is None:
+                raise ValueError("selected_dn is not in the registered GB/T 12459 DN/OD catalog")
+        elif candidate_index is not None:
+            selected_index = candidate_index
+        else:
+            selected_index = next(
+                (
+                    index for index, item in enumerate(dn_series)
+                    if float(item["outer_diameter_mm"])
+                    - 2.0 * float(item["provisional_wall_thickness_mm"])
+                    >= required_id
+                ),
+                len(dn_series) - 1,
+            )
+        selected_row = dn_series[selected_index]
+        dn = int(selected_row["dn"])
+        od = float(selected_row["outer_diameter_mm"])
+        wall = float(selected_row["provisional_wall_thickness_mm"])
+        actual_id = od - 2.0 * wall
+        actual_velocity = (
+            (per_train_flow / 3600.0)
+            / (math.pi * (actual_id / 1000.0) ** 2 / 4.0)
+        )
+        reynolds = density * actual_velocity * (actual_id / 1000.0) / (viscosity / 1000.0)
+        if explicit_elements:
+            element_count = int(float(values["element_count"]))
+            count_basis = "USER_FIXED_ELEMENT_COUNT"
+        elif reynolds >= 4000.0:
+            element_count, count_basis = 6, "TURBULENT_6_ELEMENT_FALLBACK"
+        elif reynolds >= 2300.0:
+            element_count, count_basis = 12, "TRANSITIONAL_12_ELEMENT_FALLBACK"
+        else:
+            element_count, count_basis = 18, "LAMINAR_18_ELEMENT_FALLBACK"
+        pressure_drop = (
+            element_count * k_per_element * density * actual_velocity**2
+            / 2.0 / 1000.0
+        )
+        return {
+            "parallel_train_count": parallel_count,
+            "single_train_flow_m3_h": per_train_flow,
+            "required_inner_diameter_per_train_mm": required_id,
+            "selected_dn": dn,
+            "selected_outer_diameter_mm": od,
+            "selected_wall_thickness_mm": wall,
+            "selected_dn_standard_id": selected_row.get("standard_id"),
+            "selected_dn_standard_version": selected_row.get("standard_version"),
+            "selected_dn_source_pdf_sha256": selected_row.get("source_pdf_sha256"),
+            "selected_dn_source_table_asset_id": selected_row.get("source_table_asset_id"),
+            "selected_dn_source_row_1based": selected_row.get("source_row_1based"),
+            "selected_wall_basis": (
+                "PROVISIONAL_HYDRAULIC_ALLOWANCE_NOT_PROVED_BY_GBT12459"
+            ),
+            "actual_inner_diameter_mm": actual_id,
+            "actual_velocity_m_s": actual_velocity,
+            "reynolds_number": reynolds,
+            "element_count": element_count,
+            "element_count_basis": count_basis,
+            "length_mm": _screening_round_up(element_count * element_ld * actual_id, 100.0),
+            "predicted_pressure_drop_kpa": pressure_drop,
+            "pressure_drop_ratio": pressure_drop / allowable_dp,
+            "velocity_ratio": actual_velocity / target_velocity,
+        }
+
+    candidate = evaluate(starting_parallel)
+    base_dn = candidate["selected_dn"]
+    if not explicit_dn:
+        base_index = next(
+            index for index, row in enumerate(dn_series)
+            if int(row["dn"]) == base_dn
+        )
+        for index in range(base_index, len(dn_series)):
+            candidate = evaluate(starting_parallel, index)
+            if (
+                candidate["predicted_pressure_drop_kpa"] <= allowable_dp
+                and candidate["actual_velocity_m_s"]
+                <= target_velocity * (1.0 + 1e-9)
+            ):
+                break
+    if (
+        (
+            candidate["predicted_pressure_drop_kpa"] > allowable_dp
+            or candidate["actual_velocity_m_s"]
+            > target_velocity * (1.0 + 1e-9)
+        )
+        and not explicit_parallel and not explicit_dn
+    ):
+        parallel_count = starting_parallel
+        while (
+            (
+                candidate["predicted_pressure_drop_kpa"] > allowable_dp
+                or candidate["actual_velocity_m_s"]
+                > target_velocity * (1.0 + 1e-9)
+            )
+            and parallel_count < 4096
+        ):
+            parallel_count += 1
+            candidate = evaluate(parallel_count, len(dn_series) - 1)
+    pass_dp = candidate["predicted_pressure_drop_kpa"] <= allowable_dp
+    pass_velocity = (
+        candidate["actual_velocity_m_s"]
+        <= target_velocity * (1.0 + 1e-9)
+    )
+    if pass_dp and pass_velocity and candidate["selected_dn"] != base_dn:
+        status = "PASS_AFTER_PRESSURE_DROP_DRIVEN_DN_UPSIZE"
+        branch_id = "PRESSURE_DROP_DRIVEN_DN_UPSIZE"
+    elif pass_dp and pass_velocity and candidate["parallel_train_count"] > 1:
+        status = "PASS_AFTER_PARALLEL_TRAIN_SPLIT"
+        branch_id = "PARALLEL_TRAIN_HYDRAULIC_RELIEF"
+    elif pass_dp and pass_velocity:
+        status = "PASS_SINGLE_TRAIN_REGISTERED_DN"
+        branch_id = "SINGLE_TRAIN_REGISTERED_DN"
+    elif (explicit_dn or explicit_parallel) and not pass_dp and not pass_velocity:
+        status = "FAIL_USER_FIXED_CONFIGURATION_EXCEEDS_HYDRAULIC_CONSTRAINTS"
+        branch_id = "USER_FIXED_CONFIGURATION_PRESSURE_AND_VELOCITY_FAILURE"
+    elif (explicit_dn or explicit_parallel) and not pass_velocity:
+        status = "FAIL_USER_FIXED_CONFIGURATION_EXCEEDS_TARGET_VELOCITY"
+        branch_id = "USER_FIXED_CONFIGURATION_VELOCITY_FAILURE"
+    elif explicit_dn or explicit_parallel:
+        status = "FAIL_USER_FIXED_CONFIGURATION_EXCEEDS_ALLOWABLE_PRESSURE_DROP"
+        branch_id = "USER_FIXED_CONFIGURATION_CONSTRAINT_FAILURE"
+    else:
+        status = "FAIL_NO_REGISTERED_DN_OR_PARALLEL_SOLUTION"
+        branch_id = "REGISTERED_HYDRAULIC_ENVELOPE_EXCEEDED"
+    if pass_dp and pass_velocity:
+        adjustment = (
+            f"选用{candidate['parallel_train_count']}列并联、每列DN{candidate['selected_dn']}"
+            f"、{candidate['element_count']}元件，初算压降"
+            f"{candidate['predicted_pressure_drop_kpa']:.3g} kPa不超过{allowable_dp:g} kPa，"
+            f"实际流速{candidate['actual_velocity_m_s']:.3g} m/s不超过目标"
+            f"{target_velocity:g} m/s；"
+            "混合均匀度仍须厂家曲线/试验确认。"
+        )
+    elif not pass_velocity:
+        adjustment = (
+            f"当前锁定方案实际流速{candidate['actual_velocity_m_s']:.3g} m/s"
+            f">目标{target_velocity:g} m/s；解锁DN后增径，或由用户明确增加并联列数后重算。"
+            "在流速门通过前不得按PASS发布，即使压降仍低于许用值。"
+        )
+    else:
+        adjustment = (
+            f"当前用户锁定方案压降{candidate['predicted_pressure_drop_kpa']:.3g} kPa"
+            f">许用{allowable_dp:g} kPa；解锁DN/并联数后增径、增加并联"
+            "列车或改用经试验确认的低阻格栅元件，不得按PASS发布。"
+        )
+    candidate.update({
+        "calculation_id": "static_mixer_hydraulic_train_screening",
+        "hydraulic_status": status,
+        "hydraulic_branch_id": branch_id,
+        "allowable_pressure_drop_kpa": allowable_dp,
+        "target_velocity_m_s": target_velocity,
+        "adjustment_recommendation": adjustment,
+        "selection_branch_narrative": (
+            f"{branch_id}：Re={candidate['reynolds_number']:.3g}，"
+            f"{candidate['element_count_basis']}，选{candidate['parallel_train_count']}列×"
+            f"DN{candidate['selected_dn']}，压降/许用={candidate['pressure_drop_ratio']:.3g}，"
+            f"流速/目标={candidate['velocity_ratio']:.3g}。"
+            f"{adjustment}"
+        ),
+        "dn_selection_basis": (
+            "GB/T 12459-2025 promoted DN-to-OD catalog; wall thickness is a "
+            "provisional hydraulic allowance only"
+        ),
+        "formula": "Dreq=sqrt(4*Qtrain/(3600*pi*vtarget)); Re=rho*v*Di/mu; L=N*(L/D)*Di; dP=N*K*rho*v^2/(2*1000)",
+        "substitution": (
+            f"Qtrain={flow:g}/{candidate['parallel_train_count']}; "
+            f"Re={density:g}*{candidate['actual_velocity_m_s']:.12g}*"
+            f"({candidate['actual_inner_diameter_mm']:.12g}/1000)/({viscosity:g}/1000); "
+            f"dP={candidate['element_count']}*{k_per_element:g}*{density:g}*"
+            f"{candidate['actual_velocity_m_s']:.12g}^2/(2*1000)"
+        ),
+    })
+    return candidate
+
+
+def _membrane_flux_recovery_array_chain(
+    values: dict[str, Any],
+    fallback_fields: set[str] | None = None,
+) -> dict[str, Any]:
+    """Size a geometry-consistent membrane element/pressure-vessel array."""
+
+    fallback_fields = set(fallback_fields or ())
+    flux = numeric(values.get("flux"))
+    recovery = numeric(values.get("recovery_percent"))
+    margin = numeric(values.get("design_margin_percent"))
+    geometry = str(values.get("membrane_geometry_type") or "spiral_wound")
+    existing_count = numeric(values.get("element_count"))
+    central_area = numeric(values.get("membrane_area_m2"))
+    area_per_element = numeric(values.get("membrane_area_per_element_m2"))
+    geometry_area_blocked = False
+    if (
+        geometry == "cylindrical_channels"
+        and central_area is not None and existing_count is not None
+        and existing_count > 0
+    ):
+        area_per_element = central_area / existing_count
+        area_basis = "CENTRAL_CYLINDRICAL_CHANNEL_GEOMETRY"
+    else:
+        area_basis = "REGISTERED_OR_SUPPLIED_ELEMENT_AREA"
+    if (
+        geometry not in {"spiral_wound", "cylindrical_channels"}
+        and "membrane_area_per_element_m2" in fallback_fields
+    ):
+        if central_area is not None and existing_count is not None and existing_count > 0:
+            area_per_element = central_area / existing_count
+            area_basis = "USER_TOTAL_AREA_DIVIDED_BY_ELEMENT_COUNT"
+        else:
+            area_per_element = 1.0
+            area_basis = (
+                "BLOCKED_GEOMETRY_SPECIFIC_AREA_OPEN_1M2_PLACEHOLDER_NOT_DESIGN"
+            )
+            geometry_area_blocked = True
+    elements_per_vessel = numeric(values.get("elements_per_pressure_vessel"))
+    arrangement_basis = "REGISTERED_OR_SUPPLIED_ELEMENTS_PER_PRESSURE_VESSEL"
+    if (
+        geometry != "spiral_wound"
+        and "elements_per_pressure_vessel" in fallback_fields
+    ):
+        elements_per_vessel = 1.0
+        arrangement_basis = "NON_SPIRAL_ONE_MODULE_PER_HOUSING_SCREENING"
+    required_values = (flux, recovery, margin, area_per_element, elements_per_vessel)
+    if any(value is None for value in required_values):
+        raise ValueError("membrane flux, recovery, margin and element geometry are required")
+    if flux <= 0 or not 0 < recovery <= 100 or margin < 0 or area_per_element <= 0 or elements_per_vessel <= 0:
+        raise ValueError("require flux>0, 0<recovery<=100, margin>=0 and positive element geometry")
+    explicit_count = (
+        present(values, "element_count") and "element_count" not in fallback_fields
+    )
+    permeate_target = (
+        numeric(values.get("permeate_flow_m3_h"))
+        if present(values, "permeate_flow_m3_h") else None
+    )
+    feed_target: float | None = None
+    target_basis = "NO_TARGET_FLOW_FALLBACK_ARRAY"
+    if permeate_target is not None:
+        feed_target = permeate_target / (recovery / 100.0)
+        target_basis = "USER_PERMEATE_FLOW_TARGET"
+    else:
+        feed_target = (
+            numeric(values.get("feed_flow_m3_h"))
+            if present(values, "feed_flow_m3_h")
+            else numeric(values.get("flow_m3_h"))
+            if present(values, "flow_m3_h") else None
+        )
+        if feed_target is not None:
+            permeate_target = feed_target * recovery / 100.0
+            target_basis = (
+                "USER_FEED_FLOW_TARGET"
+                if present(values, "feed_flow_m3_h")
+                else "FLOW_M3_H_INTERPRETED_AS_MEMBRANE_FEED"
+            )
+    if permeate_target is not None and permeate_target <= 0:
+        raise ValueError("membrane target flow must be positive")
+    if permeate_target is None:
+        selected_count = max(1, int(existing_count or 1))
+        required_count = selected_count
+        required_area = selected_count * area_per_element
+        design_area = required_area
+        permeate_capacity = design_area * flux / 1000.0
+        feed_capacity = permeate_capacity / (recovery / 100.0)
+    else:
+        required_area = permeate_target * 1000.0 / flux
+        design_area = required_area * (1.0 + margin / 100.0)
+        required_count = max(1, math.ceil(design_area / area_per_element))
+        selected_count = (
+            max(1, int(existing_count))
+            if explicit_count and existing_count is not None
+            else required_count
+        )
+        permeate_capacity = selected_count * area_per_element * flux / 1000.0
+        feed_capacity = permeate_capacity / (recovery / 100.0)
+    selected_area = (
+        central_area
+        if geometry == "cylindrical_channels" and central_area is not None and explicit_count
+        else selected_count * area_per_element
+    )
+    elements_per_train = max(1, int(elements_per_vessel))
+    parallel_count = max(1, math.ceil(selected_count / elements_per_train))
+    array_stages = 2 if recovery > 75.0 else 1
+    skid_count = max(1, math.ceil(parallel_count / 50.0))
+    if geometry_area_blocked:
+        status = "BLOCKED_GEOMETRY_SPECIFIC_ELEMENT_AREA_OPEN"
+        branch_id = "EXPLICIT_GEOMETRY_AREA_BASIS_HARD_GATE"
+        adjustment = (
+            "显式膜几何缺该组件有效膜面积；1 m²/模块仅为保持界面可编辑的占位，"
+            "不得发布容量或元件数。补厂家/用户模块有效面积或总面积与模块数后重算。"
+        )
+    elif explicit_count and selected_count < required_count:
+        status = "FAIL_USER_ELEMENT_COUNT_BELOW_REQUIRED"
+        branch_id = "USER_FIXED_UNDERSIZED_MEMBRANE_ARRAY"
+        adjustment = (
+            f"用户锁定{selected_count}支小于计算所需{required_count}支；"
+            f"增至至少{required_count}支、约{math.ceil(required_count/elements_per_train)}列并联后重算。"
+        )
+    elif permeate_target is None:
+        status = "FALLBACK_ARRAY_WITHOUT_TARGET_FLOW"
+        branch_id = "REGISTERED_ARRAY_CAPACITY_REPORT_ONLY"
+        adjustment = "已给出具体阵列容量，但缺目标进料/渗透流量；补入后自动反算元件数。"
+    elif recovery >= 90.0:
+        status = "PASS_CAPACITY_WITH_HIGH_RECOVERY_REVIEW"
+        branch_id = "HIGH_RECOVERY_TWO_STAGE_ARRAY_REVIEW"
+        adjustment = "回收率达90%或以上；保留两段阵列候选，必须补浓差极化、结垢和膜段压降投影。"
+    elif skid_count > 1:
+        status = "PASS_CAPACITY_WITH_MULTIPLE_SKIDS"
+        branch_id = "LARGE_MEMBRANE_ARRAY_SPLIT_INTO_SKIDS"
+        adjustment = f"阵列较大，建议拆为{skid_count}套橇块并联，各橇块设独立流量平衡、仪表和CIP隔离。"
+    else:
+        status = "PASS_PRELIMINARY_ARRAY_CAPACITY"
+        branch_id = "FLUX_RECOVERY_INTEGER_ARRAY_SIZING"
+        adjustment = "按整数膜元件/膜壳阵列保留设计裕量；用厂家归一化投影替换保底通量。"
+    return {
+        "calculation_id": "membrane_flux_recovery_array_screening",
+        "geometry_branch": geometry,
+        "area_basis": area_basis,
+        "arrangement_basis": arrangement_basis,
+        "target_flow_basis": target_basis,
+        "required_membrane_area_m2": required_area,
+        "design_membrane_area_m2": design_area,
+        "membrane_area_per_element_m2": area_per_element,
+        "required_element_count": required_count,
+        "selected_element_count": selected_count,
+        "selected_membrane_area_m2": selected_area,
+        "elements_per_train": elements_per_train,
+        "parallel_train_count": parallel_count,
+        "array_stage_count": array_stages,
+        "skid_count": skid_count,
+        "permeate_flow_m3_h": permeate_target if permeate_target is not None else permeate_capacity,
+        "feed_flow_m3_h": feed_target if feed_target is not None else feed_capacity,
+        "permeate_capacity_m3_h": permeate_capacity,
+        "feed_capacity_m3_h": feed_capacity,
+        "array_sizing_status": status,
+        "array_branch_id": branch_id,
+        "adjustment_recommendation": adjustment,
+        "selection_branch_narrative": (
+            f"{branch_id}：{target_basis}，通量={flux:g} LMH，回收率={recovery:g}%，"
+            f"所需/选定元件={required_count}/{selected_count}支，"
+            f"{parallel_count}列并联、{array_stages}段。{adjustment}"
+        ),
+        "formula": "Qp=Qfeed*R; Areq=Qp*1000/J; Adesign=Areq*(1+margin); Ne=ceil(Adesign/Aelement); Nparallel=ceil(Ne/Ne_per_train)",
+        "substitution": (
+            f"Areq={(permeate_target if permeate_target is not None else permeate_capacity):.12g}*1000/{flux:g}; "
+            f"Adesign={required_area:.12g}*(1+{margin:g}/100); "
+            f"Ne=ceil({design_area:.12g}/{area_per_element:.12g})={required_count}"
+        ),
+    }
+
+
+def _tsa_capacity_basis_validation(value: Any) -> dict[str, Any]:
+    """Validate that TSA ``capacity`` has an explicit physical unit/basis."""
+
+    text = str(value or "").strip()
+    normalized = (
+        text.casefold()
+        .replace("³", "3")
+        .replace("／", "/")
+        .replace("·", "")
+        .replace(" ", "")
+    )
+    unit_patterns = {
+        "STANDARD_VOLUMETRIC_FLOW": (
+            r"[ns]m3/(?:h|hr|s)",
+            r"标(?:准)?方/(?:小时|时|秒)",
+        ),
+        "ACTUAL_VOLUMETRIC_FLOW": (
+            r"m3/(?:h|hr|s)",
+            r"立方米/(?:小时|时|秒)",
+        ),
+        "MASS_FLOW": (
+            r"(?:kg|t)/(?:h|hr|s)",
+            r"(?:千克|公斤|吨)/(?:小时|时|秒)",
+        ),
+        "MOLAR_FLOW": (
+            r"(?:k?mol)/(?:h|hr|s)",
+        ),
+    }
+    matched_basis = next(
+        (
+            basis
+            for basis, patterns in unit_patterns.items()
+            if any(re.search(pattern, normalized) for pattern in patterns)
+        ),
+        None,
+    )
+    return {
+        "status": "VALID_PHYSICAL_QUANTITY_AND_UNIT" if matched_basis else (
+            "MISSING" if not text else "INVALID_OR_UNRECOGNIZED_UNIT"
+        ),
+        "recognized_basis": matched_basis,
+        "raw_text": text or None,
+    }
+
+
+def _tsa_cycle_bed_capacity_chain(
+    values: dict[str, Any],
+    fallback_fields: set[str] | None = None,
+) -> dict[str, Any]:
+    """Close TSA cycle timing and adsorbent inventory with explicit fallback."""
+
+    fallback_fields = set(fallback_fields or ())
+    capacity = numeric(values.get("capacity"))
+    cycle = numeric(values.get("cycle_time_h"))
+    adsorption = numeric(values.get("adsorption_time_h"))
+    bulk_density = numeric(values.get("adsorbent_bulk_density_kg_m3"))
+    margin = numeric(values.get("design_margin_percent"))
+    heating = numeric(values.get("heating_time_h"))
+    cooling = numeric(values.get("cooling_time_h"))
+    switching = numeric(values.get("switching_time_h"))
+    max_bed_volume = numeric(values.get("maximum_bed_volume_m3_per_tower"))
+    specific_bed_volume = numeric(values.get("specific_bed_volume_m3_per_capacity_unit"))
+    required_values = (
+        capacity, cycle, adsorption, bulk_density, margin, heating, cooling,
+        switching, max_bed_volume, specific_bed_volume,
+    )
+    if any(value is None for value in required_values):
+        raise ValueError("TSA capacity, cycle, step times, density, margin and bed limits are required")
+    if min(capacity, cycle, adsorption, bulk_density, max_bed_volume, specific_bed_volume) <= 0 or min(margin, heating, cooling, switching) < 0:
+        raise ValueError("TSA sizing inputs are outside the positive/nonnegative domain")
+    load = numeric(values.get("contaminant_load_kg_h"))
+    working_capacity = numeric(values.get("adsorbent_working_capacity_kg_kg"))
+    basis_validation = _tsa_capacity_basis_validation(values.get("capacity_basis"))
+    physical_capacity_basis_supplied = (
+        present(values, "capacity_basis")
+        and "capacity_basis" not in fallback_fields
+        and basis_validation["status"] == "VALID_PHYSICAL_QUANTITY_AND_UNIT"
+    )
+    if load is not None:
+        if load <= 0 or working_capacity is None or working_capacity <= 0:
+            raise ValueError("positive contaminant load requires positive adsorbent working capacity")
+        total_required_mass = load * adsorption / working_capacity * (1.0 + margin / 100.0)
+        total_required_volume = total_required_mass / bulk_density
+        capacity_branch = "DYNAMIC_WORKING_CAPACITY_MASS_BALANCE"
+        capacity_basis = "m=contaminant_load*adsorption_time/q_work*(1+margin)"
+    else:
+        total_required_volume = max(0.2, capacity * specific_bed_volume)
+        total_required_mass = total_required_volume * bulk_density
+        capacity_branch = "CAPACITY_UNIT_SPECIFIC_BED_VOLUME_FALLBACK"
+        capacity_basis = "V=max(0.2,capacity*specific_bed_volume); m=V*rho_bulk"
+    parallel_count = max(1, math.ceil(total_required_volume / max_bed_volume))
+    required_volume_per_tower = total_required_volume / parallel_count
+    required_mass_per_tower = total_required_mass / parallel_count
+    regeneration_time = heating + cooling + switching
+    cycle_sum = adsorption + regeneration_time
+    required_tower_count = 1 + math.ceil(regeneration_time / adsorption)
+    explicit_tower_count = (
+        present(values, "tower_count") and "tower_count" not in fallback_fields
+    )
+    selected_tower_count = (
+        int(float(values["tower_count"]))
+        if explicit_tower_count else max(2, required_tower_count)
+    )
+    explicit_bed_volume = (
+        present(values, "bed_volume_m3_per_tower")
+        and "bed_volume_m3_per_tower" not in fallback_fields
+    )
+    selected_bed_volume = (
+        numeric(values.get("bed_volume_m3_per_tower"))
+        if explicit_bed_volume else required_volume_per_tower
+    )
+    explicit_mass = (
+        present(values, "adsorbent_mass_kg_per_tower")
+        and "adsorbent_mass_kg_per_tower" not in fallback_fields
+    )
+    selected_mass = (
+        numeric(values.get("adsorbent_mass_kg_per_tower"))
+        if explicit_mass else selected_bed_volume * bulk_density
+    )
+    bed_margin = (selected_mass / required_mass_per_tower - 1.0) * 100.0
+    cycle_relative_error = abs(cycle_sum - cycle) / cycle
+    problems: list[str] = []
+    if cycle_relative_error > 0.05:
+        problems.append("CYCLE_STEP_SUM_MISMATCH")
+    if selected_tower_count < required_tower_count:
+        problems.append("TOWER_COUNT_BELOW_REGENERATION_OVERLAP_REQUIREMENT")
+    if selected_mass + 1e-9 < required_mass_per_tower:
+        problems.append("USER_BED_INVENTORY_BELOW_REQUIRED")
+    if not physical_capacity_basis_supplied:
+        if basis_validation["status"] == "INVALID_OR_UNRECOGNIZED_UNIT":
+            cycle_status = "BLOCKED_CAPACITY_BASIS_INVALID"
+            adjustment = (
+                "capacity_basis未解析出登记的物理单位（如Nm3/h、m3/h、kg/h或kmol/h）；"
+                "不能把任意非空文字当成处理能力依据。补充数值基准、单位、进料/产品边界后重算。"
+            )
+        else:
+            cycle_status = "BLOCKED_CAPACITY_BASIS_OPEN"
+            adjustment = (
+                "capacity缺物理量定义/单位，程序只能保留比床容积布置占位；"
+                "补进料体积或质量流量、目标杂质负荷/出口指标和动态工作容量后，"
+                "才能发布床层装填与塔数。"
+            )
+    elif problems:
+        cycle_status = "FAIL_" + "__".join(problems)
+        adjustment = (
+            f"循环步序合计{cycle_sum:.3g} h（声明周期{cycle:g} h），"
+            f"再生重叠至少需{required_tower_count}塔/列，单塔吸附剂"
+            f"至少{required_mass_per_tower:.3g} kg；修改锁定值或周期步序后重算。"
+        )
+    elif parallel_count > 1:
+        cycle_status = "PASS_WITH_PARALLEL_TSA_TRAINS"
+        adjustment = (
+            f"床层超出单塔报警线，建议{parallel_count}列并联TSA，"
+            "每列独立阀组、再生气平衡和产品露点切换联锁。"
+        )
+    elif load is None:
+        cycle_status = "FALLBACK_SPECIFIC_BED_VOLUME_WITH_EXPLICIT_CAPACITY_BASIS"
+        adjustment = "已按有明确单位的处理能力和比床容积给出装填初筛；必须补杂质负荷和动态工作容量。"
+    else:
+        cycle_status = "PASS_PRELIMINARY_CYCLE_AND_BED_CAPACITY"
+        adjustment = "循环时序和工作容量质量衡算已闭合预设计；用穿透曲线与再生热衡算替换保底值。"
+    return {
+        "calculation_id": "tsa_cycle_bed_capacity_screening",
+        "capacity_branch_id": capacity_branch,
+        "physical_capacity_basis_supplied": physical_capacity_basis_supplied,
+        "capacity_basis_validation": basis_validation,
+        "capacity_equation_basis": capacity_basis,
+        "required_total_adsorbent_mass_kg": total_required_mass,
+        "required_total_bed_volume_m3": total_required_volume,
+        "required_adsorbent_mass_kg_per_tower": required_mass_per_tower,
+        "required_bed_volume_m3_per_tower": required_volume_per_tower,
+        "selected_adsorbent_mass_kg_per_tower": selected_mass,
+        "selected_bed_volume_m3_per_tower": selected_bed_volume,
+        "bed_loading_margin_percent": bed_margin,
+        "parallel_train_count": parallel_count,
+        "required_tower_count_per_train": required_tower_count,
+        "selected_tower_count_per_train": selected_tower_count,
+        "cycle_phase_sum_h": cycle_sum,
+        "cycle_balance_status": cycle_status,
+        "adjustment_recommendation": adjustment,
+        "selection_branch_narrative": (
+            f"{capacity_branch}：周期步序合计/声明={cycle_sum:.3g}/{cycle:g} h，"
+            f"所需/选定单塔装填={required_mass_per_tower:.3g}/{selected_mass:.3g} kg，"
+            f"{parallel_count}列并联。{adjustment}"
+        ),
+        "formula": "m=load*t_ads/q_work*(1+margin) or V=max(Vmin,capacity*kV); Ntrain=ceil(V/Vmax); tcycle,sum=tads+theat+tcool+tswitch",
+        "substitution": (
+            f"branch={capacity_branch}; m_total={total_required_mass:.12g}; "
+            f"Ntrain=ceil({total_required_volume:.12g}/{max_bed_volume:g})={parallel_count}; "
+            f"t_sum={adsorption:g}+{heating:g}+{cooling:g}+{switching:g}={cycle_sum:.12g}"
+        ),
+    }
+
+
+def _gas_expander_stage_power_bypass_chain(
+    values: dict[str, Any],
+    fallback_fields: set[str] | None = None,
+) -> dict[str, Any]:
+    """Calculate expander stage count, power and normal/protective bypass."""
+
+    fallback_fields = set(fallback_fields or ())
+    flow = numeric(values.get("flow_m3_h"))
+    pin = numeric(values.get("inlet_pressure_mpa"))
+    pout = numeric(values.get("outlet_pressure_mpa"))
+    mw = numeric(values.get("gas_molecular_weight"))
+    z_value = numeric(values.get("compressibility_factor"))
+    k_value = numeric(values.get("heat_capacity_ratio_k"))
+    inlet_c = numeric(values.get("inlet_temperature_c"))
+    efficiency = numeric(values.get("efficiency_percent"))
+    supplied_maximum_stage_ratio = numeric(
+        values.get("maximum_stage_pressure_ratio")
+    )
+    stage_ratio_domain_failure = (
+        supplied_maximum_stage_ratio is not None
+        and (
+            not math.isfinite(supplied_maximum_stage_ratio)
+            or supplied_maximum_stage_ratio <= 1.0
+        )
+    )
+    # Keep arithmetic total even when the user value is invalid so the result
+    # can return a structured fail-closed recommendation instead of crashing.
+    maximum_stage_ratio = (
+        3.0 if supplied_maximum_stage_ratio is None
+        or stage_ratio_domain_failure
+        else supplied_maximum_stage_ratio
+    )
+    required_values = (flow, pin, pout, mw, z_value, k_value, inlet_c, efficiency)
+    if any(value is None for value in required_values):
+        raise ValueError("gas-expander flow, pressure, MW, Z, k, temperature and efficiency are required")
+    if (
+        any(
+            not math.isfinite(float(value))
+            for value in required_values
+            if value is not None
+        )
+        or min(flow, mw, z_value, efficiency) <= 0
+        or k_value <= 1
+    ):
+        raise ValueError("gas-expander property and efficiency inputs are outside the formula domain")
+    pressure_basis = str(values.get("pressure_basis") or "")
+    atmosphere = numeric(values.get("atmospheric_pressure_mpa")) or 0.101325
+    pin_abs = pin + atmosphere if pressure_basis == "gauge" else pin
+    pout_abs = pout + atmosphere if pressure_basis == "gauge" else pout
+    if pin_abs <= pout_abs or pout_abs <= 0:
+        raise ValueError("gas expansion requires Pin,abs>Pout,abs>0")
+    pressure_ratio_value = pin_abs / pout_abs
+    inlet_kelvin = inlet_c + 273.15
+    if inlet_kelvin <= 0:
+        raise ValueError("gas-expander inlet temperature must be above absolute zero")
+    eos_density = pin_abs * 1_000_000.0 * mw / (
+        z_value * 8314.462618 * inlet_kelvin
+    )
+    if present(values, "gas_density_kg_m3") and "gas_density_kg_m3" not in fallback_fields:
+        gas_density = float(values["gas_density_kg_m3"])
+        density_basis = "USER_OR_ASPEN_GAS_DENSITY"
+    else:
+        gas_density = eos_density
+        density_basis = "EOS_DENSITY_PMW_OVER_ZRT"
+    if present(values, "mass_flow_kg_s") and "mass_flow_kg_s" not in fallback_fields:
+        mass_flow = float(values["mass_flow_kg_s"])
+        mass_flow_basis = "USER_OR_ASPEN_MASS_FLOW"
+    elif present(values, "mass_flow_kg_h") and "mass_flow_kg_h" not in fallback_fields:
+        mass_flow = float(values["mass_flow_kg_h"]) / 3600.0
+        mass_flow_basis = "USER_OR_ASPEN_MASS_FLOW_KG_H_CONVERTED_TO_KG_S"
+    else:
+        mass_flow = gas_density * flow / 3600.0
+        mass_flow_basis = "DENSITY_TIMES_ACTUAL_VOLUME_FLOW"
+    isentropic_work = (
+        z_value * k_value / (k_value - 1.0)
+        * (8314.462618 / mw) * inlet_kelvin
+        * (1.0 - (pout_abs / pin_abs) ** ((k_value - 1.0) / k_value))
+        / 1000.0
+    )
+    actual_work = isentropic_work * efficiency / 100.0
+    shaft_power = mass_flow * actual_work
+    explicit_stage_count = (
+        present(values, "stage_count") and "stage_count" not in fallback_fields
+    )
+    stage_count = (
+        max(1, int(float(values["stage_count"])))
+        if explicit_stage_count
+        else max(1, math.ceil(math.log(pressure_ratio_value) / math.log(maximum_stage_ratio)))
+    )
+    per_stage_ratio = pressure_ratio_value ** (1.0 / stage_count)
+    outlet_c = (
+        inlet_kelvin
+        * (1.0 - efficiency / 100.0 * (
+            1.0 - (pout_abs / pin_abs) ** ((k_value - 1.0) / k_value)
+        ))
+        - 273.15
+    )
+    power_limit = numeric(values.get("maximum_recoverable_power_kw"))
+    normal_bypass = (
+        max(0.0, 1.0 - power_limit / shaft_power) * 100.0
+        if power_limit is not None and shaft_power > power_limit else 0.0
+    )
+    minimum_outlet = numeric(values.get("minimum_outlet_temperature_c"))
+    low_temperature_review = minimum_outlet is not None and outlet_c < minimum_outlet
+    stage_overload = per_stage_ratio > maximum_stage_ratio * (1.0 + 1e-9)
+    phase = canonical_phase(values.get("phase"))
+    phase_failure = phase not in {None, "vapor"}
+    if stage_ratio_domain_failure:
+        status = "FAIL_INVALID_MAXIMUM_STAGE_PRESSURE_RATIO"
+        branch_id = "MAXIMUM_STAGE_PRESSURE_RATIO_DOMAIN_HARD_GATE"
+        adjustment = (
+            "maximum_stage_pressure_ratio必须是有限且大于1的绝对压比；"
+            "当前值不进入级数公式。修正后再计算级数、单级压比和机体拆分方案。"
+        )
+    elif phase_failure:
+        status = "FAIL_TWO_PHASE_OR_NONVAPOR_EXPANDER_INPUT"
+        branch_id = "NONVAPOR_PHASE_HARD_GATE"
+        adjustment = "膨胀机不得用单相气体式处理液相/两相输入；重做相包络、分液与两相裕量校核。"
+    elif stage_overload:
+        status = "FAIL_USER_STAGE_COUNT_EXCEEDS_STAGE_RATIO_LIMIT"
+        branch_id = "USER_FIXED_STAGE_COUNT_CONSTRAINT_FAILURE"
+        adjustment = f"单级压比{per_stage_ratio:.3g}>{maximum_stage_ratio:g}；级数增至至少{math.ceil(math.log(pressure_ratio_value)/math.log(maximum_stage_ratio))}级或拆分机体。"
+    elif low_temperature_review:
+        status = "FAIL_LOW_OUTLET_TEMPERATURE_REVIEW_REQUIRED"
+        branch_id = "LOW_TEMPERATURE_REHEAT_OR_BYPASS_REVIEW"
+        adjustment = f"初算出口温度{outlet_c:.2f}℃<允许{minimum_outlet:g}℃；增设再热/分段膨胀或连续旁路，并做冷凝相包络与MDMT校核。"
+    elif normal_bypass > 0:
+        status = "PASS_POWER_LIMIT_WITH_CONTINUOUS_BYPASS"
+        branch_id = "POWER_LIMITED_CONTINUOUS_BYPASS"
+        adjustment = f"可回收功率上限{power_limit:g} kW，正常旁路初估{normal_bypass:.2f}%；由压力/功率控制联锁闭合。"
+    elif stage_count > 4:
+        status = "PASS_POWER_WITH_MULTIBODY_REVIEW"
+        branch_id = "HIGH_PRESSURE_RATIO_MULTIBODY_REVIEW"
+        adjustment = f"初算{stage_count}级超出常规单机预布置；比较多机体、中间再热及旁路调压方案。"
+    else:
+        status = "PASS_PRELIMINARY_STAGE_AND_POWER_SCREENING"
+        branch_id = "RADIAL_INFLOW_STAGE_POWER_SCREENING"
+        adjustment = "保留径向流多级膨胀机候选；配100%容量启停/跳车旁路并用厂家图谱替换等熵效率保底。"
+    efficiency_basis = (
+        "REGISTERED_FALLBACK_ISENTROPIC_EFFICIENCY"
+        if "efficiency_percent" in fallback_fields
+        else "USER_OR_ASPEN_ISENTROPIC_EFFICIENCY"
+    )
+    branch_narrative = (
+        f"{branch_id}：相态硬门未通过，未采用级数、比功、功率或旁路数值。"
+        f"{adjustment}"
+        if phase_failure
+        else (
+            f"{branch_id}：总/单级压比={pressure_ratio_value:.3g}/{per_stage_ratio:.3g}，"
+            f"{stage_count}级，等熵/实际比功={isentropic_work:.3g}/{actual_work:.3g} kJ/kg，"
+            f"轴功率={shaft_power:.3g} kW，正常旁路={normal_bypass:.2f}%。{adjustment}"
+        )
+    )
+    return {
+        "calculation_id": "gas_expander_stage_power_bypass_screening",
+        "inlet_absolute_pressure_mpa": pin_abs,
+        "outlet_absolute_pressure_mpa": pout_abs,
+        "expansion_pressure_ratio": pressure_ratio_value,
+        "gas_density_kg_m3": gas_density,
+        "eos_gas_density_kg_m3": eos_density,
+        "density_basis": density_basis,
+        "mass_flow_kg_s": mass_flow,
+        "mass_flow_basis": mass_flow_basis,
+        "expander_isentropic_specific_work_kj_kg": isentropic_work,
+        "expander_actual_specific_work_kj_kg": actual_work,
+        "shaft_power_kw": shaft_power,
+        "stage_count": stage_count,
+        "per_stage_pressure_ratio": per_stage_ratio,
+        "maximum_stage_pressure_ratio": (
+            None if stage_ratio_domain_failure else supplied_maximum_stage_ratio
+        ),
+        "maximum_stage_pressure_ratio_validation": (
+            "INVALID_MUST_BE_FINITE_AND_GREATER_THAN_ONE"
+            if stage_ratio_domain_failure else "VALID_OR_REGISTERED_DEFAULT"
+        ),
+        "maximum_stage_pressure_ratio_effective_for_arithmetic": (
+            None if stage_ratio_domain_failure else maximum_stage_ratio
+        ),
+        "outlet_temperature_c": outlet_c,
+        "efficiency_basis": efficiency_basis,
+        "normal_bypass_fraction_percent": normal_bypass,
+        "protective_bypass_capacity_percent": 100.0,
+        "bypass_required": True,
+        "bypass_control_strategy": (
+            "100%容量启停/跳车旁路；"
+            + (f"正常连续旁路初估{normal_bypass:.2f}%" if normal_bypass > 0 else "正常工况旁路目标0%")
+        ),
+        "operating_envelope_status": status,
+        "expander_branch_id": branch_id,
+        "adjustment_recommendation": adjustment,
+        "selection_branch_narrative": branch_narrative,
+        "formula": "rho=Pin*MW/(Z*R*T); wis=Z*k/(k-1)*(R/MW)*T*(1-(Pout/Pin)^((k-1)/k)); w=eta*wis; P=mdot*w; N=ceil(ln(PR)/ln(PRstage,max))",
+        "substitution": (
+            f"rho={pin_abs:g}e6*{mw:g}/({z_value:g}*8314.462618*{inlet_kelvin:g}); "
+            f"wis={isentropic_work:.12g}; w={actual_work:.12g}; "
+            f"P={mass_flow:.12g}*{actual_work:.12g}={shaft_power:.12g}; N={stage_count}"
+        ),
+    }
+
+
+def _package_process_route(values: dict[str, Any]) -> str:
+    """Classify packaged-equipment duty without treating every package as TSA."""
+
+    block_type = str(values.get("aspen_block_type") or "").strip().upper()
+    if block_type == "FILTER":
+        return "FILTER"
+    if block_type == "DRYER":
+        return "DRYER"
+    text = " ".join(
+        str(values.get(field) or "")
+        for field in ("equipment_type", "equipment_name", "process_function", "service_route")
+    ).casefold()
+    if any(marker in text for marker in ("psa", "变压吸附", "pressure swing")):
+        return "PSA"
+    if any(marker in text for marker in ("guard bed", "保护床", "精脱硫", "脱氯床")):
+        return "GUARD_BED"
+    if any(marker in text for marker in ("tsa", "变温吸附", "temperature swing", "加热再生")):
+        return "TSA"
+    if any(marker in text for marker in ("压滤", "filter press", "过滤成套")):
+        return "FILTER"
+    if any(marker in text for marker in ("带式干燥", "belt dryer", "hot air dryer")):
+        return "DRYER"
+    return "UNRESOLVED"
+
+
 def run_calculations(
     rule: dict[str, Any],
     params: dict[str, Any],
@@ -5734,6 +7281,15 @@ def run_calculations(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     requested = list(rule.get("calculation_rules", []))
     requested.extend(BLOCK_TYPE_CALCULATION_RULES.get(str(params.get("aspen_block_type") or "").strip().upper(), ()))
+    family_specific_calculations = list(
+        FAMILY_PROGRAMMATIC_CALCULATION_RULES.get(str(rule.get("id") or ""), ())
+    )
+    if (
+        str(rule.get("id") or "") == "family_package_equipment"
+        and _package_process_route(params) != "TSA"
+    ):
+        family_specific_calculations = []
+    requested.extend(family_specific_calculations)
     requested = list(dict.fromkeys(requested))
     if (
         present(params, "design_pressure_mpa")
@@ -5751,6 +7307,33 @@ def run_calculations(
         str(field): dict(item)
         for field, item in (fallback_lineage or {}).items()
     }
+    fallback_fields = {
+        str(field)
+        for field, item in (fallback_lineage or {}).items()
+        if item.get("fallback_tier")
+    }
+    if str(rule.get("id") or "") == "family_package_equipment":
+        package_route = _package_process_route(work)
+        if package_route in {"PSA", "GUARD_BED"}:
+            pending.append({
+                "calculation_id": "package_process_route_physical_bed_basis",
+                "status": "BLOCKED_PACKAGE_PHYSICAL_BED_BASIS",
+                "process_route": package_route,
+                "required": (
+                    "contaminant load/product target, dynamic working capacity or "
+                    "isotherm/breakthrough basis, cycle/switching philosophy"
+                ),
+                "action": "supply route-specific adsorption evidence before bed/tower sizing",
+            })
+            hard_blocked.add("package_process_route_physical_bed_basis")
+        elif package_route == "UNRESOLVED":
+            pending.append({
+                "calculation_id": "package_process_route_selection",
+                "status": "BLOCKED_PACKAGE_PROCESS_FUNCTION_UNRESOLVED",
+                "required": "select TSA, PSA, guard bed, filter press, or belt dryer",
+                "action": "choose the packaged-equipment process function before sizing",
+            })
+            hard_blocked.add("package_process_route_selection")
 
     def add_result(
         calc_id: str,
@@ -5807,12 +7390,14 @@ def run_calculations(
         release_class = str(notice.get("release_class", "A"))
         effective_evidence_class = str(notice.get("evidence_class", "D"))
         target_lineage = formula_lineage_by_field.get(target_field, {})
+        target_is_fallback = bool(target_lineage.get("fallback_tier"))
         target_is_model_estimate = (
-            target_lineage.get("fallback_tier") == "LLM_LAST_RESORT_ENGINEERING_ESTIMATE"
+            target_lineage.get("fallback_tier")
+            == "LLM_LAST_RESORT_ENGINEERING_ESTIMATE"
         )
         preserve_provided_target = (
             release_class == "B" or effective_evidence_class == "J"
-        ) and present(comparison_params, target_field) and not target_is_model_estimate
+        ) and present(comparison_params, target_field) and not target_is_fallback
         if present(comparison_params, target_field):
             supplied_value = float(comparison_params[target_field])
             relative_tolerance, absolute_tolerance = CALCULATION_TARGET_TOLERANCES.get(
@@ -5833,8 +7418,8 @@ def run_calculations(
             crosscheck = {
                 "status": "PASS" if matched else "FAIL",
                 "authority_choice": (
-                    "deterministic_calculation_supersedes_model_estimate"
-                    if target_is_model_estimate
+                    "deterministic_calculation_supersedes_fallback"
+                    if target_is_fallback
                     else
                     "provided_target_preserved; built_in_formula_is_provisional_screening"
                     if preserve_provided_target
@@ -5849,11 +7434,11 @@ def run_calculations(
                 "unit": unit,
             }
             item["provided_target_crosscheck"] = crosscheck
-            if target_is_model_estimate:
+            if target_is_fallback:
                 item["status"] = (
-                    "CALCULATED_SUPERSEDED_MODEL_ESTIMATE_MATCH"
+                    "CALCULATED_SUPERSEDED_FALLBACK_MATCH"
                     if matched
-                    else "CALCULATED_SUPERSEDED_MODEL_ESTIMATE_CONFLICT"
+                    else "CALCULATED_SUPERSEDED_FALLBACK_CONFLICT"
                 )
             elif preserve_provided_target:
                 item["status"] = (
@@ -5872,6 +7457,8 @@ def run_calculations(
                     "status": (
                         "WARNING_MODEL_ESTIMATE_SUPERSEDED"
                         if target_is_model_estimate
+                        else "WARNING_REGISTERED_FALLBACK_SUPERSEDED"
+                        if target_is_fallback
                         else
                         "WARNING_PROVISIONAL_SCREENING_DIFFERENCE"
                         if preserve_provided_target
@@ -5879,7 +7466,7 @@ def run_calculations(
                     ),
                 }
                 pending.append(mismatch)
-                if not preserve_provided_target and not target_is_model_estimate:
+                if not preserve_provided_target and not target_is_fallback:
                     hard_blocked.add(calc_id)
         item["adopted_as_canonical"] = not preserve_provided_target
         item["canonical_value"] = (
@@ -5946,6 +7533,11 @@ def run_calculations(
         ):
             continue
         if calc_id == "pressure_ratio" and params.get("pressure_basis") == "gauge":
+            required.append("atmospheric_pressure_mpa")
+        if (
+            calc_id == "gas_expander_stage_power_bypass_screening"
+            and params.get("pressure_basis") == "gauge"
+        ):
             required.append("atmospheric_pressure_mpa")
         if calc_id == "design_pressure" and params.get("pressure_basis") == "absolute":
             required.append("atmospheric_pressure_mpa")
@@ -6138,6 +7730,19 @@ def run_calculations(
                 hard_blocked.add(calc_id)
             unavailable_calculations.add(calc_id)
             continue
+        if calc_id == "gas_expander_stage_power_bypass_screening":
+            expander_phase = canonical_phase(work.get("phase"))
+            if expander_phase not in {None, "vapor"}:
+                pending.append({
+                    "calculation_id": calc_id,
+                    "status": "BLOCKED_PHASE_INCOMPATIBLE_FORMULA",
+                    "observed_phase": expander_phase,
+                    "required": "single-phase vapor with a verified condensation margin",
+                    "action": "run phase-envelope/separation review before gas-expander sizing",
+                })
+                hard_blocked.add(calc_id)
+                unavailable_calculations.add(calc_id)
+                continue
         if (
             calc_id == "head_thickness"
             and present(work, "head_type")
@@ -6198,7 +7803,284 @@ def run_calculations(
             pending.append(item)
             continue
         try:
-            if calc_id == "crystallizer_working_volume":
+            if calc_id == "agitator_re_np_power_screening":
+                chain = _agitator_re_np_power_chain(work, fallback_fields)
+                agitator_dependencies = [
+                    *CALCULATION_REQUIREMENTS[calc_id],
+                    *[
+                        field for field in (
+                            "inner_diameter_mm", "impeller_diameter_mm",
+                            "agitator_type", "process_function", "mixing_metric",
+                        ) if present(work, field)
+                    ],
+                ]
+                if (
+                    present(work, "impeller_diameter_ratio")
+                    and (
+                        "impeller_diameter_ratio" not in fallback_fields
+                        or abs(
+                            float(work["impeller_diameter_ratio"])
+                            - float(chain["impeller_diameter_ratio"])
+                        ) <= 1e-12
+                    )
+                ):
+                    agitator_dependencies.append("impeller_diameter_ratio")
+                add_result(
+                    calc_id,
+                    chain["formula"],
+                    chain["substitution"],
+                    chain["power_number_estimated_shaft_power_kw"],
+                    "kW",
+                    "power_number_estimated_shaft_power_kw",
+                    dependency_fields=list(dict.fromkeys(agitator_dependencies)),
+                )
+                results[-1]["branch_selection"] = {
+                    key: chain[key]
+                    for key in (
+                        "power_number_branch_id", "impeller_family",
+                        "recommended_agitator_type", "type_selection_basis",
+                        "reynolds_number", "power_number",
+                        "oversized_screening_load", "adjustment_recommendation",
+                        "selection_branch_narrative",
+                    )
+                }
+                if chain["oversized_screening_load"]:
+                    pending.append({
+                        "calculation_id": calc_id,
+                        "status": "BLOCKED_AGITATOR_OVERSIZED_SCREENING_LOAD",
+                        "estimated_shaft_power_kw": chain[
+                            "power_number_estimated_shaft_power_kw"
+                        ],
+                        "vessel_diameter_mm": chain["vessel_diameter_mm"],
+                        "action": chain["adjustment_recommendation"],
+                    })
+                    hard_blocked.add(calc_id)
+            elif calc_id == "static_mixer_hydraulic_train_screening":
+                chain = _static_mixer_hydraulic_chain(work, fallback_fields)
+                mixer_dependencies = [
+                    *CALCULATION_REQUIREMENTS[calc_id],
+                    *[
+                        field for field in (
+                            "selected_dn", "parallel_train_count", "element_count",
+                        )
+                        if present(work, field)
+                        and not (
+                            field == "element_count"
+                            and chain["element_count_basis"]
+                            != "USER_FIXED_ELEMENT_COUNT"
+                        )
+                    ],
+                ]
+                add_result(
+                    calc_id,
+                    chain["formula"],
+                    chain["substitution"],
+                    chain["predicted_pressure_drop_kpa"],
+                    "kPa",
+                    "pressure_drop_kpa",
+                    dependency_fields=mixer_dependencies,
+                )
+                results[-1]["branch_selection"] = {
+                    key: chain[key]
+                    for key in (
+                        "hydraulic_branch_id", "hydraulic_status",
+                        "parallel_train_count", "selected_dn",
+                        "selected_dn_standard_id", "selected_dn_standard_version",
+                        "element_count", "element_count_basis",
+                        "pressure_drop_ratio", "velocity_ratio",
+                        "actual_velocity_m_s", "target_velocity_m_s",
+                        "adjustment_recommendation",
+                        "selection_branch_narrative",
+                    )
+                }
+                if chain["hydraulic_status"].startswith("FAIL_"):
+                    velocity_failed = "VELOCITY" in chain["hydraulic_status"]
+                    pending.append({
+                        "calculation_id": calc_id,
+                        "status": (
+                            "BLOCKED_STATIC_MIXER_VELOCITY_CONSTRAINT"
+                            if velocity_failed
+                            else "BLOCKED_STATIC_MIXER_PRESSURE_DROP_CONSTRAINT"
+                        ),
+                        "hydraulic_status": chain["hydraulic_status"],
+                        "selected_dn": chain["selected_dn"],
+                        "parallel_train_count": chain["parallel_train_count"],
+                        "predicted_pressure_drop_kpa": chain[
+                            "predicted_pressure_drop_kpa"
+                        ],
+                        "allowable_pressure_drop_kpa": chain[
+                            "allowable_pressure_drop_kpa"
+                        ],
+                        "actual_velocity_m_s": chain["actual_velocity_m_s"],
+                        "target_velocity_m_s": chain["target_velocity_m_s"],
+                        "action": chain["adjustment_recommendation"],
+                    })
+                    hard_blocked.add(calc_id)
+            elif calc_id == "membrane_flux_recovery_array_screening":
+                chain = _membrane_flux_recovery_array_chain(work, fallback_fields)
+                membrane_dependencies = [
+                    *CALCULATION_REQUIREMENTS[calc_id],
+                    *[
+                        field for field in (
+                            "membrane_geometry_type", "element_count",
+                            "membrane_area_m2", "permeate_flow_m3_h",
+                            "feed_flow_m3_h", "flow_m3_h",
+                        ) if present(work, field)
+                    ],
+                ]
+                if chain["area_basis"] == "REGISTERED_OR_SUPPLIED_ELEMENT_AREA":
+                    membrane_dependencies.append("membrane_area_per_element_m2")
+                if (
+                    chain["arrangement_basis"]
+                    == "REGISTERED_OR_SUPPLIED_ELEMENTS_PER_PRESSURE_VESSEL"
+                ):
+                    membrane_dependencies.append("elements_per_pressure_vessel")
+                add_result(
+                    calc_id,
+                    chain["formula"],
+                    chain["substitution"],
+                    float(chain["required_element_count"]),
+                    "count",
+                    "required_element_count",
+                    dependency_fields=list(dict.fromkeys(membrane_dependencies)),
+                )
+                results[-1]["branch_selection"] = {
+                    key: chain[key]
+                    for key in (
+                        "geometry_branch", "area_basis", "arrangement_basis",
+                        "target_flow_basis", "array_branch_id",
+                        "array_sizing_status", "required_membrane_area_m2",
+                        "design_membrane_area_m2", "required_element_count",
+                        "selected_element_count", "parallel_train_count",
+                        "array_stage_count", "skid_count",
+                        "adjustment_recommendation", "selection_branch_narrative",
+                    )
+                }
+                if chain["array_sizing_status"].startswith(("FAIL_", "BLOCKED_")):
+                    pending.append({
+                        "calculation_id": calc_id,
+                        "status": "BLOCKED_MEMBRANE_ARRAY_CONSTRAINT",
+                        "array_sizing_status": chain["array_sizing_status"],
+                        "required_element_count": chain["required_element_count"],
+                        "selected_element_count": chain["selected_element_count"],
+                        "action": chain["adjustment_recommendation"],
+                    })
+                    hard_blocked.add(calc_id)
+            elif calc_id == "tsa_cycle_bed_capacity_screening":
+                chain = _tsa_cycle_bed_capacity_chain(work, fallback_fields)
+                add_result(
+                    calc_id,
+                    chain["formula"],
+                    chain["substitution"],
+                    chain["required_adsorbent_mass_kg_per_tower"],
+                    "kg",
+                    "required_adsorbent_mass_kg_per_tower",
+                    dependency_fields=[
+                        *CALCULATION_REQUIREMENTS[calc_id],
+                        *[
+                            field for field in (
+                                "contaminant_load_kg_h",
+                                "adsorbent_working_capacity_kg_kg",
+                                "heating_time_h", "cooling_time_h",
+                                "switching_time_h",
+                                "maximum_bed_volume_m3_per_tower",
+                                "specific_bed_volume_m3_per_capacity_unit",
+                                "tower_count", "bed_volume_m3_per_tower",
+                                "adsorbent_mass_kg_per_tower",
+                            ) if present(work, field)
+                        ],
+                    ],
+                )
+                results[-1]["branch_selection"] = {
+                    key: chain[key]
+                    for key in (
+                        "capacity_branch_id", "physical_capacity_basis_supplied",
+                        "capacity_basis_validation",
+                        "cycle_balance_status", "parallel_train_count",
+                        "required_tower_count_per_train",
+                        "selected_tower_count_per_train",
+                        "bed_loading_margin_percent", "adjustment_recommendation",
+                        "selection_branch_narrative",
+                    )
+                }
+                if chain["cycle_balance_status"].startswith("BLOCKED_"):
+                    pending.append({
+                        "calculation_id": calc_id,
+                        "status": (
+                            "BLOCKED_TSA_CAPACITY_BASIS_INVALID"
+                            if chain["cycle_balance_status"]
+                            == "BLOCKED_CAPACITY_BASIS_INVALID"
+                            else "BLOCKED_TSA_CAPACITY_BASIS_OPEN"
+                        ),
+                        "cycle_balance_status": chain["cycle_balance_status"],
+                        "physical_capacity_basis_supplied": chain[
+                            "physical_capacity_basis_supplied"
+                        ],
+                        "capacity_basis_validation": chain[
+                            "capacity_basis_validation"
+                        ],
+                        "action": chain["adjustment_recommendation"],
+                    })
+                    hard_blocked.add(calc_id)
+                elif chain["cycle_balance_status"].startswith("FAIL_"):
+                    pending.append({
+                        "calculation_id": calc_id,
+                        "status": "BLOCKED_TSA_CYCLE_OR_BED_CONSTRAINT",
+                        "cycle_balance_status": chain["cycle_balance_status"],
+                        "action": chain["adjustment_recommendation"],
+                    })
+                    hard_blocked.add(calc_id)
+            elif calc_id == "gas_expander_stage_power_bypass_screening":
+                chain = _gas_expander_stage_power_bypass_chain(work, fallback_fields)
+                add_result(
+                    calc_id,
+                    chain["formula"],
+                    chain["substitution"],
+                    chain["shaft_power_kw"],
+                    "kW",
+                    "shaft_power_kw",
+                    dependency_fields=[
+                        *CALCULATION_REQUIREMENTS[calc_id],
+                        *[
+                            field for field in (
+                                "atmospheric_pressure_mpa", "gas_density_kg_m3",
+                                "mass_flow_kg_s", "mass_flow_kg_h",
+                                "maximum_stage_pressure_ratio",
+                                "stage_count", "maximum_recoverable_power_kw",
+                                "minimum_outlet_temperature_c", "phase",
+                            ) if present(work, field)
+                        ],
+                    ],
+                )
+                results[-1]["branch_selection"] = {
+                    key: chain[key]
+                    for key in (
+                        "expander_branch_id", "operating_envelope_status",
+                        "density_basis", "mass_flow_basis", "stage_count",
+                        "per_stage_pressure_ratio", "outlet_temperature_c",
+                        "maximum_stage_pressure_ratio",
+                        "maximum_stage_pressure_ratio_validation",
+                        "normal_bypass_fraction_percent",
+                        "protective_bypass_capacity_percent",
+                        "bypass_control_strategy", "adjustment_recommendation",
+                        "selection_branch_narrative",
+                    )
+                }
+                if chain["operating_envelope_status"].startswith("FAIL_"):
+                    pending.append({
+                        "calculation_id": calc_id,
+                        "status": "BLOCKED_EXPANDER_OPERATING_ENVELOPE",
+                        "operating_envelope_status": chain[
+                            "operating_envelope_status"
+                        ],
+                        "outlet_temperature_c": chain["outlet_temperature_c"],
+                        "per_stage_pressure_ratio": chain[
+                            "per_stage_pressure_ratio"
+                        ],
+                        "action": chain["adjustment_recommendation"],
+                    })
+                    hard_blocked.add(calc_id)
+            elif calc_id == "crystallizer_working_volume":
                 slurry_flow = float(work["slurry_flow_m3_h"])
                 residence_time = float(work["retention_time_min"])
                 if slurry_flow <= 0.0 or residence_time <= 0.0:
@@ -10256,7 +12138,6 @@ def build_programmatic_crystallizer_specification(
             "user_override_allowed": True,
             "single_equipment_recalculation_required_after_override": True,
         }
-
     slurry_flow = numeric(chosen("slurry_flow_m3_h", 10.0))
     retention = numeric(chosen("retention_time_min", 60.0))
     fill_fraction = numeric(chosen("fill_fraction", 0.80))
@@ -11216,6 +13097,125 @@ def build_programmatic_storage_vessel_specification(
     return package
 
 
+def _blocked_agitator_programmatic_specification(
+    values: dict[str, Any],
+    fallback_fields: set[str],
+    terminal: dict[str, Any],
+    error: ValueError,
+) -> dict[str, Any]:
+    """Return a visible fail-closed route for an unsupported agitator chain."""
+
+    error_text = str(error)
+    unsupported_type = error_text.startswith(
+        "explicit agitator_type has no registered Np-Re correlation"
+    )
+    status = (
+        "BLOCKED_AGITATOR_TYPE_CORRELATION_UNSUPPORTED"
+        if unsupported_type
+        else "BLOCKED_AGITATOR_RE_NP_INPUT_INVALID"
+    )
+    raw_type = str(values.get("agitator_type") or "").strip()
+    adjustment = (
+        f"用户指定桨型“{raw_type}”没有登记的同桨型Np-Re关联式；"
+        "程序未借用PBT45、螺带或其他桨型常数。请选择已登记桨型，或补该桨型"
+        "的厂家/试验Np-Re曲线后单设备重算。"
+        if unsupported_type
+        else f"搅拌器Re-Np输入不满足计算域：{error_text}。修正输入后单设备重算。"
+    )
+    field_values = {
+        "equipment_name": values.get("equipment_name") or "顶入式搅拌器",
+        "equipment_type": raw_type or "搅拌器桨型待确认",
+        "equipment_subfamily": None,
+        "model_designation": "AGT-ROUTE-BLOCKED-NP-CORRELATION",
+        "model_status": "BLOCKED_NP_RE_CORRELATION_NOT_VENDOR_MODEL",
+        "agitator_type": raw_type or None,
+        "volume_m3": values.get("volume_m3"),
+        "rotational_speed_rpm": values.get("rotational_speed_rpm"),
+        "density_kg_m3": values.get("density_kg_m3"),
+        "dynamic_viscosity_mpa_s": values.get("dynamic_viscosity_mpa_s"),
+        "shaft_power_kw": (
+            values.get("shaft_power_kw")
+            if present(values, "shaft_power_kw")
+            and "shaft_power_kw" not in fallback_fields
+            else None
+        ),
+        "power_number": None,
+        "power_number_estimated_shaft_power_kw": None,
+        "power_basis": "BLOCKED_NO_SAME_IMPELLER_NP_RE_CORRELATION",
+        "adjustment_recommendation": adjustment,
+        "selection_branch_narrative": f"{status}：{adjustment}",
+        "quantity_count": values.get("quantity_count", 1),
+        "technical_specification": (
+            "搅拌器桨型/功率路线被程序安全门阻断；"
+            "AGT-ROUTE-BLOCKED-NP-CORRELATION为工程路由标识，不是厂家型号。"
+            + adjustment
+        ),
+    }
+    fields: dict[str, dict[str, Any]] = {}
+    for field_id, value in field_values.items():
+        direct = present(values, field_id) and field_id not in fallback_fields
+        fields[field_id] = {
+            "field_id": field_id,
+            "value": value,
+            "unit": FIELD_UNITS.get(field_id),
+            "state": "PROVIDED" if direct else (
+                "OPEN" if value is None else "CALCULATED"
+            ),
+            "origin": (
+                "USER_PROJECT_OR_ASPEN_INPUT"
+                if direct else "PROGRAMMATIC_AUXILIARY_SELECTOR"
+            ),
+            "active_in_selected_branch": value is not None,
+            "evidence_class": "J",
+            "result_status": "BLOCKED",
+            "promotion_cap": "TYPE_SCREENING",
+            "formal_design_evidence": False,
+            "warning": adjustment,
+            "equation_chain": None,
+            "user_override_allowed": True,
+            "single_equipment_recalculation_required_after_override": True,
+        }
+    package = {
+        "schema": "programmatic-auxiliary-equipment-specification-v1",
+        "policy_id": "AGITATOR_FAIL_CLOSED_NO_CROSS_IMPELLER_CORRELATION",
+        "family_id": "family_agitator",
+        "subfamily": "blocked_agitator_np_re_route",
+        "status": status,
+        "program_generated": True,
+        "deterministic": True,
+        "llm_used": False,
+        "formal_model_selected": False,
+        "formal_design_ready": False,
+        "fields": fields,
+        "selection_branch": {
+            "auxiliary_branch_id": "AGITATOR_NP_RE_CORRELATION_HARD_GATE",
+            "recommended_type": field_values["equipment_type"],
+            "terminal_rule_id": terminal.get("rule_id"),
+            "terminal_selection_status": terminal.get("status"),
+            "type_selection_basis": status,
+            "branch_narrative": field_values["selection_branch_narrative"],
+        },
+        "calculation_chain": None,
+        "formal_open_gates": [
+            "same_impeller_geometry_np_re_curve",
+            "mixing_task_and_rheology",
+            "shaft_motor_gearbox_and_seal_design",
+        ],
+        "user_control": {
+            "every_displayed_parameter_editable": True,
+            "supplied_value_overwrites_default": True,
+            "single_equipment_recalculation_supported": True,
+            "restore_registered_default_supported": True,
+        },
+        "warning": adjustment,
+    }
+    specification_sha256 = _canonical_sha256(package)
+    package["program_specification_sha256"] = specification_sha256
+    for row in fields.values():
+        row["program_specification_sha256"] = specification_sha256
+    return package
+
+
 def build_programmatic_auxiliary_specification(
     family_id: str,
     normalized: dict[str, Any],
@@ -11288,6 +13288,8 @@ def build_programmatic_auxiliary_specification(
     equations: dict[str, str] = {}
     profile_fields: set[str] = set()
     formal_open_gates: list[str]
+    branch_details: dict[str, Any] = {}
+    auxiliary_package_status = "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
 
     if family_id == "family_compressor":
         reciprocating = "往复" in selected_type or "reciproc" in selected_type.casefold()
@@ -11539,34 +13541,46 @@ def build_programmatic_auxiliary_specification(
         profile = profiles.get(profile_key, {})
         if not isinstance(profile, dict):
             profile = {}
+        try:
+            power_chain = _agitator_re_np_power_chain(
+                values,
+                set(fallback_by_field),
+            )
+        except ValueError as exc:
+            return _blocked_agitator_programmatic_specification(
+                values,
+                set(fallback_by_field),
+                terminal,
+                exc,
+            )
+        if power_chain["oversized_screening_load"]:
+            auxiliary_package_status = (
+                "BLOCKED_AGITATOR_OVERSIZED_SCREENING_LOAD"
+            )
         volume = numeric(values.get("volume_m3"))
         speed = numeric(values.get("rotational_speed_rpm"))
-        shaft_power = numeric(values.get("shaft_power_kw"))
-        vessel_diameter = numeric(values.get("inner_diameter_mm"))
-        if vessel_diameter is None and volume is not None:
-            vessel_diameter = (
-                math.ceil(
-                    (
-                        4.0 * volume / (math.pi * 1.20)
-                    ) ** (1.0 / 3.0)
-                    * 10.0
-                )
-                * 100.0
-            )
-        impeller_ratio = numeric(
-            values.get("impeller_diameter_ratio")
-            if supplied("impeller_diameter_ratio")
-            else profile.get("impeller_diameter_ratio", 0.33)
+        vessel_diameter = power_chain["vessel_diameter_mm"]
+        impeller_ratio = power_chain["impeller_diameter_ratio"]
+        impeller_diameter = power_chain["impeller_diameter_mm"]
+        estimated_shaft_power = power_chain[
+            "power_number_estimated_shaft_power_kw"
+        ]
+        shaft_power = (
+            numeric(values.get("shaft_power_kw"))
+            if supplied("shaft_power_kw")
+            else estimated_shaft_power
         )
-        impeller_diameter = numeric(values.get("impeller_diameter_mm"))
-        if (
-            impeller_diameter is None
-            and vessel_diameter is not None
-            and impeller_ratio is not None
-        ):
-            impeller_diameter = (
-                math.ceil(vessel_diameter * impeller_ratio / 50.0) * 50.0
-            )
+        power_basis = (
+            "USER_OR_ASPEN_SHAFT_POWER_PRESERVED_WITH_NP_CROSSCHECK"
+            if supplied("shaft_power_kw")
+            else "DETERMINISTIC_RE_NP_POWER_SCREENING"
+        )
+        power_deviation = (
+            abs(shaft_power - estimated_shaft_power)
+            / estimated_shaft_power * 100.0
+            if supplied("shaft_power_kw") and estimated_shaft_power > 0
+            else 0.0
+        )
         torque_nm = (
             9550.0 * shaft_power / speed
             if shaft_power is not None and speed is not None and speed > 0
@@ -11591,8 +13605,7 @@ def build_programmatic_auxiliary_specification(
         agitator_type = str(
             values.get("agitator_type")
             if supplied("agitator_type")
-            else profile.get("agitator_type")
-            or selected_type
+            else power_chain["recommended_agitator_type"]
         )
         agitator_material = str(
             values.get("agitator_material_grade")
@@ -11609,32 +13622,39 @@ def build_programmatic_auxiliary_specification(
             if supplied("seal_type")
             else profile.get("seal_type")
         )
-        baffles = int(
-            float(
-                values.get("baffle_count")
-                if supplied("baffle_count")
-                else profile.get("baffle_count", 4)
-            )
+        baffles = (
+            int(float(values["baffle_count"]))
+            if supplied("baffle_count")
+            else 0
+            if power_chain["impeller_family"] in {"HELICAL_RIBBON", "ANCHOR"}
+            else int(float(profile.get("baffle_count", 4)))
         )
         model_designation = (
-            f"AGT-TE-PBT45-D{impeller_diameter:g}-N{speed:g}-"
+            f"AGT-TE-{power_chain['impeller_code']}-D{impeller_diameter:g}-N{speed:g}-"
             f"P{shaft_power:g}-M{motor_power:g}-SHAFT{shaft_diameter:g}-"
-            f"{agitator_material}-4B"
+            f"{agitator_material}-{baffles}B"
         )
         technical_specification = (
             f"{agitator_type}；{model_designation}；适配工作容积={volume:g} m³；"
             f"桨径={impeller_diameter:g} mm；D/T={impeller_ratio:g}；"
             f"{baffles}块挡板；转速={speed:g} r/min；"
-            f"轴功率/电机候选={shaft_power:g}/{motor_power:g} kW；"
+            f"Re/Np={power_chain['reynolds_number']:.3g}/"
+            f"{power_chain['power_number']:.3g}；轴功率(采用/Np初算)="
+            f"{shaft_power:g}/{estimated_shaft_power:.3g} kW；电机候选={motor_power:g} kW；"
             f"程序扭矩={torque_nm:.1f} N·m；轴径候选={shaft_diameter:g} mm；"
-            f"减速比候选={gearbox_ratio:.2f}；密封={seal_type}"
+            f"减速比候选={gearbox_ratio:.2f}；密封={seal_type}；"
+            f"{power_chain['adjustment_recommendation']}"
         )
         fields_values = {
             "equipment_name": values.get("equipment_name") or "顶入式搅拌器",
             "equipment_type": agitator_type,
-            "equipment_subfamily": "顶入式折叶涡轮搅拌器",
+            "equipment_subfamily": power_chain["recommended_agitator_type"],
             "model_designation": model_designation,
-            "model_status": "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+            "model_status": (
+                "BLOCKED_OVERSIZED_SCREENING_LOAD_NOT_VENDOR_MODEL"
+                if power_chain["oversized_screening_load"]
+                else "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL"
+            ),
             "volume_m3": volume,
             "volume_basis": values.get("volume_basis"),
             "inner_diameter_mm": vessel_diameter,
@@ -11643,16 +13663,38 @@ def build_programmatic_auxiliary_specification(
             "impeller_diameter_mm": impeller_diameter,
             "baffle_count": baffles,
             "rotational_speed_rpm": speed,
+            "density_kg_m3": values.get("density_kg_m3"),
+            "dynamic_viscosity_mpa_s": values.get("dynamic_viscosity_mpa_s"),
+            "reynolds_number": power_chain["reynolds_number"],
+            "power_number": power_chain["power_number"],
+            "power_number_branch_id": power_chain["power_number_branch_id"],
+            "impeller_family": power_chain["impeller_family"],
+            "type_selection_basis": power_chain["type_selection_basis"],
+            "power_number_estimated_shaft_power_kw": estimated_shaft_power,
+            "agitator_power_density_kw_m3": (
+                shaft_power / volume if volume and shaft_power is not None else None
+            ),
+            "power_basis": power_basis,
+            "power_deviation_percent": power_deviation,
             "shaft_power_kw": shaft_power,
             "motor_power_kw": motor_power,
             "torque_nm": torque_nm,
             "shaft_diameter_mm": shaft_diameter,
+            "shaft_diameter_basis": (
+                "PURE_TORSION_LOWER_BOUND_ONLY; bending/fatigue/critical_speed open"
+            ),
             "gearbox_ratio": gearbox_ratio,
             "agitator_material_grade": agitator_material,
             "shaft_material_grade": shaft_material,
             "seal_type": seal_type,
             "material": f"桨叶{agitator_material}；轴{shaft_material}",
             "mixing_metric": values.get("mixing_metric"),
+            "adjustment_recommendation": power_chain[
+                "adjustment_recommendation"
+            ],
+            "selection_branch_narrative": power_chain[
+                "selection_branch_narrative"
+            ],
             "quantity_count": values.get("quantity_count", 1),
             "technical_specification": technical_specification,
         }
@@ -11661,23 +13703,41 @@ def build_programmatic_auxiliary_specification(
                 "T=(4*V/(pi*1.2))^(1/3), round up 100 mm"
             ),
             "impeller_diameter_mm": "Dimp=round_up_50(T*(D/T))",
+            "reynolds_number": "Re=rho*N*Dimp^2/mu",
+            "power_number": power_chain["formula"].split("; P=")[0],
+            "power_number_estimated_shaft_power_kw": "P=Np*rho*N^3*Dimp^5/1000",
+            "agitator_power_density_kw_m3": "P/V",
             "torque_nm": "Torque=9550*Pshaft/n",
             "shaft_diameter_mm": (
-                "d=(16*Torque*1000/(pi*tau_allow))^(1/3), "
-                "tau_allow=30 MPa, round up 5 mm"
+                "pure-torsion lower bound d=(16*Torque*1000/(pi*tau_allow))^(1/3), "
+                "tau_allow=30 MPa, round up 5 mm; bending/fatigue/critical-speed not closed"
             ),
             "motor_power_kw": "Pmotor=next_standard_series(Pshaft/0.90)",
             "gearbox_ratio": "i=n_motor/n_agitator",
         }
         profile_fields = {
-            "agitator_type",
             "impeller_diameter_ratio",
             "baffle_count",
             "agitator_material_grade",
             "shaft_material_grade",
             "seal_type",
         }
-        branch_id = "TOP_ENTRY_PITCHED_BLADE_TURBINE_AGITATOR"
+        branch_id = (
+            "TOP_ENTRY_PITCHED_BLADE_TURBINE_AGITATOR"
+            if power_chain["impeller_family"] == "PITCHED_BLADE_TURBINE_45"
+            else f"TOP_ENTRY_{power_chain['impeller_family']}_AGITATOR"
+        )
+        branch_details = {
+            "power_calculation_id": "agitator_re_np_power_screening",
+            "power_number_branch_id": power_chain["power_number_branch_id"],
+            "reynolds_number": power_chain["reynolds_number"],
+            "power_number": power_chain["power_number"],
+            "power_basis": power_basis,
+            "impeller_family": power_chain["impeller_family"],
+            "type_selection_basis": power_chain["type_selection_basis"],
+            "oversized_screening_load": power_chain["oversized_screening_load"],
+            "branch_narrative": power_chain["selection_branch_narrative"],
+        }
         formal_open_gates = [
             "same_case_viscosity_density_solid_and_gas_fraction",
             "mixing_objective_blend_time_suspension_or_mass_transfer",
@@ -11692,112 +13752,37 @@ def build_programmatic_auxiliary_specification(
         profile = profiles.get(profile_key, {})
         if not isinstance(profile, dict):
             profile = {}
+        hydraulic_chain = _static_mixer_hydraulic_chain(
+            values,
+            set(fallback_by_field),
+        )
         flow = numeric(values.get("flow_m3_h"))
         target_velocity = numeric(values.get("target_velocity_m_s"))
-        density = numeric(
-            values.get("density_kg_m3")
-            if supplied("density_kg_m3")
-            else profile.get("density_kg_m3", 1000.0)
+        density = numeric(values.get("density_kg_m3"))
+        viscosity = numeric(values.get("dynamic_viscosity_mpa_s"))
+        required_id = hydraulic_chain["required_inner_diameter_per_train_mm"]
+        selected_dn = int(hydraulic_chain["selected_dn"])
+        od = float(hydraulic_chain["selected_outer_diameter_mm"])
+        wall = float(hydraulic_chain["selected_wall_thickness_mm"])
+        actual_id = float(hydraulic_chain["actual_inner_diameter_mm"])
+        actual_velocity = float(hydraulic_chain["actual_velocity_m_s"])
+        element_count = int(hydraulic_chain["element_count"])
+        element_ld = numeric(values.get("element_length_to_diameter_ratio"))
+        length_mm = (
+            numeric(values.get("length_mm"))
+            if supplied("length_mm")
+            else float(hydraulic_chain["length_mm"])
         )
-        viscosity = numeric(
-            values.get("dynamic_viscosity_mpa_s")
-            if supplied("dynamic_viscosity_mpa_s")
-            else profile.get("dynamic_viscosity_mpa_s", 1.0)
+        k_per_element = numeric(values.get("local_resistance_coefficient_per_element"))
+        predicted_pressure_drop = float(
+            hydraulic_chain["predicted_pressure_drop_kpa"]
         )
-        required_id = (
-            math.sqrt(
-                4.0 * (flow / 3600.0) / (math.pi * target_velocity)
-            )
-            * 1000.0
-            if flow is not None
-            and target_velocity is not None
-            and flow > 0
-            and target_velocity > 0
-            else None
+        pressure_drop = (
+            numeric(values.get("pressure_drop_kpa"))
+            if supplied("pressure_drop_kpa")
+            else predicted_pressure_drop
         )
-        dn_series = [
-            (15, 21.3, 3.2), (20, 26.9, 3.2), (25, 33.7, 3.6),
-            (32, 42.4, 3.6), (40, 48.3, 3.7), (50, 60.3, 4.0),
-            (65, 76.1, 5.0), (80, 88.9, 5.5), (100, 114.3, 6.0),
-            (125, 139.7, 6.5), (150, 168.3, 7.1), (200, 219.1, 8.2),
-            (250, 273.0, 9.3), (300, 323.9, 10.3),
-        ]
-        user_dn = numeric(values.get("selected_dn"))
-        if user_dn is not None:
-            selected_dn = int(user_dn)
-            od, wall = next(
-                ((od, wall) for dn, od, wall in dn_series if dn == selected_dn),
-                (selected_dn * 1.10, max(4.0, selected_dn * 0.03)),
-            )
-        else:
-            selected_dn, od, wall = next(
-                (
-                    (dn, od, wall)
-                    for dn, od, wall in dn_series
-                    if od - 2.0 * wall >= (required_id or 0.0)
-                ),
-                dn_series[-1],
-            )
-        actual_id = od - 2.0 * wall
-        actual_velocity = (
-            (flow / 3600.0) / (math.pi * (actual_id / 1000.0) ** 2 / 4.0)
-            if flow is not None
-            else None
-        )
-        element_count = int(
-            float(
-                values.get("element_count")
-                if supplied("element_count")
-                else profile.get("element_count", 6)
-            )
-        )
-        element_ld = numeric(
-            values.get("element_length_to_diameter_ratio")
-            if supplied("element_length_to_diameter_ratio")
-            else profile.get("element_length_to_diameter_ratio", 1.5)
-        )
-        length_mm = numeric(values.get("length_mm"))
-        if length_mm is None and element_ld is not None:
-            length_mm = (
-                math.ceil(
-                    element_count * element_ld * actual_id / 100.0
-                )
-                * 100.0
-            )
-        k_per_element = numeric(
-            values.get("local_resistance_coefficient_per_element")
-            if supplied("local_resistance_coefficient_per_element")
-            else profile.get(
-                "local_resistance_coefficient_per_element",
-                1.5,
-            )
-        )
-        pressure_drop = numeric(values.get("pressure_drop_kpa"))
-        if (
-            pressure_drop is None
-            and density is not None
-            and actual_velocity is not None
-            and k_per_element is not None
-        ):
-            pressure_drop = (
-                element_count
-                * k_per_element
-                * density
-                * actual_velocity**2
-                / 2.0
-                / 1000.0
-            )
-        reynolds = (
-            density
-            * actual_velocity
-            * (actual_id / 1000.0)
-            / (viscosity / 1000.0)
-            if density is not None
-            and actual_velocity is not None
-            and viscosity is not None
-            and viscosity > 0
-            else None
-        )
+        reynolds = float(hydraulic_chain["reynolds_number"])
         flow_regime = (
             "湍流" if reynolds is not None and reynolds >= 4000
             else "过渡流" if reynolds is not None and reynolds >= 2300
@@ -11826,12 +13811,12 @@ def build_programmatic_auxiliary_specification(
         )
         design_pressure = numeric(
             values.get("design_pressure_mpa")
-            if supplied("design_pressure_mpa")
+            if present(values, "design_pressure_mpa")
             else profile.get("design_pressure_mpa", 1.0)
         )
         design_pressure_basis = str(
             values.get("design_pressure_basis")
-            if supplied("design_pressure_basis")
+            if present(values, "design_pressure_basis")
             else profile.get("design_pressure_basis", "gauge")
         )
         blockage_boundary = (
@@ -11841,13 +13826,19 @@ def build_programmatic_auxiliary_specification(
         model_designation = (
             f"SMX-KENICS-DN{selected_dn}-{element_count}E-"
             f"L{length_mm:g}-{material}-{pressure_class}-BW"
+            + (
+                f"-{hydraulic_chain['parallel_train_count']}TR"
+                if hydraulic_chain["parallel_train_count"] > 1 else ""
+            )
         )
         technical_specification = (
             f"螺旋元件静态混合器；{model_designation}；"
-            f"OD{od:g}×{wall:g} mm；有效内径={actual_id:g} mm；"
+            f"{hydraulic_chain['parallel_train_count']}列并联；每列"
+            f"OD{od:g}×暂定壁厚{wall:g} mm；有效内径={actual_id:g} mm；"
             f"{element_count}个{element_type}；总长={length_mm:g} mm；"
             f"实际流速={actual_velocity:.3f} m/s；"
-            f"程序压降={pressure_drop:.3f} kPa；Re={reynolds:.0f}；"
+            f"程序预测压降={predicted_pressure_drop:.3f} kPa/列；"
+            f"水力状态={hydraulic_chain['hydraulic_status']}；Re={reynolds:.0f}；"
             f"{pressure_class}；{connection}"
         )
         fields_values = {
@@ -11858,11 +13849,21 @@ def build_programmatic_auxiliary_specification(
             "model_status": "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
             "medium_name": values.get("main_medium") or "水样低黏液体（程序保底物性）",
             "flow_m3_h": flow,
+            "single_train_flow_m3_h": hydraulic_chain["single_train_flow_m3_h"],
+            "parallel_train_count": hydraulic_chain["parallel_train_count"],
             "target_velocity_m_s": target_velocity,
             "required_inner_diameter_mm": required_id,
+            "required_inner_diameter_per_train_mm": required_id,
             "selected_dn": selected_dn,
             "selected_outer_diameter_mm": od,
             "selected_wall_thickness_mm": wall,
+            "selected_wall_basis": hydraulic_chain["selected_wall_basis"],
+            "selected_dn_standard_id": hydraulic_chain["selected_dn_standard_id"],
+            "selected_dn_standard_version": hydraulic_chain["selected_dn_standard_version"],
+            "selected_dn_source_pdf_sha256": hydraulic_chain["selected_dn_source_pdf_sha256"],
+            "selected_dn_source_table_asset_id": hydraulic_chain["selected_dn_source_table_asset_id"],
+            "selected_dn_source_row_1based": hydraulic_chain["selected_dn_source_row_1based"],
+            "dn_selection_basis": hydraulic_chain["dn_selection_basis"],
             "actual_velocity_m_s": actual_velocity,
             "element_type": element_type,
             "element_count": element_count,
@@ -11874,9 +13875,20 @@ def build_programmatic_auxiliary_specification(
             "reynolds_number": reynolds,
             "flow_regime": flow_regime,
             "pressure_drop_kpa": pressure_drop,
+            "predicted_pressure_drop_kpa": predicted_pressure_drop,
             "allowable_pressure_drop_kpa": values.get(
                 "allowable_pressure_drop_kpa"
             ),
+            "pressure_drop_ratio": hydraulic_chain["pressure_drop_ratio"],
+            "velocity_ratio": hydraulic_chain["velocity_ratio"],
+            "hydraulic_status": hydraulic_chain["hydraulic_status"],
+            "element_count_basis": hydraulic_chain["element_count_basis"],
+            "adjustment_recommendation": hydraulic_chain[
+                "adjustment_recommendation"
+            ],
+            "selection_branch_narrative": hydraulic_chain[
+                "selection_branch_narrative"
+            ],
             "mixing_metric": values.get("mixing_metric"),
             "blockage_cleaning_boundary": blockage_boundary,
             "material": material,
@@ -11890,16 +13902,25 @@ def build_programmatic_auxiliary_specification(
         }
         equations = {
             "required_inner_diameter_mm": (
-                "Dreq=sqrt(4*(Q/3600)/(pi*vtarget))*1000"
+                "Dreq,train=sqrt(4*(Q/Ntrain/3600)/(pi*vtarget))*1000"
+            ),
+            "required_inner_diameter_per_train_mm": (
+                "Dreq,train=sqrt(4*(Q/Ntrain/3600)/(pi*vtarget))*1000"
             ),
             "selected_dn": (
-                "select first registered DN whose OD-2t >= Dreq"
+                "select/iterate DN from promoted GB/T 12459-2025 DN-to-OD rows; "
+                "wall remains provisional"
             ),
-            "actual_velocity_m_s": "v=(Q/3600)/(pi*Di^2/4)",
+            "parallel_train_count": "iterate integer Ntrain until registered DN and dP constraints pass",
+            "actual_velocity_m_s": "v=(Q/Ntrain/3600)/(pi*Di^2/4)",
             "length_mm": "L=N_element*(L/D)_element*Di, round up 100 mm",
             "pressure_drop_kpa": (
                 "dP=N_element*K_element*rho*v^2/(2*1000)"
             ),
+            "predicted_pressure_drop_kpa": (
+                "dP=N_element*K_element*rho*v^2/(2*1000)"
+            ),
+            "pressure_drop_ratio": "dPpredicted/dPallowable",
             "reynolds_number": "Re=rho*v*Di/mu",
         }
         profile_fields = {
@@ -11916,9 +13937,26 @@ def build_programmatic_auxiliary_specification(
             "design_pressure_basis",
         }
         branch_id = "HELICAL_KENICS_STATIC_MIXER"
+        branch_details = {
+            "hydraulic_calculation_id": "static_mixer_hydraulic_train_screening",
+            "hydraulic_branch_id": hydraulic_chain["hydraulic_branch_id"],
+            "hydraulic_status": hydraulic_chain["hydraulic_status"],
+            "parallel_train_count": hydraulic_chain["parallel_train_count"],
+            "selected_dn": selected_dn,
+            "pressure_drop_ratio": hydraulic_chain["pressure_drop_ratio"],
+            "velocity_ratio": hydraulic_chain["velocity_ratio"],
+            "branch_narrative": hydraulic_chain["selection_branch_narrative"],
+        }
+        if hydraulic_chain["hydraulic_status"].startswith("FAIL_"):
+            auxiliary_package_status = (
+                "BLOCKED_STATIC_MIXER_VELOCITY_CONSTRAINT"
+                if "VELOCITY" in hydraulic_chain["hydraulic_status"]
+                else "BLOCKED_STATIC_MIXER_PRESSURE_DROP_CONSTRAINT"
+            )
         formal_open_gates = [
             "same_case_density_viscosity_non_newtonian_behavior_and_solid_size",
             "required_mix_quality_and_sampling_or_test_method",
+            "hydraulic_pass_does_not_verify_mixing_target",
             "vendor_pressure_drop_and_mixing_performance_curve",
             "blockage_fouling_cleaning_and_removable_core_boundary",
             "material_compatibility_pressure_temperature_rating_and_connections",
@@ -11928,6 +13966,14 @@ def build_programmatic_auxiliary_specification(
     profile_warning = str(
         profile.get("warning")
         or "该辅助设备程序规格仅供预设计，必须用厂家证据替换。"
+    )
+    family_calculation_target = {
+        "family_agitator": "power_number_estimated_shaft_power_kw",
+        "family_static_mixer": "pressure_drop_kpa",
+    }.get(family_id)
+    family_calculation = (
+        calculation_by_target.get(family_calculation_target)
+        if family_calculation_target else None
     )
     fields: dict[str, dict[str, Any]] = {}
     for field_id, value in fields_values.items():
@@ -11995,13 +14041,32 @@ def build_programmatic_auxiliary_specification(
             "user_override_allowed": True,
             "single_equipment_recalculation_required_after_override": True,
         }
+        if family_calculation and (
+            field_id in equations
+            or field_id == family_calculation_target
+            or field_id in {
+                "hydraulic_status", "power_number_branch_id",
+                "selection_branch_narrative", "adjustment_recommendation",
+            }
+        ):
+            calculation_notice = family_calculation.get("calculation_notice", {})
+            formula_trace = family_calculation.get("formula_trace", {})
+            fields[field_id].update({
+                "family_calculation_id": family_calculation.get("calculation_id"),
+                "formula_id": calculation_notice.get("formula_id"),
+                "source_refs": list(calculation_notice.get("source_refs", [])),
+                "formula_trace_sha256": formula_trace.get(
+                    "calculation_trace_sha256"
+                ),
+                "traceability_status": formula_trace.get("traceability_status"),
+            })
 
     package = {
         "schema": "programmatic-auxiliary-equipment-specification-v1",
         "policy_id": str(profile.get("profile_id")),
         "family_id": family_id,
         "subfamily": profile_key,
-        "status": "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        "status": auxiliary_package_status,
         "program_generated": True,
         "deterministic": True,
         "llm_used": False,
@@ -12014,7 +14079,28 @@ def build_programmatic_auxiliary_specification(
             "fallback_profile_id": profile.get("profile_id"),
             "terminal_rule_id": terminal.get("rule_id"),
             "terminal_selection_status": terminal.get("status"),
+            **branch_details,
         },
+        "calculation_chain": (
+            {
+                "calculation_id": family_calculation.get("calculation_id"),
+                "formula_id": family_calculation.get(
+                    "calculation_notice", {}
+                ).get("formula_id"),
+                "source_refs": list(
+                    family_calculation.get("calculation_notice", {}).get(
+                        "source_refs", []
+                    )
+                ),
+                "formula_trace_sha256": family_calculation.get(
+                    "formula_trace", {}
+                ).get("calculation_trace_sha256"),
+                "traceability_status": family_calculation.get(
+                    "formula_trace", {}
+                ).get("traceability_status"),
+            }
+            if family_calculation else None
+        ),
         "formal_open_gates": formal_open_gates,
         "user_control": {
             "every_displayed_parameter_editable": True,
@@ -12078,6 +14164,10 @@ def build_programmatic_membrane_package_specification(
         else {}
     )
     block_type = str(values.get("aspen_block_type") or "").upper()
+    package_route = (
+        "MEMBRANE" if family_id == "family_membrane"
+        else _package_process_route(values)
+    )
 
     def supplied(field_id: str) -> bool:
         return present(normalized, field_id) and field_id not in fallback_by_field
@@ -12121,102 +14211,174 @@ def build_programmatic_membrane_package_specification(
     equations: dict[str, str]
     profile_fields: set[str]
     formal_open_gates: list[str]
+    branch_details: dict[str, Any] = {}
+    package_status = "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
 
     if family_id == "family_membrane":
         profile_key = "spiral_wound_8040_membrane"
         profile = profiles.get(profile_key, {})
         if not isinstance(profile, dict):
             profile = {}
-        geometry = text_value(
-            "membrane_geometry_type", profile, "spiral_wound"
+        geometry = str(
+            values.get("membrane_geometry_type")
+            if present(values, "membrane_geometry_type")
+            else profile.get("membrane_geometry_type") or "spiral_wound"
         )
-        element_name = text_value(
-            "element_standard_designation", profile, "8040卷式膜元件"
+        array_chain = _membrane_flux_recovery_array_chain(
+            values,
+            set(fallback_by_field),
         )
-        element_od = number(
-            "element_outer_diameter_mm", profile, 201.0
-        )
-        element_length = number("element_length_mm", profile, 1016.0)
-        area_per_element = number(
-            "membrane_area_per_element_m2", profile, 37.0
-        )
-        element_count = int(number("element_count", profile, 10.0))
-        elements_per_vessel = int(
-            number("elements_per_pressure_vessel", profile, 5.0)
-        )
-        vessel_count = (
-            int(float(values["pressure_vessel_count"]))
-            if supplied("pressure_vessel_count")
-            else int(math.ceil(element_count / elements_per_vessel))
-        )
-        area = (
-            numeric(values.get("membrane_area_m2"))
-            if supplied("membrane_area_m2")
-            else element_count * area_per_element
-        )
+        element_count = int(array_chain["selected_element_count"])
+        elements_per_vessel = int(array_chain["elements_per_train"])
+        vessel_count = int(array_chain["parallel_train_count"])
+        area_per_element = float(array_chain["membrane_area_per_element_m2"])
+        area = float(array_chain["selected_membrane_area_m2"])
         flux = number("flux", profile, 20.0)
         recovery = number("recovery_percent", profile, 80.0)
-        selectivity = number("selectivity", profile, 25.0)
-        permeate = (
-            numeric(values.get("permeate_flow_m3_h"))
-            if supplied("permeate_flow_m3_h")
-            else area * flux / 1000.0
+        permeate = float(array_chain["permeate_flow_m3_h"])
+        feed = float(array_chain["feed_flow_m3_h"])
+        concentrate = max(0.0, feed - permeate)
+        pressure_class = text_value("pressure_class", profile, "PN16")
+        design_pressure = (
+            float(values["design_pressure_mpa"])
+            if present(values, "design_pressure_mpa")
+            else number("design_pressure_mpa", profile, 1.6)
         )
-        feed = (
-            numeric(values.get("feed_flow_m3_h"))
-            if supplied("feed_flow_m3_h")
-            else permeate / (recovery / 100.0)
+        pressure_basis = (
+            str(values["design_pressure_basis"])
+            if present(values, "design_pressure_basis")
+            else text_value("design_pressure_basis", profile, "gauge")
         )
-        concentrate = (
-            numeric(values.get("concentrate_flow_m3_h"))
-            if supplied("concentrate_flow_m3_h")
-            else feed - permeate
-        )
-        membrane_material = text_value(
-            "membrane_material_grade",
-            profile,
-            "芳香族聚酰胺薄膜复合膜（PA-TFC）",
-        )
-        vessel_material = text_value(
-            "pressure_vessel_material_grade",
-            profile,
-            "FRP玻璃纤维增强环氧树脂",
-        )
-        center_material = text_value(
-            "center_tube_material_grade", profile, "ABS"
-        )
-        service_route = text_value(
-            "service_route",
-            profile,
-            "水相压力驱动分离（程序保底；RO/NF待确认）",
-        )
-        design_pressure = number("design_pressure_mpa", profile, 1.6)
-        pressure_basis = text_value(
-            "design_pressure_basis", profile, "gauge"
-        )
+
+        if geometry == "spiral_wound":
+            equipment_type = "8040卷式膜分离装置"
+            equipment_subfamily = "8040卷式PA-TFC膜组件阵列"
+            element_name = text_value(
+                "element_standard_designation", profile, "8040卷式膜元件"
+            )
+            element_od = number("element_outer_diameter_mm", profile, 201.0)
+            element_length = number("element_length_mm", profile, 1016.0)
+            selectivity = (
+                numeric(values.get("selectivity"))
+                if supplied("selectivity") else number("selectivity", profile, 25.0)
+            )
+            membrane_material = text_value(
+                "membrane_material_grade", profile,
+                "芳香族聚酰胺薄膜复合膜（PA-TFC）",
+            )
+            vessel_material = text_value(
+                "pressure_vessel_material_grade", profile,
+                "FRP玻璃纤维增强环氧树脂",
+            )
+            center_material = text_value(
+                "center_tube_material_grade", profile, "ABS"
+            )
+            service_route = text_value(
+                "service_route", profile,
+                "水相压力驱动分离（程序保底；RO/NF待确认）",
+            )
+            designation = (
+                f"MEM-SW8040-{element_count}E-{vessel_count}PV"
+                f"{elements_per_vessel}-PA-TFC-A{area:g}-{pressure_class}"
+            )
+            branch_id = "SPIRAL_WOUND_8040_PA_TFC_ARRAY"
+            geometry_warning = "8040型式、选择性和材料仅在卷式支路采用。"
+        else:
+            geometry_map = {
+                "cylindrical_channels": (
+                    "管式圆柱通道膜组件阵列", "多通道管式膜组件",
+                    "TUBULAR", "圆柱通道管式膜组件",
+                ),
+                "hollow_fiber": (
+                    "中空纤维膜组件阵列", "中空纤维膜组件",
+                    "HF", "中空纤维膜组件",
+                ),
+                "flat_sheet": (
+                    "平板膜组件阵列", "板框式平板膜组件",
+                    "FS", "平板膜组件",
+                ),
+            }
+            (
+                equipment_type, equipment_subfamily, geometry_code,
+                fallback_element_name,
+            ) = geometry_map[geometry]
+            profile_key = f"explicit_{geometry}_geometry"
+            element_name = (
+                str(values["element_standard_designation"])
+                if supplied("element_standard_designation")
+                else fallback_element_name
+            )
+            element_od = numeric(values.get("element_outer_diameter_mm"))
+            element_length = numeric(values.get("element_length_mm"))
+            if element_length is None and present(values, "element_length_m"):
+                element_length = float(values["element_length_m"]) * 1000.0
+            selectivity = (
+                numeric(values.get("selectivity"))
+                if supplied("selectivity") else None
+            )
+            membrane_material = (
+                str(values["membrane_material_grade"])
+                if supplied("membrane_material_grade")
+                else "膜材质待按介质相容性确认（程序不跨型式套用PA-TFC）"
+            )
+            vessel_material = (
+                str(values["pressure_vessel_material_grade"])
+                if supplied("pressure_vessel_material_grade")
+                else "S31603组件壳体预选（相容性/压力等级待确认）"
+            )
+            center_material = (
+                str(values["center_tube_material_grade"])
+                if supplied("center_tube_material_grade")
+                else "不适用/由所选几何组件厂家确认"
+            )
+            service_route = (
+                str(values["service_route"])
+                if supplied("service_route")
+                else f"{equipment_subfamily}分离任务（截留对象待确认）"
+            )
+            designation = (
+                f"MEM-{geometry_code}-{element_count}MOD-"
+                f"{vessel_count}TR-A{area:g}-{pressure_class}"
+            )
+            if array_chain["array_sizing_status"].startswith("BLOCKED_"):
+                designation = f"MEM-{geometry_code}-ROUTE-BLOCKED-AREA"
+            branch_id = f"EXPLICIT_{geometry.upper()}_ARRAY"
+            geometry_warning = (
+                "显式几何优先：未套用8040型号、37 m²/支选择性或PA-TFC；"
+                "材料/截留性能缺项保持开放并报警。"
+            )
+            profile = {
+                "profile_id": (
+                    f"EXPLICIT_{geometry.upper()}_GEOMETRY_PROGRAMMATIC_ROUTE"
+                ),
+                "warning": geometry_warning,
+            }
         pressure_class = text_value("pressure_class", profile, "PN16")
         material = (
             f"膜层={membrane_material}；膜壳={vessel_material}；"
             f"中心管={center_material}"
         )
-        designation = (
-            f"MEM-SW8040-{element_count}E-{vessel_count}PV"
-            f"{elements_per_vessel}-PA-TFC-A{area:g}-{pressure_class}"
-        )
         technical = (
-            f"8040卷式膜装置；{designation}；{element_count}支{element_name}，"
-            f"{vessel_count}支膜壳×最多{elements_per_vessel}芯；"
+            f"{equipment_type}；{designation}；{element_count}支{element_name}，"
+            f"{vessel_count}列×每列最多{elements_per_vessel}芯；"
             f"单支/总膜面积={area_per_element:g}/{area:g} m²；"
-            f"设计通量={flux:g} L/(m²·h)，程序产水={permeate:.2f} m³/h；"
+            f"所需/设计面积={array_chain['required_membrane_area_m2']:.3g}/"
+            f"{array_chain['design_membrane_area_m2']:.3g} m²；"
+            f"设计通量={flux:g} L/(m²·h)，程序渗透流量={permeate:.2f} m³/h；"
             f"回收率={recovery:g}%，进料/浓水={feed:.2f}/{concentrate:.2f} "
-            f"m³/h；{pressure_class}；{material}"
+            f"m³/h；{pressure_class}；设计压力={design_pressure:g} MPa({pressure_basis})；"
+            f"阵列状态={array_chain['array_sizing_status']}；{material}"
         )
         fields_values = {
-            "equipment_name": values.get("equipment_name") or "卷式膜分离装置",
-            "equipment_type": "8040卷式膜分离装置",
-            "equipment_subfamily": "8040卷式PA-TFC膜组件阵列",
+            "equipment_name": values.get("equipment_name") or equipment_type,
+            "equipment_type": equipment_type,
+            "equipment_subfamily": equipment_subfamily,
             "model_designation": designation,
-            "model_status": "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+            "model_status": (
+                "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL"
+                if not array_chain["array_sizing_status"].startswith(("BLOCKED_", "FAIL_"))
+                else "BLOCKED_ARRAY_CONSTRAINT_NOT_VENDOR_MODEL"
+            ),
             "process_function": values.get("process_function"),
             "service_route": service_route,
             "main_medium": values.get("main_medium"),
@@ -12229,6 +14391,27 @@ def build_programmatic_membrane_package_specification(
             "elements_per_pressure_vessel": elements_per_vessel,
             "pressure_vessel_count": vessel_count,
             "membrane_area_m2": area,
+            "required_membrane_area_m2": array_chain[
+                "required_membrane_area_m2"
+            ],
+            "design_membrane_area_m2": array_chain["design_membrane_area_m2"],
+            "required_element_count": array_chain["required_element_count"],
+            "design_margin_percent": values.get("design_margin_percent"),
+            "elements_per_train": array_chain["elements_per_train"],
+            "parallel_train_count": array_chain["parallel_train_count"],
+            "array_stage_count": array_chain["array_stage_count"],
+            "skid_count": array_chain["skid_count"],
+            "array_sizing_status": array_chain["array_sizing_status"],
+            "area_basis": array_chain["area_basis"],
+            "arrangement_basis": array_chain["arrangement_basis"],
+            "target_flow_basis": array_chain["target_flow_basis"],
+            "adjustment_recommendation": array_chain[
+                "adjustment_recommendation"
+            ],
+            "selection_branch_narrative": array_chain[
+                "selection_branch_narrative"
+            ],
+            "geometry_consistency_warning": geometry_warning,
             "flux": flux,
             "selectivity": selectivity,
             "recovery_percent": recovery,
@@ -12247,12 +14430,26 @@ def build_programmatic_membrane_package_specification(
             "technical_specification": technical,
         }
         equations = {
-            "pressure_vessel_count": "Npv=ceil(Nelement/Nelement_per_PV)",
-            "membrane_area_m2": "A=Nelement*Aelement",
-            "permeate_flow_m3_h": "Qp=A*J/1000",
+            "required_membrane_area_m2": "Areq=Qp*1000/J",
+            "design_membrane_area_m2": "Adesign=Areq*(1+margin/100)",
+            "required_element_count": "Ne,required=ceil(Adesign/Aelement)",
+            "pressure_vessel_count": "Npv=ceil(Nelement/Nelement_per_train)",
+            "parallel_train_count": "Nparallel=ceil(Nelement/Nelement_per_train)",
+            "membrane_area_m2": "Aselected=Nelement*Aelement (or explicit central geometry area)",
+            "permeate_flow_m3_h": "Qp=Aselected*J/1000 for capacity estimate; target remains target in sizing mode",
             "feed_flow_m3_h": "Qfeed=Qp/(Recovery/100)",
             "concentrate_flow_m3_h": "Qc=Qfeed-Qp",
         }
+        if geometry != "spiral_wound":
+            equations.update({
+                "membrane_area_per_element_m2": (
+                    "Aelement=Ageometry/Nelement for explicit geometry; "
+                    "8040 area fallback is inapplicable"
+                ),
+                "elements_per_pressure_vessel": (
+                    "one explicit non-spiral module per housing/train in screening layout"
+                ),
+            })
         profile_fields = {
             "membrane_geometry_type", "element_standard_designation",
             "element_outer_diameter_mm", "element_length_mm",
@@ -12263,16 +14460,34 @@ def build_programmatic_membrane_package_specification(
             "service_route", "design_pressure_mpa",
             "design_pressure_basis", "pressure_class",
         }
-        branch_id = "SPIRAL_WOUND_8040_PA_TFC_ARRAY"
+        if geometry != "spiral_wound":
+            profile_fields = set()
+        branch_details = {
+            "array_calculation_id": "membrane_flux_recovery_array_screening",
+            "array_branch_id": array_chain["array_branch_id"],
+            "geometry_branch": array_chain["geometry_branch"],
+            "area_basis": array_chain["area_basis"],
+            "target_flow_basis": array_chain["target_flow_basis"],
+            "array_sizing_status": array_chain["array_sizing_status"],
+            "parallel_train_count": array_chain["parallel_train_count"],
+            "array_stage_count": array_chain["array_stage_count"],
+            "skid_count": array_chain["skid_count"],
+            "branch_narrative": array_chain["selection_branch_narrative"],
+        }
+        if array_chain["array_sizing_status"].startswith(("FAIL_", "BLOCKED_")):
+            package_status = "BLOCKED_MEMBRANE_ARRAY_CONSTRAINT"
+        elif array_chain["array_sizing_status"].startswith("FALLBACK_"):
+            package_status = "PRELIMINARY_CAPACITY_ESTIMATE_WITHOUT_TARGET_FLOW"
         formal_open_gates = [
             "same_feed_composition_temperature_pressure_ph_and_sdi",
             "target_permeate_quality_rejection_and_recovery",
+            "selected_geometry_specific_element_area_and_housing_arrangement",
             "vendor_element_projection_and_normalized_performance",
             "pretreatment_scaling_fouling_and_cleaning_design",
             "pressure_vessel_code_rating_and_array_hydraulics",
             "membrane_lifetime_chemical_compatibility_and_vendor_guarantee",
         ]
-    elif block_type == "FILTER":
+    elif package_route == "FILTER":
         profile_key = "recessed_chamber_filter_press"
         profile = profiles.get(profile_key, {})
         if not isinstance(profile, dict):
@@ -12398,7 +14613,7 @@ def build_programmatic_membrane_package_specification(
             "cycle_step_times_and_vendor_chamber_volume",
             "hydraulic_closure_pressure_rating_material_and_vendor_guarantee",
         ]
-    elif block_type == "DRYER":
+    elif package_route == "DRYER":
         profile_key = "continuous_belt_hot_air_dryer"
         profile = profiles.get(profile_key, {})
         if not isinstance(profile, dict):
@@ -12528,7 +14743,7 @@ def build_programmatic_membrane_package_specification(
             "heat_source_air_fan_and_energy_balance",
             "dust_solvent_fire_explosion_offgas_and_vendor_drying_test",
         ]
-    else:
+    elif package_route == "TSA":
         profile_key = "twin_tower_tsa_package"
         profile = profiles.get(profile_key, {})
         if not isinstance(profile, dict):
@@ -12536,7 +14751,11 @@ def build_programmatic_membrane_package_specification(
         capacity = number("capacity", profile, 100.0)
         cycle = number("cycle_time_h", profile, 8.0)
         adsorption_time = number("adsorption_time_h", profile, 4.0)
-        tower_count = int(number("tower_count", profile, 2.0))
+        tsa_chain = _tsa_cycle_bed_capacity_chain(
+            values,
+            set(fallback_by_field),
+        )
+        tower_count = int(tsa_chain["selected_tower_count_per_train"])
         vessel_diameter = number("vessel_diameter_mm", profile, 500.0)
         specific_volume = float(
             profile.get(
@@ -12546,11 +14765,7 @@ def build_programmatic_membrane_package_specification(
         minimum_volume = float(
             profile.get("minimum_bed_volume_m3_per_tower", 0.2)
         )
-        bed_volume = (
-            numeric(values.get("bed_volume_m3_per_tower"))
-            if supplied("bed_volume_m3_per_tower")
-            else max(minimum_volume, capacity * specific_volume)
-        )
+        bed_volume = float(tsa_chain["selected_bed_volume_m3_per_tower"])
         calculated_height = (
             4.0 * bed_volume
             / (math.pi * (vessel_diameter / 1000.0) ** 2)
@@ -12573,10 +14788,8 @@ def build_programmatic_membrane_package_specification(
         bulk_density = number(
             "adsorbent_bulk_density_kg_m3", profile, 750.0
         )
-        adsorbent_mass = (
-            numeric(values.get("adsorbent_mass_kg_per_tower"))
-            if supplied("adsorbent_mass_kg_per_tower")
-            else bed_volume * bulk_density
+        adsorbent_mass = float(
+            tsa_chain["selected_adsorbent_mass_kg_per_tower"]
         )
         regeneration = text_value(
             "regeneration_method",
@@ -12591,28 +14804,36 @@ def build_programmatic_membrane_package_specification(
             profile,
             "S30408支承格栅+丝网",
         )
-        design_pressure = number("design_pressure_mpa", profile, 1.1)
-        pressure_basis = text_value(
-            "design_pressure_basis", profile, "gauge"
+        design_pressure = (
+            float(values["design_pressure_mpa"])
+            if present(values, "design_pressure_mpa")
+            else number("design_pressure_mpa", profile, 1.1)
+        )
+        pressure_basis = (
+            str(values["design_pressure_basis"])
+            if present(values, "design_pressure_basis")
+            else text_value("design_pressure_basis", profile, "gauge")
         )
         pressure_class = text_value("pressure_class", profile, "PN16")
         capacity_basis = (
             str(values.get("capacity_basis"))
             if supplied("capacity_basis")
-            else "项目处理能力单位待确认；程序默认capacity=100"
+            else None
         )
         designation = (
-            f"PKG-TSA-{tower_count}T-DN{vessel_diameter:g}-"
+            f"PKG-TSA-{tsa_chain['parallel_train_count']}TRX{tower_count}T-"
+            f"DN{vessel_diameter:g}-"
             f"BED{bed_volume:g}M3-ALUMINA-C{cycle:g}H-{pressure_class}"
         )
         technical = (
             f"双塔变温吸附成套装置；{designation}；"
-            f"{tower_count}×DN{vessel_diameter:g}吸附塔，单塔床层="
+            f"{tsa_chain['parallel_train_count']}列×{tower_count}塔/列×"
+            f"DN{vessel_diameter:g}吸附塔，单塔床层="
             f"{bed_volume:g} m³/{bed_height:g} mm，"
             f"{adsorbent_mass:g} kg {adsorbent}；周期/吸附="
             f"{cycle:g}/{adsorption_time:g} h；{regeneration}；"
             f"壳体={shell_material}，内件={internals_material}；"
-            f"{pressure_class}"
+            f"{pressure_class}；循环/床层状态={tsa_chain['cycle_balance_status']}"
         )
         fields_values = {
             "equipment_name": values.get("equipment_name")
@@ -12620,18 +14841,64 @@ def build_programmatic_membrane_package_specification(
             "equipment_type": "双塔变温吸附成套装置",
             "equipment_subfamily": "双塔加热再生TSA成套装置",
             "model_designation": designation,
-            "model_status": "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+            "model_status": (
+                "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL"
+                if not tsa_chain["cycle_balance_status"].startswith(("BLOCKED_", "FAIL_"))
+                else "BLOCKED_TSA_CAPACITY_OR_CYCLE_NOT_VENDOR_MODEL"
+            ),
             "capacity": capacity,
             "capacity_basis": capacity_basis,
             "cycle_time_h": cycle,
             "adsorption_time_h": adsorption_time,
             "tower_count": tower_count,
+            "parallel_train_count": tsa_chain["parallel_train_count"],
+            "required_tower_count_per_train": tsa_chain[
+                "required_tower_count_per_train"
+            ],
             "vessel_diameter_mm": vessel_diameter,
             "bed_volume_m3_per_tower": bed_volume,
+            "required_bed_volume_m3_per_tower": tsa_chain[
+                "required_bed_volume_m3_per_tower"
+            ],
             "bed_height_mm": bed_height,
             "adsorbent_type": adsorbent,
             "adsorbent_bulk_density_kg_m3": bulk_density,
             "adsorbent_mass_kg_per_tower": adsorbent_mass,
+            "required_adsorbent_mass_kg_per_tower": tsa_chain[
+                "required_adsorbent_mass_kg_per_tower"
+            ],
+            "required_total_adsorbent_mass_kg": tsa_chain[
+                "required_total_adsorbent_mass_kg"
+            ],
+            "required_total_bed_volume_m3": tsa_chain[
+                "required_total_bed_volume_m3"
+            ],
+            "contaminant_load_kg_h": values.get("contaminant_load_kg_h"),
+            "adsorbent_working_capacity_kg_kg": values.get(
+                "adsorbent_working_capacity_kg_kg"
+            ),
+            "design_margin_percent": values.get("design_margin_percent"),
+            "heating_time_h": values.get("heating_time_h"),
+            "cooling_time_h": values.get("cooling_time_h"),
+            "switching_time_h": values.get("switching_time_h"),
+            "cycle_phase_sum_h": tsa_chain["cycle_phase_sum_h"],
+            "cycle_balance_status": tsa_chain["cycle_balance_status"],
+            "bed_loading_margin_percent": tsa_chain[
+                "bed_loading_margin_percent"
+            ],
+            "capacity_branch_id": tsa_chain["capacity_branch_id"],
+            "physical_capacity_basis_supplied": tsa_chain[
+                "physical_capacity_basis_supplied"
+            ],
+            "capacity_basis_validation": tsa_chain[
+                "capacity_basis_validation"
+            ],
+            "adjustment_recommendation": tsa_chain[
+                "adjustment_recommendation"
+            ],
+            "selection_branch_narrative": tsa_chain[
+                "selection_branch_narrative"
+            ],
             "regeneration_method": regeneration,
             "allowable_pressure_drop_kpa": values.get(
                 "allowable_pressure_drop_kpa"
@@ -12654,6 +14921,11 @@ def build_programmatic_membrane_package_specification(
                 "Hbed=max(Hmin,round_up_100(4*Vbed/(pi*D^2)))"
             ),
             "adsorbent_mass_kg_per_tower": "mads=Vbed*rho_bulk",
+            "required_adsorbent_mass_kg_per_tower": (
+                "m=load*tads/qwork*(1+margin)/Ntrain or provisional V*rho"
+            ),
+            "parallel_train_count": "Ntrain=ceil(Vtotal/Vmax_per_tower)",
+            "cycle_phase_sum_h": "tsum=tads+theat+tcool+tswitch",
         }
         profile_fields = {
             "cycle_time_h", "adsorption_time_h", "tower_count",
@@ -12664,6 +14936,24 @@ def build_programmatic_membrane_package_specification(
             "pressure_class",
         }
         branch_id = "TWIN_TOWER_TEMPERATURE_SWING_ADSORPTION_PACKAGE"
+        branch_details = {
+            "process_route": package_route,
+            "bed_calculation_id": "tsa_cycle_bed_capacity_screening",
+            "capacity_branch_id": tsa_chain["capacity_branch_id"],
+            "cycle_balance_status": tsa_chain["cycle_balance_status"],
+            "parallel_train_count": tsa_chain["parallel_train_count"],
+            "physical_capacity_basis_supplied": tsa_chain[
+                "physical_capacity_basis_supplied"
+            ],
+            "capacity_basis_validation": tsa_chain[
+                "capacity_basis_validation"
+            ],
+            "branch_narrative": tsa_chain["selection_branch_narrative"],
+        }
+        if tsa_chain["cycle_balance_status"].startswith("BLOCKED_"):
+            package_status = tsa_chain["cycle_balance_status"]
+        elif tsa_chain["cycle_balance_status"].startswith("FAIL_"):
+            package_status = "BLOCKED_TSA_CYCLE_OR_BED_CONSTRAINT"
         formal_open_gates = [
             "same_feed_composition_flow_pressure_temperature_and_contaminants",
             "product_purity_dew_point_or_breakthrough_requirement",
@@ -12672,10 +14962,166 @@ def build_programmatic_membrane_package_specification(
             "regeneration_heat_purge_gas_cooling_and_energy_balance",
             "vessel_controls_interlocks_pid_and_vendor_guarantee",
         ]
+    elif package_route in {"PSA", "GUARD_BED"}:
+        is_psa = package_route == "PSA"
+        profile_key = (
+            "pressure_swing_adsorption_route"
+            if is_psa else "switchable_guard_bed_route"
+        )
+        profile = {
+            "profile_id": (
+                "PROGRAMMATIC_PSA_ROUTE_NO_PHYSICAL_BED_BASIS"
+                if is_psa
+                else "PROGRAMMATIC_GUARD_BED_ROUTE_NO_PHYSICAL_BED_BASIS"
+            ),
+            "warning": (
+                "已识别成套设备工艺功能，但缺少足以闭合床层尺寸的动态容量/穿透证据；"
+                "程序不会将其冒充TSA或虚构厂家型号。"
+            ),
+        }
+        equipment_type = (
+            "多塔变压吸附成套装置（循环与塔数待求解）"
+            if is_psa else "双联可切换固定床保护器（床层待求解）"
+        )
+        equipment_subfamily = (
+            "PSA均压—吸附—降压—再生循环成套装置"
+            if is_psa else "一用一备/串联切换式固定床保护系统"
+        )
+        pressure_class = (
+            str(values["pressure_class"])
+            if supplied("pressure_class") else "PN16（程序接口保底）"
+        )
+        shell_material = (
+            str(values["shell_material_grade"])
+            if supplied("shell_material_grade") else "Q345R预选"
+        )
+        internals_material = (
+            str(values["internals_material_grade"])
+            if supplied("internals_material_grade")
+            else "S30408支承格栅预选"
+        )
+        designation = (
+            f"PKG-{'PSA' if is_psa else 'GUARD'}-ROUTE-{pressure_class.split('（')[0]}"
+        )
+        branch_id = (
+            "PRESSURE_SWING_ADSORPTION_ROUTE_BLOCKED_BED_BASIS"
+            if is_psa else "SWITCHABLE_GUARD_BED_ROUTE_BLOCKED_BED_BASIS"
+        )
+        blocked_reason = (
+            "PSA需吸附/均压/降压/再生各步时间、产品纯度、进料负荷、吸附等温线与动态容量后求塔数和床层。"
+            if is_psa
+            else "保护床需目标污染物负荷、允许出口泄漏、动态工作容量和切换/穿透时间后求床层。"
+        )
+        technical = (
+            f"{equipment_type}；工程路由标识={designation}（非厂家型号）；"
+            f"壳体={shell_material}，内件={internals_material}；{pressure_class}；"
+            f"状态=BLOCKED_PHYSICAL_BED_BASIS_OPEN。{blocked_reason}"
+        )
+        fields_values = {
+            "equipment_name": values.get("equipment_name") or equipment_type,
+            "equipment_type": equipment_type,
+            "equipment_subfamily": equipment_subfamily,
+            "model_designation": designation,
+            "model_status": "BLOCKED_PHYSICAL_BED_BASIS_OPEN_NOT_VENDOR_MODEL",
+            "process_function": values.get("process_function"),
+            "service_route": values.get("service_route"),
+            "capacity": values.get("capacity"),
+            "capacity_basis": values.get("capacity_basis"),
+            "cycle_time_h": values.get("cycle_time_h"),
+            "tower_count": values.get("tower_count"),
+            "bed_volume_m3_per_tower": None,
+            "adsorbent_mass_kg_per_tower": None,
+            "adsorbent_type": values.get("adsorbent_type"),
+            "shell_material_grade": shell_material,
+            "internals_material_grade": internals_material,
+            "material": f"壳体{shell_material}；内件{internals_material}",
+            "pressure_class": pressure_class,
+            "design_pressure_mpa": values.get("design_pressure_mpa"),
+            "design_pressure_basis": values.get("design_pressure_basis"),
+            "design_temperature_c": values.get("design_temperature_c"),
+            "adjustment_recommendation": blocked_reason,
+            "selection_branch_narrative": (
+                f"{branch_id}：process_function已路由到{package_route}，未套用TSA周期/床层公式；"
+                f"{blocked_reason}"
+            ),
+            "quantity_count": values.get("quantity_count", 1),
+            "technical_specification": technical,
+        }
+        equations = {}
+        profile_fields = set()
+        package_status = "BLOCKED_PHYSICAL_BED_BASIS_OPEN"
+        branch_details = {
+            "process_route": package_route,
+            "route_status": package_status,
+            "branch_narrative": fields_values["selection_branch_narrative"],
+        }
+        formal_open_gates = [
+            "feed_composition_flow_pressure_temperature_and_contaminant_load",
+            "product_specification_and_allowable_breakthrough",
+            "adsorption_isotherm_dynamic_capacity_and_breakthrough_curve",
+            "cycle_sequence_or_guard_bed_switching_philosophy",
+            "bed_velocity_pressure_drop_mass_transfer_zone_and_regeneration",
+            "vessel_valves_controls_interlocks_and_vendor_guarantee",
+        ]
+    else:
+        profile_key = "unresolved_package_process_route"
+        profile = {
+            "profile_id": "PROGRAMMATIC_PACKAGE_ROUTE_UNRESOLVED",
+            "warning": (
+                "process_function未能唯一识别；禁止默认套用TSA、过滤或干燥链。"
+            ),
+        }
+        branch_id = "PACKAGE_PROCESS_FUNCTION_UNRESOLVED"
+        package_status = "BLOCKED_PACKAGE_PROCESS_FUNCTION_UNRESOLVED"
+        blocked_reason = (
+            "请先选择成套设备工艺功能：TSA、PSA、保护床、压滤或带式干燥；"
+            "程序随后仅启动对应专属链。"
+        )
+        fields_values = {
+            "equipment_name": values.get("equipment_name") or "成套设备",
+            "equipment_type": "成套设备工艺功能待选择",
+            "equipment_subfamily": None,
+            "model_designation": "PKG-ROUTE-OPEN",
+            "model_status": "BLOCKED_PROCESS_FUNCTION_NOT_VENDOR_MODEL",
+            "process_function": values.get("process_function"),
+            "service_route": values.get("service_route"),
+            "adjustment_recommendation": blocked_reason,
+            "selection_branch_narrative": (
+                f"{branch_id}：未运行任何设备专属容量或周期公式。{blocked_reason}"
+            ),
+            "quantity_count": values.get("quantity_count", 1),
+            "technical_specification": (
+                "成套设备工艺路由未闭合；工程路由标识PKG-ROUTE-OPEN（非厂家型号）。"
+                + blocked_reason
+            ),
+        }
+        equations = {}
+        profile_fields = set()
+        branch_details = {
+            "process_route": package_route,
+            "route_status": package_status,
+            "branch_narrative": fields_values["selection_branch_narrative"],
+        }
+        formal_open_gates = [
+            "select_package_process_function",
+            "supply_process_load_and_product_requirement",
+            "supply_equipment_specific_capacity_or_test_basis",
+        ]
 
     profile_warning = str(
         profile.get("warning")
         or "该膜/成套设备规格仅供预设计，必须用同工况试验和厂家证据替换。"
+    )
+    family_calculation_target = (
+        "required_element_count"
+        if family_id == "family_membrane"
+        else "required_adsorbent_mass_kg_per_tower"
+        if package_route == "TSA"
+        else None
+    )
+    family_calculation = (
+        calculation_by_target.get(family_calculation_target)
+        if family_calculation_target else None
     )
     fields: dict[str, dict[str, Any]] = {}
     for field_id, value in fields_values.items():
@@ -12740,12 +15186,49 @@ def build_programmatic_membrane_package_specification(
             "user_override_allowed": True,
             "single_equipment_recalculation_required_after_override": True,
         }
+        if (
+            family_id == "family_membrane"
+            and geometry != "spiral_wound"
+            and not supplied(field_id)
+            and field_id in {
+                "selectivity", "element_standard_designation",
+                "element_outer_diameter_mm", "element_length_mm",
+                "membrane_material_grade", "pressure_vessel_material_grade",
+                "center_tube_material_grade", "service_route",
+            }
+        ):
+            fields[field_id].update({
+                "origin": "PROGRAMMATIC_GEOMETRY_SPECIFIC_ROUTE",
+                "state": "OPEN" if value is None else "DEFAULTED_WITH_WARNING",
+                "fallback_policy_id": None,
+                "basis": [],
+                "warning": geometry_warning,
+            })
+        if family_calculation and (
+            field_id in equations
+            or field_id == family_calculation_target
+            or field_id in {
+                "array_sizing_status", "cycle_balance_status",
+                "selection_branch_narrative", "adjustment_recommendation",
+            }
+        ):
+            calculation_notice = family_calculation.get("calculation_notice", {})
+            formula_trace = family_calculation.get("formula_trace", {})
+            fields[field_id].update({
+                "family_calculation_id": family_calculation.get("calculation_id"),
+                "formula_id": calculation_notice.get("formula_id"),
+                "source_refs": list(calculation_notice.get("source_refs", [])),
+                "formula_trace_sha256": formula_trace.get(
+                    "calculation_trace_sha256"
+                ),
+                "traceability_status": formula_trace.get("traceability_status"),
+            })
     package = {
         "schema": "programmatic-membrane-package-specification-v1",
         "policy_id": str(profile.get("profile_id")),
         "family_id": family_id,
         "subfamily": profile_key,
-        "status": "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        "status": package_status,
         "program_generated": True,
         "deterministic": True,
         "llm_used": False,
@@ -12757,9 +15240,31 @@ def build_programmatic_membrane_package_specification(
             "recommended_type": fields_values.get("equipment_type"),
             "fallback_profile_id": profile.get("profile_id"),
             "aspen_block_type": block_type or None,
+            "process_route": package_route,
             "terminal_rule_id": terminal.get("rule_id"),
             "terminal_selection_status": terminal.get("status"),
+            **branch_details,
         },
+        "calculation_chain": (
+            {
+                "calculation_id": family_calculation.get("calculation_id"),
+                "formula_id": family_calculation.get(
+                    "calculation_notice", {}
+                ).get("formula_id"),
+                "source_refs": list(
+                    family_calculation.get("calculation_notice", {}).get(
+                        "source_refs", []
+                    )
+                ),
+                "formula_trace_sha256": family_calculation.get(
+                    "formula_trace", {}
+                ).get("calculation_trace_sha256"),
+                "traceability_status": family_calculation.get(
+                    "formula_trace", {}
+                ).get("traceability_status"),
+            }
+            if family_calculation else None
+        ),
         "formal_open_gates": formal_open_gates,
         "user_control": {
             "every_displayed_parameter_editable": True,
@@ -12882,6 +15387,11 @@ def build_programmatic_turbine_specification(
     efficiency = numeric(values.get("efficiency_percent"))
     equations: dict[str, str]
     profile_fields: set[str]
+    branch_details: dict[str, Any] = {}
+    turbine_package_status = "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED"
+    branch_technical_suffix = ""
+    phase_hard_gate = False
+    operating_hard_gate = False
 
     if family_id == "family_liquid_power_recovery_turbine":
         profile_key = "liquid_pat_recovery_turbine"
@@ -12981,111 +15491,38 @@ def build_programmatic_turbine_specification(
         profile = profiles.get(profile_key, {})
         if not isinstance(profile, dict):
             profile = {}
+        power_chain = _gas_expander_stage_power_bypass_chain(
+            values,
+            set(fallback_by_field),
+        )
+        operating_hard_gate = power_chain[
+            "operating_envelope_status"
+        ].startswith("FAIL_")
+        phase_hard_gate = (
+            power_chain["operating_envelope_status"]
+            == "FAIL_TWO_PHASE_OR_NONVAPOR_EXPANDER_INPUT"
+        )
         molecular_weight = numeric(values.get("gas_molecular_weight"))
         z_value = numeric(values.get("compressibility_factor"))
         k_value = numeric(values.get("heat_capacity_ratio_k"))
         inlet_temperature = numeric(values.get("inlet_temperature_c"))
-        inlet_kelvin = (
-            inlet_temperature + 273.15
-            if inlet_temperature is not None
-            else None
+        gas_density = float(power_chain["gas_density_kg_m3"])
+        mass_flow_kg_s = float(power_chain["mass_flow_kg_s"])
+        isentropic_work = float(
+            power_chain["expander_isentropic_specific_work_kj_kg"]
         )
-        gas_density = (
-            pin_abs * 1_000_000.0 * molecular_weight
-            / (z_value * 8314.462618 * inlet_kelvin)
-            if None
-            not in (
-                pin_abs,
-                molecular_weight,
-                z_value,
-                inlet_kelvin,
-            )
-            else None
+        actual_work = float(
+            power_chain["expander_actual_specific_work_kj_kg"]
         )
-        mass_flow_kg_s = (
-            gas_density * flow / 3600.0
-            if gas_density is not None and flow is not None
-            else None
-        )
-        isentropic_work = (
-            k_value
-            / (k_value - 1.0)
-            * (8314.462618 / molecular_weight)
-            * inlet_kelvin
-            * (
-                1.0
-                - (pout_abs / pin_abs)
-                ** ((k_value - 1.0) / k_value)
-            )
-            / 1000.0
-            if None
-            not in (
-                k_value,
-                molecular_weight,
-                inlet_kelvin,
-                pin_abs,
-                pout_abs,
-            )
-            and k_value > 1
-            and pin_abs > pout_abs > 0
-            else None
-        )
-        actual_work = (
-            isentropic_work * efficiency / 100.0
-            if isentropic_work is not None and efficiency is not None
-            else None
-        )
+        estimated_shaft_power = float(power_chain["shaft_power_kw"])
         shaft_power = (
-            mass_flow_kg_s * actual_work
-            if mass_flow_kg_s is not None and actual_work is not None
-            else numeric(values.get("shaft_power_kw"))
+            float(values["shaft_power_kw"])
+            if supplied("shaft_power_kw") else estimated_shaft_power
         )
-        maximum_stage_ratio = float(
-            profile.get("maximum_stage_pressure_ratio", 3.0)
-        )
-        stage_count = (
-            int(float(values["stage_count"]))
-            if supplied("stage_count")
-            else max(
-                1,
-                int(
-                    math.ceil(
-                        math.log(pressure_ratio)
-                        / math.log(maximum_stage_ratio)
-                    )
-                )
-                if pressure_ratio is not None and pressure_ratio > 1
-                else 1,
-            )
-        )
-        per_stage_ratio = (
-            pressure_ratio ** (1.0 / stage_count)
-            if pressure_ratio is not None
-            else None
-        )
-        outlet_temperature = (
-            inlet_kelvin
-            * (
-                1.0
-                - efficiency
-                / 100.0
-                * (
-                    1.0
-                    - (pout_abs / pin_abs)
-                    ** ((k_value - 1.0) / k_value)
-                )
-            )
-            - 273.15
-            if None
-            not in (
-                inlet_kelvin,
-                efficiency,
-                pout_abs,
-                pin_abs,
-                k_value,
-            )
-            else None
-        )
+        stage_count = int(power_chain["stage_count"])
+        per_stage_ratio = float(power_chain["per_stage_pressure_ratio"])
+        outlet_temperature = float(power_chain["outlet_temperature_c"])
+        pressure_ratio = float(power_chain["expansion_pressure_ratio"])
         speed = profile_number("rotational_speed_rpm", profile, 30000.0)
         generator_efficiency = profile_number(
             "generator_efficiency_percent", profile, 95.0
@@ -13105,41 +15542,129 @@ def build_programmatic_turbine_specification(
             if supplied("runaway_speed_rpm")
             else speed * 1.20
         )
-        equipment_type = "多级径向流气体膨胀透平发电机组"
+        equipment_type = (
+            "多级径向流气体膨胀透平发电机组"
+            if not power_chain["operating_envelope_status"].startswith("FAIL_")
+            else "气体膨胀回收工艺路线（安全门未通过）"
+        )
         branch_id = "MULTISTAGE_RADIAL_INFLOW_GAS_EXPANDER"
-        power_code = "EXP-RAD"
+        power_code = (
+            "EXP-RAD"
+            if not power_chain["operating_envelope_status"].startswith("FAIL_")
+            else "EXP-ROUTE-BLOCKED"
+        )
         equations = {
             "expansion_pressure_ratio": "r=Pin,abs/Pout,abs",
-            "gas_density_kg_m3": "rho=Pin,abs*MW/(Z*R*T1)",
-            "mass_flow_kg_s": "mdot=rho*Q/3600",
+            "gas_density_kg_m3": "rho=Pin,abs*MW/(Z*R*T1), unless user/Aspen density is supplied",
+            "mass_flow_kg_s": "mdot=user/Aspen mass flow, else rho*Q/3600",
             "stage_count": "N=ceil(ln(r)/ln(rstage,max))",
             "per_stage_pressure_ratio": "rstage=r^(1/N)",
             "expander_isentropic_specific_work_kj_kg": (
-                "wis=k/(k-1)*(R/MW)*T1*(1-(Pout/Pin)^((k-1)/k))"
+                "wis=Z*k/(k-1)*(R/MW)*T1*(1-(Pout/Pin)^((k-1)/k))"
             ),
             "expander_actual_specific_work_kj_kg": "w=wis*eta_turbine",
             "shaft_power_kw": "Pshaft=mdot*w",
+            "calculated_shaft_power_kw": "Pshaft,calc=mdot*w",
             "outlet_temperature_c": (
                 "T2=T1*(1-eta*(1-(Pout/Pin)^((k-1)/k)))-273.15"
             ),
             "electrical_power_kw": "Pel=Pshaft*eta_generator",
             "generator_power_kw": "Pgen=next_standard_series(Pel)",
             "runaway_speed_rpm": "nrunaway=1.20*n",
+            "normal_bypass_fraction_percent": (
+                "Bypass=max(0,1-Pmaximum_recoverable/Pcalculated)*100"
+            ),
+            "protective_bypass_capacity_percent": "100% trip/start-up bypass screening requirement",
         }
         extra_fields = {
             "gas_molecular_weight": molecular_weight,
             "compressibility_factor": z_value,
             "heat_capacity_ratio_k": k_value,
             "gas_density_kg_m3": gas_density,
+            "eos_gas_density_kg_m3": power_chain["eos_gas_density_kg_m3"],
+            "density_basis": power_chain["density_basis"],
             "mass_flow_kg_s": mass_flow_kg_s,
+            "mass_flow_kg_h": values.get("mass_flow_kg_h"),
+            "mass_flow_basis": power_chain["mass_flow_basis"],
             "inlet_temperature_c": inlet_temperature,
             "outlet_temperature_c": outlet_temperature,
-            "stage_count": stage_count,
+            "stage_count": None if operating_hard_gate else stage_count,
             "per_stage_pressure_ratio": per_stage_ratio,
             "expander_isentropic_specific_work_kj_kg": isentropic_work,
             "expander_actual_specific_work_kj_kg": actual_work,
             "shaft_power_kw": shaft_power,
+            "calculated_shaft_power_kw": estimated_shaft_power,
+            "efficiency_basis": power_chain["efficiency_basis"],
+            "type_selection_basis": (
+                "RADIAL_INFLOW_PROGRAMMATIC_SCREEN_ONLY_VENDOR_MAP_OPEN"
+            ),
+            "rotational_speed_basis": (
+                "USER_FIXED_SPEED" if supplied("rotational_speed_rpm")
+                else "REGISTERED_FIXED_SPEED_SCREEN_ONLY_VENDOR_MAP_OPEN"
+            ),
+            "normal_bypass_fraction_percent": power_chain[
+                "normal_bypass_fraction_percent"
+            ],
+            "protective_bypass_capacity_percent": power_chain[
+                "protective_bypass_capacity_percent"
+            ],
+            "bypass_required": power_chain["bypass_required"],
+            "bypass_control_strategy": power_chain[
+                "bypass_control_strategy"
+            ],
+            "operating_envelope_status": power_chain[
+                "operating_envelope_status"
+            ],
+            "maximum_stage_pressure_ratio": power_chain.get(
+                "maximum_stage_pressure_ratio"
+            ),
+            "maximum_stage_pressure_ratio_validation": power_chain.get(
+                "maximum_stage_pressure_ratio_validation"
+            ),
+            "minimum_outlet_temperature_c": values.get(
+                "minimum_outlet_temperature_c"
+            ),
+            "maximum_recoverable_power_kw": values.get(
+                "maximum_recoverable_power_kw"
+            ),
+            "adjustment_recommendation": power_chain[
+                "adjustment_recommendation"
+            ],
+            "selection_branch_narrative": power_chain[
+                "selection_branch_narrative"
+            ],
         }
+        branch_details = {
+            "power_calculation_id": (
+                None if phase_hard_gate
+                else "gas_expander_stage_power_bypass_screening"
+            ),
+            "expander_branch_id": power_chain["expander_branch_id"],
+            "operating_envelope_status": power_chain[
+                "operating_envelope_status"
+            ],
+            "stage_count": None if operating_hard_gate else stage_count,
+            "normal_bypass_fraction_percent": (
+                None if phase_hard_gate
+                else power_chain["normal_bypass_fraction_percent"]
+            ),
+            "protective_bypass_capacity_percent": power_chain[
+                "protective_bypass_capacity_percent"
+            ],
+            "density_basis": power_chain["density_basis"],
+            "mass_flow_basis": power_chain["mass_flow_basis"],
+            "branch_narrative": power_chain[
+                "selection_branch_narrative"
+            ],
+        }
+        if power_chain["operating_envelope_status"].startswith("FAIL_"):
+            turbine_package_status = "BLOCKED_EXPANDER_OPERATING_ENVELOPE"
+        branch_technical_suffix = (
+            f"；膨胀机工况门={power_chain['operating_envelope_status']}；"
+            f"正常/保护旁路={power_chain['normal_bypass_fraction_percent']:.2f}/"
+            f"{power_chain['protective_bypass_capacity_percent']:.0f}%；"
+            "径向流型式与固定转速仅为程序初筛，不代表厂家图谱匹配"
+        )
         formal_open_gates = [
             "same_gas_composition_flow_pressure_temperature_and_phase_margin",
             "vendor_enthalpy_drop_pressure_ratio_efficiency_power_map",
@@ -13167,26 +15692,56 @@ def build_programmatic_turbine_specification(
     coupling_type = profile_text(
         "coupling_type", profile, "膜片联轴器（程序保底）"
     )
-    designation = (
-        f"{power_code}-{extra_fields['stage_count']}STG-Q{flow:g}-"
-        f"PR{pressure_ratio:.2f}-P{extra_fields['shaft_power_kw']:.1f}-"
-        f"G{generator_power:g}-N{speed:g}"
-    )
     material = f"机壳{casing}；叶轮{impeller}；轴{shaft_material}"
-    technical = (
-        f"{equipment_type}；{designation}；总压比={pressure_ratio:.3f}；"
-        f"轴功率/发电输出/发电机额定={extra_fields['shaft_power_kw']:.2f}/"
-        f"{electrical_power:.2f}/{generator_power:g} kW；"
-        f"额定/飞逸转速={speed:g}/{runaway_speed:g} r/min；"
-        f"{material}；密封={seal_type}；轴承={bearing_type}；"
-        f"联轴器={coupling_type}"
-    )
+    if phase_hard_gate:
+        designation = "EXP-ROUTE-BLOCKED-NONVAPOR"
+        for field_id in (
+            "outlet_temperature_c", "stage_count", "per_stage_pressure_ratio",
+            "expander_isentropic_specific_work_kj_kg",
+            "expander_actual_specific_work_kj_kg", "shaft_power_kw",
+            "calculated_shaft_power_kw", "normal_bypass_fraction_percent",
+        ):
+            extra_fields[field_id] = None
+        shaft_power = None
+        electrical_power = None
+        generator_power = None
+        runaway_speed = None
+        technical = (
+            "气体膨胀回收工艺路线；EXP-ROUTE-BLOCKED-NONVAPOR（非厂家型号）；"
+            "输入相态不是经验证的单相气体，未采用级数、比功、功率、转速或发电机"
+            "计算结果；先完成相包络、分液和两相裕量校核。"
+        )
+    elif operating_hard_gate:
+        designation = "EXP-ROUTE-BLOCKED-ENVELOPE"
+        technical = (
+            f"气体膨胀回收工艺路线；{designation}（非厂家型号）；"
+            f"安全门={power_chain['operating_envelope_status']}。"
+            f"{power_chain['adjustment_recommendation']}"
+        )
+    else:
+        designation = (
+            f"{power_code}-{extra_fields['stage_count']}STG-Q{flow:g}-"
+            f"PR{pressure_ratio:.2f}-P{extra_fields['shaft_power_kw']:.1f}-"
+            f"G{generator_power:g}-N{speed:g}"
+        )
+        technical = (
+            f"{equipment_type}；{designation}；总压比={pressure_ratio:.3f}；"
+            f"轴功率/发电输出/发电机额定={extra_fields['shaft_power_kw']:.2f}/"
+            f"{electrical_power:.2f}/{generator_power:g} kW；"
+            f"额定/飞逸转速={speed:g}/{runaway_speed:g} r/min；"
+            f"{material}；密封={seal_type}；轴承={bearing_type}；"
+            f"联轴器={coupling_type}{branch_technical_suffix}"
+        )
     fields_values = {
         "equipment_name": values.get("equipment_name") or equipment_type,
         "equipment_type": equipment_type,
         "equipment_subfamily": equipment_type,
         "model_designation": designation,
-        "model_status": "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL",
+        "model_status": (
+            "PROGRAM_PRELIMINARY_CANDIDATE_NOT_VENDOR_MODEL"
+            if not turbine_package_status.startswith("BLOCKED_")
+            else "BLOCKED_OPERATING_ENVELOPE_NOT_VENDOR_MODEL"
+        ),
         "flow_m3_h": flow,
         "inlet_pressure_mpa": pin,
         "outlet_pressure_mpa": pout,
@@ -13218,6 +15773,17 @@ def build_programmatic_turbine_specification(
     profile_warning = str(
         profile.get("warning")
         or "透平规格仅用于预设计，必须用厂家性能图和轴系证据替换。"
+    )
+    family_calculation = (
+        next(
+            (
+                dict(item) for item in calculations
+                if item.get("calculation_id")
+                == "gas_expander_stage_power_bypass_screening"
+            ),
+            None,
+        )
+        if family_id == "family_gas_expander_turbine" else None
     )
     fields: dict[str, dict[str, Any]] = {}
     for field_id, value in fields_values.items():
@@ -13281,12 +15847,47 @@ def build_programmatic_turbine_specification(
             "user_override_allowed": True,
             "single_equipment_recalculation_required_after_override": True,
         }
+        if phase_hard_gate and field_id in {
+            "outlet_temperature_c", "stage_count", "per_stage_pressure_ratio",
+            "expander_isentropic_specific_work_kj_kg",
+            "expander_actual_specific_work_kj_kg", "shaft_power_kw",
+            "calculated_shaft_power_kw", "normal_bypass_fraction_percent",
+            "rotational_speed_rpm", "electrical_power_kw",
+            "generator_power_kw", "runaway_speed_rpm",
+        }:
+            fields[field_id].update({
+                "value": None,
+                "state": "BLOCKED_BY_PHASE_HARD_GATE",
+                "origin": "NOT_CALCULATED",
+                "active_in_selected_branch": False,
+                "result_status": "BLOCKED_NOT_ADOPTED",
+                "equation_chain": None,
+                "warning": "非单相气体输入触发硬门；该数值未计算、未采用。",
+            })
+        if family_calculation and (
+            field_id in equations
+            or field_id in {
+                "calculated_shaft_power_kw", "operating_envelope_status",
+                "selection_branch_narrative", "adjustment_recommendation",
+            }
+        ):
+            calculation_notice = family_calculation.get("calculation_notice", {})
+            formula_trace = family_calculation.get("formula_trace", {})
+            fields[field_id].update({
+                "family_calculation_id": family_calculation.get("calculation_id"),
+                "formula_id": calculation_notice.get("formula_id"),
+                "source_refs": list(calculation_notice.get("source_refs", [])),
+                "formula_trace_sha256": formula_trace.get(
+                    "calculation_trace_sha256"
+                ),
+                "traceability_status": formula_trace.get("traceability_status"),
+            })
     package = {
         "schema": "programmatic-turbine-specification-v1",
         "policy_id": str(profile.get("profile_id")),
         "family_id": family_id,
         "subfamily": profile_key,
-        "status": "PRELIMINARY_CONCRETE_SPECIFICATION_SELECTED",
+        "status": turbine_package_status,
         "program_generated": True,
         "deterministic": True,
         "llm_used": False,
@@ -13299,7 +15900,28 @@ def build_programmatic_turbine_specification(
             "fallback_profile_id": profile.get("profile_id"),
             "terminal_rule_id": terminal.get("rule_id"),
             "terminal_selection_status": terminal.get("status"),
+            **branch_details,
         },
+        "calculation_chain": (
+            {
+                "calculation_id": family_calculation.get("calculation_id"),
+                "formula_id": family_calculation.get(
+                    "calculation_notice", {}
+                ).get("formula_id"),
+                "source_refs": list(
+                    family_calculation.get("calculation_notice", {}).get(
+                        "source_refs", []
+                    )
+                ),
+                "formula_trace_sha256": family_calculation.get(
+                    "formula_trace", {}
+                ).get("calculation_trace_sha256"),
+                "traceability_status": family_calculation.get(
+                    "formula_trace", {}
+                ).get("traceability_status"),
+            }
+            if family_calculation else None
+        ),
         "formal_open_gates": formal_open_gates,
         "user_control": {
             "every_displayed_parameter_editable": True,
@@ -16927,6 +19549,200 @@ def build_model_recommendation(
     }
 
 
+def reconcile_model_recommendation_with_programmatic_specification(
+    family_id: str,
+    model_recommendation: dict[str, Any],
+    *,
+    auxiliary_specification: dict[str, Any] | None,
+    membrane_package_specification: dict[str, Any] | None,
+    turbine_specification: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Make the terminal result use the same branch as the program spec.
+
+    The model recommendation is built before the detailed programmatic
+    specification.  This reconciliation prevents the older family default from
+    remaining in the summary when the deterministic equipment branch selected
+    a different impeller, membrane geometry, package route, or expander gate.
+    """
+
+    specification_by_family = {
+        "family_agitator": auxiliary_specification,
+        "family_static_mixer": auxiliary_specification,
+        "family_membrane": membrane_package_specification,
+        "family_package_equipment": membrane_package_specification,
+        "family_gas_expander_turbine": turbine_specification,
+    }
+    program_specification = specification_by_family.get(family_id)
+    if not isinstance(program_specification, dict):
+        return model_recommendation
+    fields = program_specification.get("fields")
+    if not isinstance(fields, dict):
+        return model_recommendation
+
+    def field_value(field_id: str) -> Any:
+        descriptor = fields.get(field_id)
+        return descriptor.get("value") if isinstance(descriptor, dict) else None
+
+    recommended_type = str(field_value("equipment_type") or "").strip()
+    designation = str(field_value("model_designation") or "").strip()
+    if not recommended_type or not designation:
+        return model_recommendation
+
+    program_status = str(program_specification.get("status") or "UNKNOWN")
+    program_model_status = str(field_value("model_status") or "")
+    blocked = program_status.startswith(("BLOCKED_", "FAIL_")) or (
+        program_model_status.startswith(("BLOCKED_", "FAIL_"))
+    )
+    selection_branch = program_specification.get("selection_branch")
+    if not isinstance(selection_branch, dict):
+        selection_branch = {}
+    branch_id = str(
+        selection_branch.get("auxiliary_branch_id")
+        or selection_branch.get("membrane_package_branch_id")
+        or selection_branch.get("turbine_branch_id")
+        or selection_branch.get("expander_branch_id")
+        or "PROGRAMMATIC_BRANCH"
+    )
+    terminal_selection = {
+        **(
+            model_recommendation.get("terminal_selection")
+            if isinstance(model_recommendation.get("terminal_selection"), dict)
+            else {}
+        ),
+        "status": (
+            "PROGRAMMATIC_TERMINAL_ROUTE_BLOCKED"
+            if blocked else "PROGRAMMATIC_TERMINAL_TYPE_SELECTED"
+        ),
+        "recommended_type": recommended_type,
+        "selection_basis": "deterministic_programmatic_specification_branch",
+        "default_applied": False,
+        "evidence_class": "J",
+        "provisional": True,
+        "rule_id": f"programmatic:{family_id}:{branch_id}",
+        "assumption": (
+            "型式、工程代号和计算状态取自同一程序专属规格分支；"
+            "该代号仍是TYPE_SCREENING，不是厂家商品型号。"
+        ),
+        "terminal_scope": "equipment_form",
+        "formal_model": False,
+        "is_vendor_model": False,
+        "programmatic_specification_status": program_status,
+        "programmatic_specification_sha256": program_specification.get(
+            "program_specification_sha256"
+        ),
+        "type_name_quality": terminal_type_name_quality(recommended_type),
+    }
+
+    candidates = model_recommendation.get("candidates")
+    if not isinstance(candidates, list):
+        candidates = []
+    engineering_candidate = next(
+        (
+            candidate for candidate in candidates
+            if isinstance(candidate, dict)
+            and candidate.get("program_origin")
+            == "DETERMINISTIC_ENGINEERING_SELECTOR"
+        ),
+        None,
+    )
+    if engineering_candidate is None:
+        leading = model_recommendation.get("leading_candidate")
+        engineering_candidate = leading if isinstance(leading, dict) else None
+    if engineering_candidate is None:
+        return model_recommendation
+
+    projected_specification: dict[str, Any] = {}
+    for field_id, descriptor in fields.items():
+        if not isinstance(descriptor, dict) or descriptor.get("value") is None:
+            continue
+        projected_specification[str(field_id)] = {
+            "value": descriptor.get("value"),
+            "unit": descriptor.get("unit"),
+            "source": "programmatic_equipment_specification",
+            "origin": descriptor.get("origin"),
+            "promotion_cap": descriptor.get("promotion_cap"),
+            "formal_design_evidence": descriptor.get("formal_design_evidence"),
+        }
+    missing_gates = list(engineering_candidate.get("missing_gates", []))
+    missing_gates.append(f"programmatic_specification:{program_status}")
+    engineering_candidate.update({
+        "designation": designation,
+        "recommended_type": recommended_type,
+        "designation_scope": (
+            "programmatic_equipment_designation_type_screening_not_vendor_model"
+        ),
+        "type_name_quality": terminal_type_name_quality(recommended_type),
+        "specification": projected_specification,
+        "status": (
+            "IDENTITY_CANDIDATE_RETAINED_PROGRAMMATIC_SPECIFICATION_BLOCKED"
+            if blocked else "PROGRAMMATIC_ENGINEERING_CANDIDATE_READY"
+        ),
+        "candidate_eligibility": (
+            "CONSTRAINT_FAIL_FAMILY_ONLY"
+            if blocked else "READY_FOR_ENGINEERING_REVIEW"
+        ),
+        "eligible_for_leading_candidate": True,
+        "eligible_for_formal_selection": False,
+        "formal_model": False,
+        "is_vendor_model": False,
+        "terminal_selection": terminal_selection,
+        "programmatic_specification_status": program_status,
+        "programmatic_specification_sha256": program_specification.get(
+            "program_specification_sha256"
+        ),
+        "programmatic_selection_branch": selection_branch,
+        "missing_gates": sorted(set(missing_gates)),
+    })
+    if blocked:
+        for candidate in candidates:
+            if not isinstance(candidate, dict) or candidate is engineering_candidate:
+                continue
+            candidate["status"] = "REJECTED_PROGRAMMATIC_SPECIFICATION_BLOCKED"
+            candidate["candidate_eligibility"] = "REJECTED"
+            candidate["eligible_for_leading_candidate"] = False
+            candidate["eligible_for_formal_selection"] = False
+            candidate["candidate_rejection_reasons"] = sorted(set([
+                *candidate.get("candidate_rejection_reasons", []),
+                f"PROGRAMMATIC_SPECIFICATION_BLOCKED:{program_status}",
+            ]))
+
+    model_recommendation["recommended_type"] = recommended_type
+    model_recommendation["terminal_selection"] = terminal_selection
+    model_recommendation["leading_candidate"] = engineering_candidate
+    model_recommendation["status"] = (
+        "PROGRAMMATIC_SPECIFICATION_BLOCKED_IDENTITY_RETAINED"
+        if blocked else "PROGRAMMATIC_ENGINEERING_CANDIDATE_READY"
+    )
+    model_recommendation["programmatic_specification_status"] = program_status
+    model_recommendation["programmatic_specification_sha256"] = (
+        program_specification.get("program_specification_sha256")
+    )
+    execution = model_recommendation.get("selection_execution")
+    if isinstance(execution, dict):
+        execution["status"] = (
+            "IDENTITY_CANDIDATE_RETAINED_PROGRAMMATIC_SPECIFICATION_BLOCKED"
+            if blocked else "EXECUTED"
+        )
+        execution["execution_scope"] = "TYPE_SCREENING_ONLY"
+        execution["formal_selection_executed"] = False
+    model_recommendation["screening_candidate_count"] = sum(
+        1 for candidate in candidates
+        if isinstance(candidate, dict)
+        and candidate.get("candidate_eligibility") in {
+            "READY_FOR_ENGINEERING_REVIEW",
+            "SCREENING_ONLY_EVIDENCE_OPEN",
+            "FORMAL_READY",
+        }
+    )
+    model_recommendation["formal_ready_candidate_count"] = sum(
+        1 for candidate in candidates
+        if isinstance(candidate, dict)
+        and candidate.get("eligible_for_formal_selection") is True
+        and candidate.get("formal_model") is True
+    )
+    return model_recommendation
+
+
 def family_field_roles(rule: dict[str, Any]) -> dict[str, list[str]]:
     """Return the deterministic role of every input field for one family."""
     roles: dict[str, set[str]] = {}
@@ -17748,6 +20564,17 @@ def match_one(
                 and descriptor.get("value") is not None
             ):
                 reported_effective_normalized[field_id] = descriptor["value"]
+    model_recommendation = (
+        reconcile_model_recommendation_with_programmatic_specification(
+            family_id,
+            model_recommendation,
+            auxiliary_specification=programmatic_auxiliary_specification,
+            membrane_package_specification=(
+                programmatic_membrane_package_specification
+            ),
+            turbine_specification=programmatic_turbine_specification,
+        )
+    )
     engineering_adjustment_plan = build_engineering_adjustment_plan(
         family_id,
         effective_parameters,

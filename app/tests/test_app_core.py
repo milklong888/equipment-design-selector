@@ -312,11 +312,31 @@ class AppCoreTests(unittest.TestCase):
 
     def test_solids_aspen_block_types_end_in_registered_preliminary_forms(self) -> None:
         cases = {
-            "CRYSTALLIZER": ("family_reactor_vessel_separator", "连续结晶器（预设计）"),
-            "FILTER": ("family_package_equipment", "固液过滤机（预设计）"),
-            "DRYER": ("family_package_equipment", "连续固体干燥器（预设计）"),
+            "CRYSTALLIZER": (
+                "family_reactor_vessel_separator",
+                "连续结晶器（预设计）",
+                "DEFAULTED_TERMINAL_TYPE_SELECTED",
+                True,
+            ),
+            "FILTER": (
+                "family_package_equipment",
+                "自动厢式压滤机",
+                "PROGRAMMATIC_TERMINAL_TYPE_SELECTED",
+                False,
+            ),
+            "DRYER": (
+                "family_package_equipment",
+                "连续带式热风干燥器",
+                "PROGRAMMATIC_TERMINAL_TYPE_SELECTED",
+                False,
+            ),
         }
-        for block_type, (family_id, recommended_type) in cases.items():
+        for block_type, (
+            family_id,
+            recommended_type,
+            terminal_status,
+            default_applied,
+        ) in cases.items():
             with self.subTest(block_type=block_type):
                 result = app_core.manual_match(
                     f"block:{block_type}",
@@ -331,10 +351,12 @@ class AppCoreTests(unittest.TestCase):
                 self.assertEqual(result["match"]["family_id"], family_id)
                 terminal = result["model_recommendation"]["terminal_selection"]
                 self.assertEqual(terminal["recommended_type"], recommended_type)
-                self.assertEqual(terminal["status"], "DEFAULTED_TERMINAL_TYPE_SELECTED")
-                self.assertTrue(terminal["default_applied"])
+                self.assertEqual(terminal["status"], terminal_status)
+                self.assertEqual(terminal["default_applied"], default_applied)
                 self.assertEqual(terminal["evidence_class"], "J")
                 self.assertTrue(terminal["provisional"])
+                self.assertFalse(terminal["formal_model"])
+                self.assertFalse(terminal["is_vendor_model"])
 
     def test_pump_power_helpers_have_no_silent_water_density_default(self) -> None:
         with self.assertRaises(TypeError):

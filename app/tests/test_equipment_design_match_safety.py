@@ -1399,9 +1399,14 @@ class EquipmentDesignMatchConstraintSafetyTests(unittest.TestCase):
                 },
             ),
             (
-                {"equipment_tag": "PKG-PROGRAM", "equipment_type": "成套设备"},
+                {
+                    "equipment_tag": "PKG-PROGRAM",
+                    "equipment_type": "成套设备",
+                    "process_function": "TSA变温吸附脱水",
+                    "capacity_basis": "100 Nm3/h feed",
+                },
                 "TWIN_TOWER_TEMPERATURE_SWING_ADSORPTION_PACKAGE",
-                "PKG-TSA-2T-DN500-BED0.2M3-ALUMINA-C8H-PN16",
+                "PKG-TSA-1TRX2T-DN500-BED0.2M3-ALUMINA-C8H-PN16",
                 {
                     "tower_count": 2,
                     "bed_volume_m3_per_tower": 0.2,
@@ -1512,13 +1517,13 @@ class EquipmentDesignMatchConstraintSafetyTests(unittest.TestCase):
         )
         self.assertAlmostEqual(
             fields["shaft_power_kw"]["value"],
-            233.59739369368378,
+            71.95997391298214,
         )
         self.assertEqual(
             fields["model_designation"]["value"],
-            "EXP-RAD-2STG-Q1000-PR3.33-P233.6-G250-N30000",
+            "EXP-RAD-2STG-Q1000-PR3.33-P72.0-G75-N30000",
         )
-        self.assertEqual(fields["generator_power_kw"]["value"], 250.0)
+        self.assertEqual(fields["generator_power_kw"]["value"], 75.0)
         self.assertEqual(fields["runaway_speed_rpm"]["value"], 36000.0)
         self.assertIn("干气密封", fields["seal_type"]["value"])
         self.assertIn("高速齿轮箱", fields["coupling_type"]["value"])

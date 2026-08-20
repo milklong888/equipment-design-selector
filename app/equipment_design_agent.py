@@ -55,6 +55,7 @@ PARAMETER_PACKAGE_SCHEMA = PACKAGE_ROOT / "knowledge_graph" / "equipment_design_
 CONNECTION_SELECTION_SCHEMA = PACKAGE_ROOT / "knowledge_graph" / "equipment_connection_selection_package.schema.json"
 SERVICE_PROFILE_SCHEMA = PACKAGE_ROOT / "knowledge_graph" / "equipment_service_profile.schema.json"
 ASPEN_EQUIPMENT_EXPORT_SCHEMA = PACKAGE_ROOT / "knowledge_graph" / "aspen_equipment_export.schema.json"
+ASPEN_EXTRACTION_COVERAGE_SCHEMA = PACKAGE_ROOT / "knowledge_graph" / "aspen_extraction_coverage.schema.json"
 CANONICAL_OPERATIONS = (
     "capabilities",
     "schema_get",
@@ -152,6 +153,7 @@ SCHEMA_PATHS: dict[str, Path] = {
     "equipment-connection-selection-package-v1": CONNECTION_SELECTION_SCHEMA,
     "equipment-service-profile-v1": SERVICE_PROFILE_SCHEMA,
     "aspen-equipment-export-v1": ASPEN_EQUIPMENT_EXPORT_SCHEMA,
+    "aspen-com-extraction-coverage-v1": ASPEN_EXTRACTION_COVERAGE_SCHEMA,
     "equipment-customer-output-profiles-v1": CUSTOMER_PROFILE_SCHEMA,
     "equipment-customer-delivery-bundle-v1": CUSTOMER_DELIVERY_BUNDLE_SCHEMA,
     "equipment-overview-table-v1": EQUIPMENT_OVERVIEW_SCHEMA,
@@ -341,6 +343,7 @@ def _provenance() -> dict[str, Any]:
         "connection_selection_schema": CONNECTION_SELECTION_SCHEMA,
         "service_profile_schema": SERVICE_PROFILE_SCHEMA,
         "aspen_equipment_export_schema": ASPEN_EQUIPMENT_EXPORT_SCHEMA,
+        "aspen_extraction_coverage_schema": ASPEN_EXTRACTION_COVERAGE_SCHEMA,
         "customer_profile_schema": CUSTOMER_PROFILE_SCHEMA,
         "customer_delivery_bundle_schema": CUSTOMER_DELIVERY_BUNDLE_SCHEMA,
         "equipment_overview_schema": EQUIPMENT_OVERVIEW_SCHEMA,
@@ -2918,6 +2921,8 @@ def _execute(operation: str, payload: dict[str, Any], api: EquipmentDesignApi) -
                     "equipment-evidence-index-v1",
                     "equipment-design-pfd-mapping-v1",
                     "equipment-agent-organized-answer-v1",
+                    "aspen-equipment-export-v1",
+                    "aspen-com-extraction-coverage-v1",
                 } <= schema_ids,
                 "detail": sorted(schema_ids),
             },

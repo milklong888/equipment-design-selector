@@ -1997,9 +1997,11 @@ class CustomerDeliveryTests(unittest.TestCase):
                 {
                     "equipment_tag": "PKG-DELIVERY",
                     "equipment_type": "成套设备",
+                    "process_function": "TSA变温吸附脱水",
+                    "capacity_basis": "100 Nm3/h feed",
                 },
                 "T20",
-                "PKG-TSA-2T-DN500-BED0.2M3-ALUMINA-C8H-PN16",
+                "PKG-TSA-1TRX2T-DN500-BED0.2M3-ALUMINA-C8H-PN16",
                 "bed_volume_m3_per_tower",
                 0.2,
             ),
@@ -2053,6 +2055,340 @@ class CustomerDeliveryTests(unittest.TestCase):
         with self.assertRaises(delivery.CustomerDeliveryError):
             delivery.build_customer_delivery(result)
 
+    def test_five_family_calculation_fields_export_trace_and_branch_provenance(
+        self,
+    ) -> None:
+        cases = [
+            (
+                {
+                    "equipment_type": "搅拌器",
+                    "volume_m3": 10.0,
+                    "rotational_speed_rpm": 100.0,
+                    "density_kg_m3": 1000.0,
+                    "dynamic_viscosity_mpa_s": 1.0,
+                },
+                "programmatic_auxiliary_specification",
+                "power_number_estimated_shaft_power_kw",
+                "Np-Re 公式初算轴功率",
+                "kW",
+                "agitator_re_np_power_screening",
+                "AGITATOR_RE_NP_POWER_SCREENING",
+                "power_number_branch_id",
+            ),
+            (
+                {
+                    "equipment_type": "静态混合器",
+                    "flow_m3_h": 10.0,
+                    "target_velocity_m_s": 1.5,
+                    "allowable_pressure_drop_kpa": 2.0,
+                },
+                "programmatic_auxiliary_specification",
+                "predicted_pressure_drop_kpa",
+                "静态混合器预测压降",
+                "kPa",
+                "static_mixer_hydraulic_train_screening",
+                "STATIC_MIXER_HYDRAULIC_TRAIN_SCREENING",
+                "hydraulic_branch_id",
+            ),
+            (
+                {
+                    "equipment_type": "膜组件",
+                    "flux": 20.0,
+                    "recovery_percent": 80.0,
+                    "design_margin_percent": 10.0,
+                    "permeate_flow_m3_h": 10.0,
+                },
+                "programmatic_membrane_package_specification",
+                "required_element_count",
+                "计算所需膜元件数",
+                "支",
+                "membrane_flux_recovery_array_screening",
+                "MEMBRANE_FLUX_RECOVERY_ARRAY_SCREENING",
+                "array_branch_id",
+            ),
+            (
+                {
+                    "equipment_type": "成套设备",
+                    "process_function": "TSA变温吸附脱水",
+                    "capacity": 100.0,
+                    "capacity_basis": "100 Nm3/h feed; H2O load 1 kg/h",
+                    "contaminant_load_kg_h": 1.0,
+                    "adsorbent_working_capacity_kg_kg": 0.08,
+                    "cycle_time_h": 8.0,
+                    "adsorption_time_h": 4.0,
+                },
+                "programmatic_membrane_package_specification",
+                "required_adsorbent_mass_kg_per_tower",
+                "单塔所需吸附剂质量",
+                "kg",
+                "tsa_cycle_bed_capacity_screening",
+                "TSA_CYCLE_BED_CAPACITY_SCREENING",
+                "capacity_branch_id",
+            ),
+            (
+                {
+                    "equipment_type": "气体膨胀机",
+                    "phase": "vapor",
+                    "flow_m3_h": 1000.0,
+                    "mass_flow_kg_h": 7200.0,
+                    "gas_density_kg_m3": 3.6,
+                    "gas_molecular_weight": 28.97,
+                    "compressibility_factor": 1.0,
+                    "heat_capacity_ratio_k": 1.3,
+                    "inlet_temperature_c": 25.0,
+                    "inlet_pressure_mpa": 1.0,
+                    "outlet_pressure_mpa": 0.3,
+                    "pressure_basis": "absolute",
+                    "efficiency_percent": 80.0,
+                },
+                "programmatic_turbine_specification",
+                "calculated_shaft_power_kw",
+                "膨胀机公式计算轴功率",
+                "kW",
+                "gas_expander_stage_power_bypass_screening",
+                "GAS_EXPANDER_STAGE_POWER_BYPASS_SCREENING",
+                "expander_branch_id",
+            ),
+        ]
+        for (
+            raw,
+            specification_key,
+            field_id,
+            label,
+            unit,
+            calculation_id,
+            formula_id,
+            branch_key,
+        ) in cases:
+            with self.subTest(field_id=field_id):
+                result = matcher.match_one(
+                    raw,
+                    matcher.load_rules(),
+                    matcher.load_graph(),
+                )
+                specification = result[specification_key]
+                bundle = delivery.build_customer_delivery(result)
+                sheet = bundle["equipment_family_datasheet"]["equipment"][0]
+                fields = {
+                    item["field_id"]: item for item in sheet["fields"]
+                }
+                cell = fields[field_id]
+                source = cell["source"]
+
+                self.assertEqual(
+                    cell["value"],
+                    specification["fields"][field_id]["value"],
+                )
+                self.assertEqual(cell["label"], label)
+                self.assertEqual(cell["unit"], unit)
+                self.assertEqual(
+                    source["family_calculation_id"], calculation_id
+                )
+                self.assertEqual(source["formula_id"], formula_id)
+                self.assertTrue(source["source_refs"])
+                self.assertRegex(
+                    source["formula_trace_sha256"], r"^[A-F0-9]{64}$"
+                )
+                self.assertRegex(
+                    source["selection_branch_sha256"], r"^[A-F0-9]{64}$"
+                )
+                self.assertIn(branch_key, source["selection_branch"])
+                self.assertFalse(source["llm_used"])
+
+    def test_generic_package_is_exported_as_unresolved_not_implicit_tsa(
+        self,
+    ) -> None:
+        result = matcher.match_one(
+            {
+                "equipment_tag": "PKG-UNRESOLVED-DELIVERY",
+                "equipment_type": "成套设备",
+            },
+            matcher.load_rules(),
+            matcher.load_graph(),
+        )
+        specification = result[
+            "programmatic_membrane_package_specification"
+        ]
+        self.assertEqual(
+            specification["status"],
+            "BLOCKED_PACKAGE_PROCESS_FUNCTION_UNRESOLVED",
+        )
+        self.assertEqual(
+            specification["selection_branch"]["process_route"],
+            "UNRESOLVED",
+        )
+
+        bundle = delivery.build_customer_delivery(result)
+        sheet = bundle["equipment_family_datasheet"]["equipment"][0]
+        fields = {item["field_id"]: item for item in sheet["fields"]}
+        self.assertEqual(sheet["profile_ids"], ["T18", "T19", "T20"])
+        self.assertEqual(fields["model_designation"]["value"], "PKG-ROUTE-OPEN")
+        self.assertNotIn("TSA", fields["model_designation"]["value"])
+        self.assertEqual(
+            fields["model_designation"]["source"]["specification_status"],
+            "BLOCKED_PACKAGE_PROCESS_FUNCTION_UNRESOLVED",
+        )
+        self.assertEqual(
+            fields["model_designation"]["source"]["selection_branch"][
+                "process_route"
+            ],
+            "UNRESOLVED",
+        )
+
+    def test_hard_gated_program_fields_remain_visible_as_blocked_screening(
+        self,
+    ) -> None:
+        cases = [
+            (
+                {
+                    "equipment_type": "静态混合器",
+                    "flow_m3_h": 10.0,
+                    "target_velocity_m_s": 1.5,
+                    "allowable_pressure_drop_kpa": 2.0,
+                    "selected_dn": 50,
+                },
+                "programmatic_auxiliary_specification",
+                "BLOCKED_STATIC_MIXER_PRESSURE_DROP_CONSTRAINT",
+                "predicted_pressure_drop_kpa",
+            ),
+            (
+                {
+                    "equipment_type": "膜组件",
+                    "flux": 20.0,
+                    "recovery_percent": 80.0,
+                    "design_margin_percent": 10.0,
+                    "permeate_flow_m3_h": 20.0,
+                    "element_count": 10,
+                },
+                "programmatic_membrane_package_specification",
+                "BLOCKED_MEMBRANE_ARRAY_CONSTRAINT",
+                "required_element_count",
+            ),
+            (
+                {
+                    "equipment_type": "成套设备",
+                    "process_function": "TSA变温吸附脱水",
+                    "capacity": 100.0,
+                    "cycle_time_h": 8.0,
+                    "adsorption_time_h": 4.0,
+                },
+                "programmatic_membrane_package_specification",
+                "BLOCKED_CAPACITY_BASIS_OPEN",
+                "required_adsorbent_mass_kg_per_tower",
+            ),
+            (
+                {
+                    "equipment_type": "气体膨胀机",
+                    "phase": "vapor",
+                    "flow_m3_h": 1000.0,
+                    "gas_density_kg_m3": 3.6,
+                    "gas_molecular_weight": 28.97,
+                    "compressibility_factor": 1.0,
+                    "heat_capacity_ratio_k": 1.3,
+                    "inlet_temperature_c": 25.0,
+                    "inlet_pressure_mpa": 1.0,
+                    "outlet_pressure_mpa": 0.3,
+                    "pressure_basis": "absolute",
+                    "efficiency_percent": 80.0,
+                    "minimum_outlet_temperature_c": 10.0,
+                },
+                "programmatic_turbine_specification",
+                "BLOCKED_EXPANDER_OPERATING_ENVELOPE",
+                "calculated_shaft_power_kw",
+            ),
+        ]
+        for raw, specification_key, expected_status, field_id in cases:
+            with self.subTest(expected_status=expected_status):
+                result = matcher.match_one(
+                    raw,
+                    matcher.load_rules(),
+                    matcher.load_graph(),
+                )
+                specification = result[specification_key]
+                self.assertEqual(specification["status"], expected_status)
+                bundle = delivery.build_customer_delivery(result)
+                sheet = bundle["equipment_family_datasheet"]["equipment"][0]
+                fields = {
+                    item["field_id"]: item for item in sheet["fields"]
+                }
+                cell = fields[field_id]
+                self.assertEqual(
+                    cell["value"],
+                    specification["fields"][field_id]["value"],
+                )
+                self.assertEqual(
+                    cell["source"]["specification_status"],
+                    expected_status,
+                )
+                self.assertEqual(
+                    cell["source"]["promotion_cap"], "TYPE_SCREENING"
+                )
+                self.assertFalse(cell["source"]["formal_design_evidence"])
+
+    def test_static_mixer_velocity_gate_controls_delivery_but_keeps_preliminary_spec(
+        self,
+    ) -> None:
+        result = matcher.match_one(
+            {
+                "equipment_tag": "SMX-VELOCITY-BLOCKED-DELIVERY",
+                "equipment_type": "静态混合器",
+                "flow_m3_h": 10.0,
+                "target_velocity_m_s": 1.5,
+                "allowable_pressure_drop_kpa": 100000.0,
+                "selected_dn": 15,
+            },
+            matcher.load_rules(),
+            matcher.load_graph(),
+        )
+        specification = result["programmatic_auxiliary_specification"]
+        self.assertEqual(
+            specification["status"],
+            "BLOCKED_STATIC_MIXER_VELOCITY_CONSTRAINT",
+        )
+        preliminary_designation = specification["fields"][
+            "model_designation"
+        ]["value"]
+        self.assertTrue(preliminary_designation)
+
+        bundle = delivery.build_customer_delivery(result)
+        overview = bundle["equipment_overview_table"]["rows"][0]
+        self.assertEqual(
+            overview["model_or_specification_status"],
+            "calculation_blocked",
+        )
+        self.assertEqual(overview["delivery_state"], "NOT_READY")
+        self.assertEqual(
+            overview["model_or_specification"], preliminary_designation
+        )
+        self.assertIn(
+            "CALCULATION_OR_CONSTRAINT_GATE_BLOCKED",
+            overview["formal_readiness_gate"]["blocking_reasons"],
+        )
+        self.assertEqual(
+            overview["formal_readiness_gate"]["model_status"],
+            "calculation_blocked",
+        )
+
+        sheet = bundle["equipment_family_datasheet"]["equipment"][0]
+        fields = {item["field_id"]: item for item in sheet["fields"]}
+        for field_id in (
+            "model_designation",
+            "selected_dn",
+            "actual_velocity_m_s",
+            "predicted_pressure_drop_kpa",
+        ):
+            self.assertIn(field_id, fields)
+            source = fields[field_id]["source"]
+            self.assertEqual(source["promotion_cap"], "TYPE_SCREENING")
+            self.assertFalse(source["formal_design_evidence"])
+        self.assertEqual(
+            fields["model_designation"]["source"]["designation_scope"],
+            "PRELIMINARY_TYPE_SCREENING",
+        )
+        self.assertFalse(
+            fields["model_designation"]["source"]["purchase_ready"]
+        )
+
     def test_turbine_branches_project_program_specs_into_authority_profiles(
         self,
     ) -> None:
@@ -2089,7 +2425,7 @@ class CustomerDeliveryTests(unittest.TestCase):
                     "efficiency_percent": 80.0,
                 },
                 "T04",
-                "EXP-RAD-2STG-Q1000-PR3.33-P233.6-G250-N30000",
+                "EXP-RAD-2STG-Q1000-PR3.33-P72.0-G75-N30000",
                 "runaway_speed_rpm",
                 36000.0,
             ),
